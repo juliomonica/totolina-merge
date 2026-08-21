@@ -4,6 +4,7 @@ extends RigidBody2D
 var tier: int = 1
 var radius: float = 24.0
 var debug_color := Color("79c7ff")
+var merge_pending := false
 
 
 func configure(

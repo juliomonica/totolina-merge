@@ -6,12 +6,39 @@ const CHAMBER_WIDTH_RATIO := 0.86
 const CHAMBER_HEIGHT_RATIO := 0.72
 const CHAMBER_TOP_RATIO := 0.17
 const CHAMBER_MAX_ASPECT_RATIO := 0.67
-const TIER_RADIUS_RATIOS := [0.046, 0.0538, 0.0630]
-const TIER_MASSES := [1.0, 1.30, 1.69]
+const NORMAL_SPAWN_MAX_TIER := 3
+const TIER_RADIUS_RATIOS := [
+	0.0460,
+	0.0538,
+	0.0630,
+	0.0737,
+	0.0862,
+	0.1009,
+	0.1180,
+	0.1381,
+	0.1615,
+]
+const TIER_MASSES := [
+	1.00,
+	1.30,
+	1.69,
+	2.20,
+	2.86,
+	3.71,
+	4.83,
+	6.27,
+	8.16,
+]
 const TIER_COLORS := [
 	Color("79c7ff"),
 	Color("ffc857"),
 	Color("ff7b89"),
+	Color("72e0a1"),
+	Color("b88cff"),
+	Color("ff9f43"),
+	Color("47e6e6"),
+	Color("f368e0"),
+	Color("f5f5f5"),
 ]
 
 @onready var pieces: Node2D = $Pieces
@@ -151,23 +178,117 @@ func _drop_piece(viewport_x: float) -> void:
 	var drop_x := clampf(viewport_x, inner_left + radius, inner_right - radius)
 	var drop_y := _chamber_rect.position.y + radius + _wall_thickness * 0.5
 
-	var piece := PIECE_SCENE.instantiate() as PrototypePiece
-	piece.configure(
-		_next_tier,
-		radius,
-		TIER_MASSES[tier_index],
-		TIER_COLORS[tier_index]
-	)
-	piece.position = Vector2(drop_x, drop_y)
-	pieces.add_child(piece)
-	piece.sleeping = false
-
+	_spawn_piece(_next_tier, Vector2(drop_x, drop_y))
 	_next_tier = _roll_tier()
 	_update_debug_ui()
 
 
+func _spawn_piece(
+	tier: int,
+	spawn_position: Vector2,
+	initial_linear_velocity: Vector2 = Vector2.ZERO,
+	initial_angular_velocity: float = 0.0,
+	initial_rotation: float = 0.0
+) -> PrototypePiece:
+	var tier_index := tier - 1
+	var piece := PIECE_SCENE.instantiate() as PrototypePiece
+	piece.configure(
+		tier,
+		_chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index],
+		TIER_MASSES[tier_index],
+		TIER_COLORS[tier_index]
+	)
+	piece.position = pieces.to_local(spawn_position)
+	piece.rotation = initial_rotation
+	piece.linear_velocity = initial_linear_velocity
+	piece.angular_velocity = initial_angular_velocity
+	piece.body_entered.connect(_on_piece_body_entered.bind(piece))
+	pieces.add_child(piece)
+	piece.sleeping = false
+	return piece
+
+
+func _on_piece_body_entered(other_body: Node, source_piece: PrototypePiece) -> void:
+	if not is_instance_valid(source_piece) or source_piece.merge_pending:
+		return
+	if not other_body is PrototypePiece:
+		return
+
+	var other_piece := other_body as PrototypePiece
+	if source_piece == other_piece or other_piece.merge_pending:
+		return
+	if source_piece.get_parent() != pieces or other_piece.get_parent() != pieces:
+		return
+	if source_piece.tier != other_piece.tier:
+		return
+	if source_piece.tier >= TIER_RADIUS_RATIOS.size():
+		return
+
+	source_piece.merge_pending = true
+	other_piece.merge_pending = true
+	var result_position := (source_piece.global_position + other_piece.global_position) * 0.5
+	var result_linear_velocity := (
+		source_piece.linear_velocity + other_piece.linear_velocity
+	) * 0.5
+	var result_angular_velocity := (
+		source_piece.angular_velocity + other_piece.angular_velocity
+	) * 0.5
+	var result_rotation := lerp_angle(
+		source_piece.global_rotation,
+		other_piece.global_rotation,
+		0.5
+	)
+	call_deferred(
+		"_resolve_merge",
+		source_piece,
+		other_piece,
+		source_piece.tier + 1,
+		result_position,
+		result_linear_velocity,
+		result_angular_velocity,
+		result_rotation
+	)
+
+
+func _resolve_merge(
+	first_piece: PrototypePiece,
+	second_piece: PrototypePiece,
+	result_tier: int,
+	result_position: Vector2,
+	result_linear_velocity: Vector2,
+	result_angular_velocity: float,
+	result_rotation: float
+) -> void:
+	if not _is_active_merge_source(first_piece):
+		return
+	if not _is_active_merge_source(second_piece):
+		return
+	if first_piece.tier + 1 != result_tier or second_piece.tier + 1 != result_tier:
+		return
+
+	first_piece.queue_free()
+	second_piece.queue_free()
+	_spawn_piece(
+		result_tier,
+		result_position,
+		result_linear_velocity,
+		result_angular_velocity,
+		result_rotation
+	)
+	_update_debug_ui()
+
+
+func _is_active_merge_source(piece: PrototypePiece) -> bool:
+	return (
+		is_instance_valid(piece)
+		and not piece.is_queued_for_deletion()
+		and piece.get_parent() == pieces
+		and piece.merge_pending
+	)
+
+
 func _roll_tier() -> int:
-	return _rng.randi_range(1, TIER_RADIUS_RATIOS.size())
+	return _rng.randi_range(1, NORMAL_SPAWN_MAX_TIER)
 
 
 func _restart_sandbox() -> void:

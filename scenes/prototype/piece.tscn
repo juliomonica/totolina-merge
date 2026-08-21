@@ -12,6 +12,8 @@ radius = 24.0
 [node name="Piece" type="RigidBody2D"]
 mass = 1.0
 physics_material_override = SubResource("PhysicsMaterial_piece")
+contact_monitor = true
+max_contacts_reported = 8
 continuous_cd = 2
 linear_damp = 0.15
 linear_damp_mode = 1
