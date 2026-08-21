@@ -6,6 +6,9 @@ const CHAMBER_WIDTH_RATIO := 0.86
 const CHAMBER_HEIGHT_RATIO := 0.72
 const CHAMBER_TOP_RATIO := 0.17
 const CHAMBER_MAX_ASPECT_RATIO := 0.67
+const DANGER_LINE_CHAMBER_RATIO := 0.30
+const DANGER_GRACE_SECONDS := 3.0
+const DANGER_VERTICAL_SPEED_THRESHOLD := 10.0
 const NORMAL_SPAWN_MAX_TIER := 3
 const TIER_RADIUS_RATIOS := [
 	0.0460,
@@ -50,11 +53,17 @@ const TIER_COLORS := [
 @onready var next_tier_label: Label = $DebugUI/Panel/Margin/Row/NextTier
 @onready var fps_label: Label = $DebugUI/Panel/Margin/Row/FPS
 @onready var restart_button: Button = $DebugUI/Panel/Margin/Row/Restart
+@onready var game_over_label: Label = $DebugUI/GameOver
 
 var _rng := RandomNumberGenerator.new()
 var _next_tier := 1
 var _chamber_rect := Rect2()
 var _wall_thickness := 0.0
+var _danger_line_y := 0.0
+
+var danger_active := false
+var danger_timer := 0.0
+var game_over := false
 
 
 func _ready() -> void:
@@ -69,6 +78,24 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_update_debug_ui()
+
+
+func _physics_process(delta: float) -> void:
+	if game_over:
+		return
+
+	if _has_dangerous_piece():
+		if not danger_active:
+			danger_active = true
+			danger_timer = 0.0
+			queue_redraw()
+		danger_timer += delta
+		if danger_timer >= DANGER_GRACE_SECONDS:
+			_enter_game_over()
+	elif danger_active:
+		danger_active = false
+		danger_timer = 0.0
+		queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -100,6 +127,13 @@ func _draw() -> void:
 		),
 		wall_color,
 		true
+	)
+	var danger_line_color := Color("ff3b30") if danger_active else Color("ffb020")
+	draw_line(
+		Vector2(_chamber_rect.position.x, _danger_line_y),
+		Vector2(_chamber_rect.end.x, _danger_line_y),
+		danger_line_color,
+		3.0
 	)
 	draw_rect(
 		Rect2(
@@ -144,6 +178,10 @@ func _layout_chamber() -> void:
 		chamber_size
 	)
 	_wall_thickness = maxf(8.0, viewport_size.x * 0.018)
+	_danger_line_y = (
+		_chamber_rect.position.y
+		+ _chamber_rect.size.y * DANGER_LINE_CHAMBER_RATIO
+	)
 
 	left_wall.position = Vector2(
 		_chamber_rect.position.x,
@@ -168,7 +206,7 @@ func _layout_chamber() -> void:
 
 
 func _drop_piece(viewport_x: float) -> void:
-	if _chamber_rect.size == Vector2.ZERO:
+	if game_over or _chamber_rect.size == Vector2.ZERO:
 		return
 
 	var tier_index := _next_tier - 1
@@ -209,6 +247,8 @@ func _spawn_piece(
 
 
 func _on_piece_body_entered(other_body: Node, source_piece: PrototypePiece) -> void:
+	if game_over:
+		return
 	if not is_instance_valid(source_piece) or source_piece.merge_pending:
 		return
 	if not other_body is PrototypePiece:
@@ -259,6 +299,8 @@ func _resolve_merge(
 	result_angular_velocity: float,
 	result_rotation: float
 ) -> void:
+	if game_over:
+		return
 	if not _is_active_merge_source(first_piece):
 		return
 	if not _is_active_merge_source(second_piece):
@@ -291,12 +333,46 @@ func _roll_tier() -> int:
 	return _rng.randi_range(1, NORMAL_SPAWN_MAX_TIER)
 
 
+func _has_dangerous_piece() -> bool:
+	for child in pieces.get_children():
+		if not child is PrototypePiece:
+			continue
+		var piece := child as PrototypePiece
+		if piece.is_queued_for_deletion() or piece.merge_pending:
+			continue
+		var bottom_edge := piece.global_position.y + piece.radius
+		var is_supported := piece.sleeping or not piece.get_colliding_bodies().is_empty()
+		if (
+			bottom_edge <= _danger_line_y
+			and absf(piece.linear_velocity.y) <= DANGER_VERTICAL_SPEED_THRESHOLD
+			and is_supported
+		):
+			return true
+	return false
+
+
+func _enter_game_over() -> void:
+	game_over = true
+	danger_active = true
+	danger_timer = DANGER_GRACE_SECONDS
+	game_over_label.visible = true
+	for child in pieces.get_children():
+		if child is PrototypePiece:
+			child.set_deferred("freeze", true)
+	queue_redraw()
+
+
 func _restart_sandbox() -> void:
 	for piece in pieces.get_children():
 		piece.queue_free()
 
+	danger_active = false
+	danger_timer = 0.0
+	game_over = false
+	game_over_label.visible = false
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
+	queue_redraw()
 	_update_debug_ui()
 
 
