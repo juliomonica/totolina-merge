@@ -1,0 +1,90 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/prototype/physics_sandbox.gd" id="1_sandbox"]
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_chamber"]
+friction = 0.45
+bounce = 0.05
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_left"]
+size = Vector2(10, 700)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_right"]
+size = Vector2(10, 700)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
+size = Vector2(460, 10)
+
+[sub_resource type="Theme" id="Theme_debug"]
+default_font = ExtResource("2_font")
+default_font_size = 13
+
+[node name="PhysicsSandbox" type="Node2D"]
+script = ExtResource("1_sandbox")
+
+[node name="Chamber" type="Node2D" parent="."]
+
+[node name="LeftWall" type="StaticBody2D" parent="Chamber"]
+physics_material_override = SubResource("PhysicsMaterial_chamber")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Chamber/LeftWall"]
+shape = SubResource("RectangleShape2D_left")
+
+[node name="RightWall" type="StaticBody2D" parent="Chamber"]
+physics_material_override = SubResource("PhysicsMaterial_chamber")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Chamber/RightWall"]
+shape = SubResource("RectangleShape2D_right")
+
+[node name="Floor" type="StaticBody2D" parent="Chamber"]
+physics_material_override = SubResource("PhysicsMaterial_chamber")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Chamber/Floor"]
+shape = SubResource("RectangleShape2D_floor")
+
+[node name="Pieces" type="Node2D" parent="."]
+
+[node name="DebugUI" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="DebugUI"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = 52.0
+grow_horizontal = 2
+theme = SubResource("Theme_debug")
+
+[node name="Margin" type="MarginContainer" parent="DebugUI/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 4
+
+[node name="Row" type="HBoxContainer" parent="DebugUI/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Seed" type="Label" parent="DebugUI/Panel/Margin/Row"]
+layout_mode = 2
+text = "Seed: 12345"
+
+[node name="BodyCount" type="Label" parent="DebugUI/Panel/Margin/Row"]
+layout_mode = 2
+text = "Bodies: 0"
+
+[node name="NextTier" type="Label" parent="DebugUI/Panel/Margin/Row"]
+layout_mode = 2
+text = "Next: T1"
+
+[node name="FPS" type="Label" parent="DebugUI/Panel/Margin/Row"]
+layout_mode = 2
+text = "FPS: 0"
+
+[node name="Restart" type="Button" parent="DebugUI/Panel/Margin/Row"]
+layout_mode = 2
+size_flags_horizontal = 10
+text = "Restart"

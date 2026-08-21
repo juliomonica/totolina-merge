@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/prototype/piece.gd" id="1_piece"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_piece"]
+friction = 0.55
+bounce = 0.02
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_piece"]
+radius = 24.0
+
+[node name="Piece" type="RigidBody2D"]
+mass = 1.0
+physics_material_override = SubResource("PhysicsMaterial_piece")
+continuous_cd = 2
+linear_damp = 0.15
+linear_damp_mode = 1
+angular_damp = 1.0
+angular_damp_mode = 1
+script = ExtResource("1_piece")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_piece")
