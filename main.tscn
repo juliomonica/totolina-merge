@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://de2qyt5qcr1a7"]
+
+[ext_resource type="FontFile" uid="uid://d3n3xuilcu3ns" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="1_ig7tw"]
+
+[node name="Main" type="Control" unique_id=1497772352]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="." unique_id=1415946140]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+theme_override_fonts/font = ExtResource("1_ig7tw")
+text = "GAME01_PROTOTYPE"
