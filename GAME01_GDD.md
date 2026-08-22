@@ -2,40 +2,162 @@
 
 ## Title
 
+Working title:
+
 **Tolina's Magical Cake**
 
-## Vision
+Genre:
+
+Cozy physics creation puzzle.
+
+Platforms:
+
+-   Android
+-   iOS
+
+Engine:
+
+Godot.
+
+------------------------------------------------------------------------
+
+# 1. Vision
 
 Help Tolina the cat create her magical birthday cake through a
 satisfying physics-based cooking puzzle.
 
-## Player Fantasy
+The player combines ingredients through playful physics interactions,
+discovering new creations until they complete the ultimate cake.
 
-The player helps Tolina create the most magical birthday cake ever
-through discovering creations, seeing Tolina happy, and improving
-previous attempts.
+The game should feel:
 
-## Main Character
+-   cozy
+-   satisfying
+-   charming
+-   relaxing but challenging
+-   rewarding to replay
 
-Tolina is the main character and mascot. She is cute, friendly, playful,
-and expressive through animations and reactions.
+------------------------------------------------------------------------
 
-## Core Gameplay Loop
+# 2. Player Fantasy
+
+The player helps Tolina achieve her dream:
+
+> Create the most magical birthday cake ever.
+
+The reward is:
+
+-   discovering new creations
+-   seeing Tolina happy
+-   completing the collection
+-   improving previous attempts
+
+------------------------------------------------------------------------
+
+# 3. Main Character
+
+## Tolina
+
+Tolina is the main character and mascot.
+
+She is:
+
+-   cute
+-   friendly
+-   playful
+-   expressive
+-   slightly mischievous
+
+Tolina communicates through:
+
+-   animations
+-   expressions
+-   reactions
+
+The player helps Tolina. The player does not manage Tolina.
+
+Avoid:
+
+-   pet maintenance
+-   hunger mechanics
+-   relationship meters
+
+------------------------------------------------------------------------
+
+# 4. Tolina Character Design
+
+## Appearance
+
+Tolina is inspired by a gray-and-white tabby cat.
+
+Visual characteristics:
+
+-   soft gray fur
+-   darker gray tabby markings
+-   white chest
+-   white muzzle
+-   white paws
+-   large expressive eyes
+-   rounded cute proportions
+
+She should feel like a beloved house cat transformed into a magical
+storybook character.
+
+## Art Style
+
+Cute 2D storybook illustration style.
+
+Characteristics:
+
+-   warm colors
+-   rounded shapes
+-   charming handcrafted feeling
+-   expressive characters
+-   cozy fantasy atmosphere
+-   readable mobile silhouettes
+
+No clothing or chef outfit.
+
+The magic comes from the world, ingredients, and creations.
+
+------------------------------------------------------------------------
+
+# 5. Core Gameplay Loop
 
 Meet Tolina → Start cooking → Tolina throws ingredients → Player chooses
 placement → Ingredients merge → New creations appear → Earn points →
-Reward Tolina → Try again.
+Reward Tolina → Try again
 
-## Gameplay
+------------------------------------------------------------------------
 
-Physics-based merging: - Drop ingredients. - Combine matching
-ingredients. - Create higher-tier objects. - Survive until the creation
-becomes impossible.
+# 6. Gameplay Mechanics
 
-Current mechanics: - Physics dropping - Merging - Chain reactions -
-Danger zone - Push rescue mechanic
+The game uses physics-based merging.
 
-## Cat Kitchen Progression
+Core mechanics:
+
+-   drop ingredients
+-   combine matching ingredients
+-   create higher-tier objects
+-   survive until the creation becomes impossible
+
+Current prototype mechanics:
+
+-   physics dropping
+-   merging
+-   chain reactions
+-   danger zone
+-   Push rescue mechanic
+
+------------------------------------------------------------------------
+
+# 7. Creation Progression
+
+Initial theme:
+
+## Cat Kitchen
+
+Example progression:
 
   Tier   Creation
   ------ ---------------------------
@@ -49,77 +171,211 @@ Danger zone - Push rescue mechanic
   T8     Royal Cake
   T9     Magical Cat Birthday Cake
 
-## Screens
+------------------------------------------------------------------------
 
-### Home
+# 8. Rewards
+
+Score represents how much the player helped Tolina.
+
+Score can be earned from:
+
+-   merges
+-   creating higher-tier objects
+-   completing creations
+
+End of run:
+
+Show:
+
+-   final creation
+-   score
+-   Tolina reaction
+-   rewards earned
+
+------------------------------------------------------------------------
+
+# 9. Game Screens
+
+## Home Screen
+
+Purpose:
+
+Create emotional connection.
+
+Contains:
 
 -   Tolina
--   Cozy kitchen
+-   cozy kitchen environment
 -   Start button
 
-### Cooking
+Future:
+
+-   collection
+-   achievements
+-   cosmetics
+
+------------------------------------------------------------------------
+
+## Cooking Screen
+
+Purpose:
+
+Main gameplay.
+
+Contains:
 
 -   Tolina interaction
--   Ingredient throwing
--   Physics chamber
--   Score
--   Preview
+-   ingredient throwing
+-   physics chamber
+-   score
+-   creation preview
 -   Push mechanic
 
-### Result
+------------------------------------------------------------------------
+
+## Result Screen
+
+Purpose:
+
+Reward the player.
+
+Contains:
 
 -   Tolina celebration
--   Created object
--   Score
--   Rewards
+-   created object
+-   score
+-   rewards
 
-## Art Direction
+------------------------------------------------------------------------
 
-Cute 3D toy-like style: - Rounded shapes - Soft materials - Colorful
-objects - Friendly appearance - Mobile-friendly visuals
+# 10. Audio Direction
 
-## Monetization
+Future goals:
 
-Preferred: - Rewarded ads - Remove ads purchase - Cosmetic expansions
+-   satisfying merge sounds
+-   cute cat sounds
+-   cheerful feedback
+-   cozy background music
 
-Avoid: - Pay-to-win - Energy systems - Forced timers - Intrusive ads
+Audio should reinforce:
 
-## Expansion
+-   discovery
+-   success
+-   warmth
 
-Future themes: - Cat Garage - Sakura Garden - Space Cat
+------------------------------------------------------------------------
 
-## What Game01 Is NOT
+# 11. Monetization Direction
 
--   Pet simulator
--   Farming game
--   Restaurant management game
--   Decoration game
--   Multiplayer game
--   Social game
--   Live service game
+Preferred:
 
-Focus:
+Free game with:
 
-Drop → Merge → Discover → Create
+-   rewarded ads
+-   optional remove ads purchase
+-   cosmetic expansions
 
-## MVP
+Potential future content:
+
+-   new ingredient themes
+-   new creation collections
+-   visual skins
+
+Avoid:
+
+-   pay-to-win mechanics
+-   energy systems
+-   forced timers
+-   intrusive ads
+
+------------------------------------------------------------------------
+
+# 12. Expansion Possibilities
+
+Future themes:
+
+## Cat Garage
+
+Create:
+
+-   wheels
+-   engines
+-   cars
+-   supercars
+
+## Sakura Garden
+
+Create:
+
+-   seeds
+-   plants
+-   magical trees
+
+## Space Cat
+
+Create:
+
+-   planets
+-   stars
+-   galaxies
+
+The underlying merge system remains reusable.
+
+------------------------------------------------------------------------
+
+# 13. What Game01 Is NOT
+
+Game01 is NOT:
+
+-   a pet simulator
+-   a farming game
+-   a restaurant management game
+-   a decoration game
+-   a multiplayer game
+-   a social game
+-   a live service game
+
+The focus remains:
+
+Drop → Merge → Discover → Create.
+
+------------------------------------------------------------------------
+
+# 14. MVP Scope
+
+The first complete version should include:
+
+Required:
 
 -   Tolina character
 -   Cat Kitchen theme
 -   9 creation tiers
--   Physics merge gameplay
--   Score
--   Result screen
--   Basic rewards
--   Basic animations
+-   physics merge gameplay
+-   score
+-   result screen
+-   basic rewards
+-   basic animations
 -   Android/iOS support
 
-## Success Criteria
+Avoid adding:
+
+-   additional themes
+-   complex progression
+-   large environments
+-   unnecessary systems
+
+until the core experience is validated.
+
+------------------------------------------------------------------------
+
+# 15. Product Success Criteria
 
 The game succeeds if players think:
 
 "I want to see what I create next."
 
-Retention drivers:
+The main retention drivers are:
 
-Curiosity + satisfaction + emotional connection.
+-   curiosity
+-   satisfaction
+-   emotional connection
