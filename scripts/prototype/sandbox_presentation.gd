@@ -1,12 +1,13 @@
 class_name PrototypeSandboxPresentation
 extends Node2D
 
-const TOLINA_IDLE := preload("res://assets/cat_kitchen/tolinа_idle.png")
-const TOLINA_HAPPY := preload("res://assets/cat_kitchen/tolinа_happy.png")
-const TOLINA_THROW := preload("res://assets/cat_kitchen/tolinа_throw.png")
-const MERGE_MAGIC := preload("res://assets/effects/merge_magic.png")
+const TOLINA_IDLE := preload("res://assets/cat_kitchen/characters/tolinа_idle.png")
+const TOLINA_HAPPY := preload("res://assets/cat_kitchen/characters/tolinа_happy.png")
+const TOLINA_THROW := preload("res://assets/cat_kitchen/characters/tolinа_throw.png")
+const MERGE_MAGIC := preload("res://assets/cat_kitchen/effects/merge_magic.png")
 const THROW_POSE_SECONDS := 0.35
 const HAPPY_POSE_SECONDS := 0.75
+const RESULT_POSE_SECONDS := 1.5
 const MERGE_EFFECT_SECONDS := 0.45
 const BOWL_WIDTH_CHAMBER_RATIO := 1.38
 const BOWL_PHYSICS_FLOOR_TEXTURE_Y_RATIO := 0.75
@@ -80,6 +81,14 @@ func show_merge(world_position: Vector2, effect_diameter: float) -> void:
 		MERGE_EFFECT_SECONDS
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.chain().tween_callback(effect.queue_free)
+
+
+func show_discovery(world_position: Vector2, effect_diameter: float) -> void:
+	show_merge(world_position, effect_diameter)
+
+
+func show_result() -> void:
+	_set_tolina_pose(TOLINA_HAPPY, RESULT_POSE_SECONDS)
 
 
 func reset() -> void:

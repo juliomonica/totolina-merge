@@ -3,8 +3,8 @@
 [ext_resource type="Script" path="res://scripts/prototype/physics_sandbox.gd" id="1_sandbox"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
 [ext_resource type="Script" path="res://scripts/prototype/sandbox_presentation.gd" id="3_presentation"]
-[ext_resource type="Texture2D" path="res://assets/cat_kitchen/backgrounds/cat_kitchen_background.png" id="4_background"]
-[ext_resource type="Texture2D" path="res://assets/cat_kitchen/environment/magical_kitchen_bowl.png" id="5_bowl"]
+[ext_resource type="Texture2D" path="res://assets/cat_kitchen/environment/cat_kitchen/cat_kitchen_background.png" id="4_background"]
+[ext_resource type="Texture2D" path="res://assets/cat_kitchen/environment/cat_kitchen/magical_kitchen_bowl.png" id="5_bowl"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_chamber"]
 friction = 0.45
@@ -233,6 +233,28 @@ text = "MAX MERGE!"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="NewCreationFeedback" type="Label" parent="DebugUI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -150.0
+offset_right = 180.0
+offset_bottom = -104.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = SubResource("Theme_debug")
+theme_override_colors/font_color = Color(1, 0.788235, 0.341176, 1)
+theme_override_colors/font_outline_color = Color(0.239216, 0.121569, 0.0470588, 1)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 26
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="Danger" type="Label" parent="DebugUI"]
 visible = false
 anchors_preset = 10
@@ -265,5 +287,27 @@ theme = SubResource("Theme_debug")
 theme_override_colors/font_color = Color(1, 0.231373, 0.188235, 1)
 theme_override_font_sizes/font_size = 32
 text = "GAME OVER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RunResult" type="Label" parent="DebugUI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = 48.0
+offset_right = 220.0
+offset_bottom = 124.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = SubResource("Theme_debug")
+theme_override_colors/font_color = Color(1, 0.952941, 0.839216, 1)
+theme_override_colors/font_outline_color = Color(0.239216, 0.121569, 0.0470588, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 18
 horizontal_alignment = 1
 vertical_alignment = 1

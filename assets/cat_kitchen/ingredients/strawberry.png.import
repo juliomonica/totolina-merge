@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b3g8kbspr8poj"
-path="res://.godot/imported/magical_kitchen_bowl.png-e6daa0ae188ac8a90ca008db50f98246.ctex"
+uid="uid://dixe88ku382ph"
+path="res://.godot/imported/strawberry.png-5e845e4ac903316cad29672645f6e4c6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/environment/magical_kitchen_bowl.png"
-dest_files=["res://.godot/imported/magical_kitchen_bowl.png-e6daa0ae188ac8a90ca008db50f98246.ctex"]
+source_file="res://assets/cat_kitchen/ingredients/strawberry.png"
+dest_files=["res://.godot/imported/strawberry.png-5e845e4ac903316cad29672645f6e4c6.ctex"]
 
 [params]
 

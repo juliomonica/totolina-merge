@@ -19,6 +19,10 @@ const PULSE_SEPARATION_MAX_IMPULSE := 24.0
 const PULSE_SEPARATION_DOWNWARD_SCALE := 0.20
 const PULSE_FEEDBACK_SECONDS := 0.65
 const MAX_MERGE_FEEDBACK_SECONDS := 1.0
+const DISCOVERY_FEEDBACK_SECONDS := 1.25
+const DISCOVERY_SAVE_PATH := "user://recipe_discoveries.cfg"
+const DISCOVERY_SAVE_SECTION := "recipes"
+const DISCOVERY_SAVE_KEY := "discovered_tiers"
 const MERGE_PLACEMENT_CLEARANCE := 0.5
 const MERGE_PLACEMENT_SEARCH_RINGS := 16
 const MERGE_PLACEMENT_SEARCH_DIRECTIONS := 16
@@ -67,6 +71,17 @@ const TIER_COLORS := [
 	Color("f368e0"),
 	Color("f5f5f5"),
 ]
+const TIER_NAME_KEYS := [
+	"RECIPE_TIER_1",
+	"RECIPE_TIER_2",
+	"RECIPE_TIER_3",
+	"RECIPE_TIER_4",
+	"RECIPE_TIER_5",
+	"RECIPE_TIER_6",
+	"RECIPE_TIER_7",
+	"RECIPE_TIER_8",
+	"RECIPE_TIER_9",
+]
 
 @onready var pieces: Node2D = $Pieces
 @onready var left_wall: StaticBody2D = $Chamber/LeftWall
@@ -84,8 +99,10 @@ const TIER_COLORS := [
 @onready var pulse_right_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseRight
 @onready var pulse_feedback_label: Label = $DebugUI/PulseFeedback
 @onready var max_merge_feedback_label: Label = $DebugUI/MaxMergeFeedback
+@onready var new_creation_feedback_label: Label = $DebugUI/NewCreationFeedback
 @onready var danger_label: Label = $DebugUI/Danger
 @onready var game_over_label: Label = $DebugUI/GameOver
+@onready var run_result_label: Label = $DebugUI/RunResult
 @onready var presentation: PrototypeSandboxPresentation = $Presentation
 
 var _rng := RandomNumberGenerator.new()
@@ -96,19 +113,25 @@ var _danger_line_y := 0.0
 var _next_preview_style := StyleBoxFlat.new()
 var _pulse_feedback_timer := 0.0
 var _max_merge_feedback_timer := 0.0
+var _discovery_feedback_timer := 0.0
 var _merge_cooldown_remaining := 0.0
 var _merge_resolution_pending := false
 var _queued_merge_pairs: Array = []
+var _new_discoveries_this_run: Array[int] = []
+var _discovery_save_path := DISCOVERY_SAVE_PATH
 
 var danger_active := false
 var danger_timer := 0.0
 var game_over := false
 var pulse_charge := 0
 var score := 0
+var highest_creation_reached := 0
+var discovered_creation_tiers: Array[int] = []
 
 
 func _ready() -> void:
 	Engine.physics_ticks_per_second = 60
+	_load_recipe_discoveries()
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
 	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
@@ -127,6 +150,9 @@ func _process(delta: float) -> void:
 	if _max_merge_feedback_timer > 0.0:
 		_max_merge_feedback_timer = maxf(0.0, _max_merge_feedback_timer - delta)
 		max_merge_feedback_label.visible = _max_merge_feedback_timer > 0.0
+	if _discovery_feedback_timer > 0.0:
+		_discovery_feedback_timer = maxf(0.0, _discovery_feedback_timer - delta)
+		new_creation_feedback_label.visible = _discovery_feedback_timer > 0.0
 	_update_debug_ui()
 
 
@@ -288,11 +314,14 @@ func _update_next_preview() -> void:
 		return
 	var tier_index := _next_tier - 1
 	var radius: float = _chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index]
-	var diameter := ceilf(radius * 2.0)
-	next_preview.custom_minimum_size = Vector2(diameter, diameter)
 	var ingredient_texture: Texture2D = (
 		PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(_next_tier)
 	)
+	var preview_diameter := ceilf(
+		radius
+		* PIECE_VISUAL_SCRIPT.ingredient_diameter_scale_for_tier(_next_tier)
+	)
+	next_preview.custom_minimum_size = Vector2(preview_diameter, preview_diameter)
 	next_preview_ingredient.texture = ingredient_texture
 	next_preview_ingredient.visible = ingredient_texture != null
 	_next_preview_style.bg_color = (
@@ -317,9 +346,15 @@ func _drop_piece(viewport_x: float) -> void:
 	var drop_y := _chamber_rect.position.y + radius + _wall_thickness * 0.5
 
 	presentation.show_throw()
-	_spawn_piece(_next_tier, Vector2(drop_x, drop_y))
+	var spawned_piece := _spawn_piece(_next_tier, Vector2(drop_x, drop_y))
 	_next_tier = _roll_tier()
 	_update_debug_ui()
+	_register_creation(
+		spawned_piece.tier,
+		spawned_piece.global_position,
+		spawned_piece.radius,
+		false
+	)
 
 
 func _spawn_piece(
@@ -495,6 +530,12 @@ func _resolve_merge(
 		_max_merge_feedback_timer = MAX_MERGE_FEEDBACK_SECONDS
 		max_merge_feedback_label.visible = true
 	_update_debug_ui()
+	_register_creation(
+		result_tier,
+		safe_result_position,
+		result_radius,
+		true
+	)
 
 
 func _find_safe_merge_position(
@@ -666,6 +707,98 @@ func _roll_tier() -> int:
 	return 3
 
 
+func _register_creation(
+	tier: int,
+	world_position: Vector2,
+	radius: float,
+	visual_feedback_already_playing: bool
+) -> bool:
+	if tier < 1 or tier > TIER_NAME_KEYS.size():
+		return false
+	highest_creation_reached = maxi(highest_creation_reached, tier)
+	if discovered_creation_tiers.has(tier):
+		return false
+
+	discovered_creation_tiers.append(tier)
+	discovered_creation_tiers.sort()
+	_new_discoveries_this_run.append(tier)
+	_save_recipe_discoveries()
+	_discovery_feedback_timer = DISCOVERY_FEEDBACK_SECONDS
+	new_creation_feedback_label.text = tr("NEW_CREATION")
+	new_creation_feedback_label.visible = true
+	if not visual_feedback_already_playing:
+		presentation.show_discovery(
+			world_position,
+			minf(radius * 3.0, _chamber_rect.size.x * 0.45)
+		)
+	return true
+
+
+func _load_recipe_discoveries() -> void:
+	discovered_creation_tiers.clear()
+	var save_file := ConfigFile.new()
+	var load_error := save_file.load(_discovery_save_path)
+	if load_error == ERR_FILE_NOT_FOUND:
+		return
+	if load_error != OK:
+		push_warning("Could not load recipe discoveries: error %d" % load_error)
+		return
+
+	var stored_tiers: Variant = save_file.get_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_KEY,
+		[]
+	)
+	if not (stored_tiers is Array or stored_tiers is PackedInt32Array):
+		return
+	for stored_tier in stored_tiers:
+		var tier := int(stored_tier)
+		if (
+			tier >= 1
+			and tier <= TIER_NAME_KEYS.size()
+			and not discovered_creation_tiers.has(tier)
+		):
+			discovered_creation_tiers.append(tier)
+	discovered_creation_tiers.sort()
+
+
+func _save_recipe_discoveries() -> void:
+	var save_file := ConfigFile.new()
+	save_file.set_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_KEY,
+		discovered_creation_tiers.duplicate()
+	)
+	var save_error := save_file.save(_discovery_save_path)
+	if save_error != OK:
+		push_warning("Could not save recipe discoveries: error %d" % save_error)
+
+
+func _tier_display_name(tier: int) -> String:
+	if tier < 1 or tier > TIER_NAME_KEYS.size():
+		return ""
+	return tr(TIER_NAME_KEYS[tier - 1])
+
+
+func _show_run_result() -> void:
+	if highest_creation_reached <= 0:
+		run_result_label.visible = false
+		return
+	var result_lines := PackedStringArray([
+		tr("RESULT_HIGHEST_CREATION") % _tier_display_name(highest_creation_reached),
+	])
+	if not _new_discoveries_this_run.is_empty():
+		var highest_new_tier := 1
+		for discovered_tier in _new_discoveries_this_run:
+			highest_new_tier = maxi(highest_new_tier, discovered_tier)
+		result_lines.append(
+			tr("RESULT_NEW_RECIPE") % _tier_display_name(highest_new_tier)
+		)
+	run_result_label.text = "\n".join(result_lines)
+	run_result_label.visible = true
+	presentation.show_result()
+
+
 func _has_dangerous_piece() -> bool:
 	for child in pieces.get_children():
 		if not child is PrototypePiece:
@@ -692,6 +825,7 @@ func _enter_game_over() -> void:
 	for child in pieces.get_children():
 		if child is PrototypePiece:
 			child.set_deferred("freeze", true)
+	_show_run_result()
 	queue_redraw()
 
 
@@ -756,13 +890,18 @@ func _restart_sandbox() -> void:
 	score = 0
 	_pulse_feedback_timer = 0.0
 	_max_merge_feedback_timer = 0.0
+	_discovery_feedback_timer = 0.0
 	_merge_cooldown_remaining = 0.0
 	_merge_resolution_pending = false
 	_queued_merge_pairs.clear()
+	_new_discoveries_this_run.clear()
+	highest_creation_reached = 0
 	presentation.reset()
 	pulse_feedback_label.visible = false
 	max_merge_feedback_label.visible = false
+	new_creation_feedback_label.visible = false
 	game_over_label.visible = false
+	run_result_label.visible = false
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
 	queue_redraw()

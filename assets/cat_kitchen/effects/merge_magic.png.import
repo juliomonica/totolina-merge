@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://tunmpsqc0dtb"
-path="res://.godot/imported/cookie.png-7dac6890bcc778c4705ba5cd1e98c1b5.ctex"
+uid="uid://cqydtu5fwxikh"
+path="res://.godot/imported/merge_magic.png-63b8f7ac3c4c2d93b9fa30e42f9e3307.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ingredients/cookie.png"
-dest_files=["res://.godot/imported/cookie.png-7dac6890bcc778c4705ba5cd1e98c1b5.ctex"]
+source_file="res://assets/cat_kitchen/effects/merge_magic.png"
+dest_files=["res://.godot/imported/merge_magic.png-63b8f7ac3c4c2d93b9fa30e42f9e3307.ctex"]
 
 [params]
 

@@ -1,2 +1,14 @@
 keys,en,es,zh_CN
 GAME01_PROTOTYPE,Game 01 Prototype,Prototipo del Juego 01,游戏 01 原型
+NEW_CREATION,NEW CREATION!,¡NUEVA CREACIÓN!,新作品！
+RESULT_HIGHEST_CREATION,Highest Creation: %s,Creación más alta: %s,最高作品：%s
+RESULT_NEW_RECIPE,New Recipe: %s,Nueva receta: %s,新配方：%s
+RECIPE_TIER_1,Strawberry,Fresa,草莓
+RECIPE_TIER_2,Strawberry Milkshake,Batido de fresa,草莓奶昔
+RECIPE_TIER_3,Cookie,Galleta,曲奇
+RECIPE_TIER_4,Cupcake,Magdalena,纸杯蛋糕
+RECIPE_TIER_5,Cake Slice,Porción de pastel,蛋糕片
+RECIPE_TIER_6,Birthday Cake,Pastel de cumpleaños,生日蛋糕
+RECIPE_TIER_7,Magical Cake,Pastel mágico,魔法蛋糕
+RECIPE_TIER_8,Cat Celebration Cake,Pastel de celebración gatuna,猫咪庆典蛋糕
+RECIPE_TIER_9,Magical Cat Birthday Cake,Pastel mágico de cumpleaños gatuno,魔法猫咪生日蛋糕

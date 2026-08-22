@@ -2,11 +2,19 @@ class_name PrototypePieceVisual
 extends Node2D
 
 const INGREDIENT_TEXTURES: Array[Texture2D] = [
-	preload("res://assets/ingredients/strawberry.png"),
-	preload("res://assets/ingredients/milk.png"),
-	preload("res://assets/ingredients/cookie.png"),
+	preload("res://assets/cat_kitchen/ingredients/strawberry.png"),
+	preload("res://assets/cat_kitchen/ingredients/milkshake.png"),
+	preload("res://assets/cat_kitchen/ingredients/cookie.png"),
+	preload("res://assets/cat_kitchen/ingredients/cupcake.png"),
+	preload("res://assets/cat_kitchen/ingredients/cake_slice.png"),
 ]
-const INGREDIENT_DIAMETER_SCALE := 1.84
+const INGREDIENT_DIAMETER_SCALES := [
+	1.46,
+	1.90,
+	1.82,
+	1.78,
+	1.74,
+]
 
 var _radius := 24.0
 var _fallback_color := Color("79c7ff")
@@ -17,6 +25,12 @@ static func ingredient_texture_for_tier(tier: int) -> Texture2D:
 	if tier < 1 or tier > INGREDIENT_TEXTURES.size():
 		return null
 	return INGREDIENT_TEXTURES[tier - 1]
+
+
+static func ingredient_diameter_scale_for_tier(tier: int) -> float:
+	if tier < 1 or tier > INGREDIENT_DIAMETER_SCALES.size():
+		return 2.0
+	return INGREDIENT_DIAMETER_SCALES[tier - 1]
 
 
 func configure(tier: int, radius: float, fallback_color: Color) -> void:
@@ -30,7 +44,9 @@ func configure(tier: int, radius: float, fallback_color: Color) -> void:
 	if ingredient_texture != null:
 		var texture_size := ingredient_texture.get_size()
 		var texture_extent := maxf(texture_size.x, texture_size.y)
-		var visual_scale := radius * INGREDIENT_DIAMETER_SCALE / texture_extent
+		var visual_scale := (
+			radius * ingredient_diameter_scale_for_tier(tier) / texture_extent
+		)
 		ingredient_sprite.scale = Vector2.ONE * visual_scale
 	queue_redraw()
 

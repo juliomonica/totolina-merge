@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://4ua66desch81"
-path="res://.godot/imported/tolinа_idle.png-0efb715079fc42639d7fbed57bcc60ee.ctex"
+uid="uid://5ygwtmpp721d"
+path="res://.godot/imported/tolinа_happy.png-b114f9e8a91a923a419345932f81aa74.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/tolinа_idle.png"
-dest_files=["res://.godot/imported/tolinа_idle.png-0efb715079fc42639d7fbed57bcc60ee.ctex"]
+source_file="res://assets/cat_kitchen/characters/tolinа_happy.png"
+dest_files=["res://.godot/imported/tolinа_happy.png-b114f9e8a91a923a419345932f81aa74.ctex"]
 
 [params]
 

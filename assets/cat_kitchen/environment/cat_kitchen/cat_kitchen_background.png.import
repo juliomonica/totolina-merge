@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dixe88ku382ph"
-path="res://.godot/imported/strawberry.png-40cfccaceb40e4b91d59968ffd9f92dc.ctex"
+uid="uid://bv24w1yt5k524"
+path="res://.godot/imported/cat_kitchen_background.png-df7d51d8d8507c3fa3b6f6647c01ff5e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ingredients/strawberry.png"
-dest_files=["res://.godot/imported/strawberry.png-40cfccaceb40e4b91d59968ffd9f92dc.ctex"]
+source_file="res://assets/cat_kitchen/environment/cat_kitchen/cat_kitchen_background.png"
+dest_files=["res://.godot/imported/cat_kitchen_background.png-df7d51d8d8507c3fa3b6f6647c01ff5e.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bv24w1yt5k524"
-path="res://.godot/imported/cat_kitchen_background.png-240495dedf057ab7464426a6e33dac6d.ctex"
+uid="uid://tunmpsqc0dtb"
+path="res://.godot/imported/cookie.png-66e0dc7f0d9dba3cd551448d4cd11f5e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/backgrounds/cat_kitchen_background.png"
-dest_files=["res://.godot/imported/cat_kitchen_background.png-240495dedf057ab7464426a6e33dac6d.ctex"]
+source_file="res://assets/cat_kitchen/ingredients/cookie.png"
+dest_files=["res://.godot/imported/cookie.png-66e0dc7f0d9dba3cd551448d4cd11f5e.ctex"]
 
 [params]
 
