@@ -6,9 +6,29 @@ const CHAMBER_WIDTH_RATIO := 0.86
 const CHAMBER_HEIGHT_RATIO := 0.72
 const CHAMBER_TOP_RATIO := 0.17
 const CHAMBER_MAX_ASPECT_RATIO := 0.67
-const DANGER_LINE_CHAMBER_RATIO := 0.30
+const DANGER_LINE_CHAMBER_RATIO := 0.35
 const DANGER_GRACE_SECONDS := 3.0
 const DANGER_VERTICAL_SPEED_THRESHOLD := 10.0
+const MAX_PULSE_CHARGE := 100
+const PULSE_CHARGE_PER_MERGE := 12
+const PULSE_BASE_IMPULSE := 300.0
+const PULSE_SEPARATION_RADIUS_RATIO := 0.32
+const PULSE_SEPARATION_BASE_IMPULSE := 36.0
+const PULSE_SEPARATION_MAX_IMPULSE := 24.0
+const PULSE_SEPARATION_DOWNWARD_SCALE := 0.20
+const PULSE_FEEDBACK_SECONDS := 0.65
+const MAX_MERGE_FEEDBACK_SECONDS := 1.0
+const MERGE_PLACEMENT_CLEARANCE := 0.5
+const MERGE_PLACEMENT_SEARCH_RINGS := 16
+const MERGE_PLACEMENT_SEARCH_DIRECTIONS := 16
+const MERGE_EXPANSION_RADIUS_MULTIPLIER := 2.0
+const MERGE_EXPANSION_BASE_IMPULSE := 40.0
+const MERGE_EXPANSION_MAX_IMPULSE := 32.0
+const MERGE_EXPANSION_DOWNWARD_SCALE := 0.25
+const MERGE_RESOLUTION_COOLDOWN_SECONDS := 0.45
+const UI_EDGE_MARGIN := 16.0
+const HUD_HEIGHT := 88.0
+const CONTROLS_HEIGHT := 52.0
 const NORMAL_SPAWN_MAX_TIER := 3
 const TIER_RADIUS_RATIOS := [
 	0.0460,
@@ -18,8 +38,8 @@ const TIER_RADIUS_RATIOS := [
 	0.0862,
 	0.1009,
 	0.1180,
-	0.1381,
-	0.1615,
+	0.1900,
+	0.2600,
 ]
 const TIER_MASSES := [
 	1.00,
@@ -48,11 +68,17 @@ const TIER_COLORS := [
 @onready var left_wall: StaticBody2D = $Chamber/LeftWall
 @onready var right_wall: StaticBody2D = $Chamber/RightWall
 @onready var floor: StaticBody2D = $Chamber/Floor
-@onready var seed_label: Label = $DebugUI/Panel/Margin/Row/Seed
-@onready var body_count_label: Label = $DebugUI/Panel/Margin/Row/BodyCount
-@onready var next_tier_label: Label = $DebugUI/Panel/Margin/Row/NextTier
-@onready var fps_label: Label = $DebugUI/Panel/Margin/Row/FPS
-@onready var restart_button: Button = $DebugUI/Panel/Margin/Row/Restart
+@onready var hud_panel: PanelContainer = $DebugUI/HUDPanel
+@onready var next_preview: Panel = $DebugUI/HUDPanel/Margin/Row/Next/PreviewCenter/Preview
+@onready var score_label: Label = $DebugUI/HUDPanel/Margin/Row/Score
+@onready var pulse_label: Label = $DebugUI/HUDPanel/Margin/Row/Pulse
+@onready var controls_panel: PanelContainer = $DebugUI/ControlsPanel
+@onready var pulse_left_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseLeft
+@onready var restart_button: Button = $DebugUI/ControlsPanel/Margin/Row/Restart
+@onready var pulse_right_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseRight
+@onready var pulse_feedback_label: Label = $DebugUI/PulseFeedback
+@onready var max_merge_feedback_label: Label = $DebugUI/MaxMergeFeedback
+@onready var danger_label: Label = $DebugUI/Danger
 @onready var game_over_label: Label = $DebugUI/GameOver
 
 var _rng := RandomNumberGenerator.new()
@@ -60,29 +86,51 @@ var _next_tier := 1
 var _chamber_rect := Rect2()
 var _wall_thickness := 0.0
 var _danger_line_y := 0.0
+var _next_preview_style := StyleBoxFlat.new()
+var _pulse_feedback_timer := 0.0
+var _max_merge_feedback_timer := 0.0
+var _merge_cooldown_remaining := 0.0
+var _merge_resolution_pending := false
+var _queued_merge_pairs: Array = []
 
 var danger_active := false
 var danger_timer := 0.0
 var game_over := false
+var pulse_charge := 0
+var score := 0
 
 
 func _ready() -> void:
 	Engine.physics_ticks_per_second = 60
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
+	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
 	restart_button.pressed.connect(_restart_sandbox)
+	pulse_left_button.pressed.connect(_activate_pulse.bind(Vector2.LEFT))
+	pulse_right_button.pressed.connect(_activate_pulse.bind(Vector2.RIGHT))
 	get_viewport().size_changed.connect(_layout_chamber)
 	_layout_chamber()
 	_update_debug_ui()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _pulse_feedback_timer > 0.0:
+		_pulse_feedback_timer = maxf(0.0, _pulse_feedback_timer - delta)
+		pulse_feedback_label.visible = _pulse_feedback_timer > 0.0
+	if _max_merge_feedback_timer > 0.0:
+		_max_merge_feedback_timer = maxf(0.0, _max_merge_feedback_timer - delta)
+		max_merge_feedback_label.visible = _max_merge_feedback_timer > 0.0
 	_update_debug_ui()
 
 
 func _physics_process(delta: float) -> void:
 	if game_over:
 		return
+
+	if _merge_cooldown_remaining > 0.0:
+		_merge_cooldown_remaining = maxf(0.0, _merge_cooldown_remaining - delta)
+		if is_zero_approx(_merge_cooldown_remaining):
+			_try_resolve_next_merge()
 
 	if _has_dangerous_piece():
 		if not danger_active:
@@ -96,6 +144,20 @@ func _physics_process(delta: float) -> void:
 		danger_active = false
 		danger_timer = 0.0
 		queue_redraw()
+
+
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	if key_event.keycode == KEY_LEFT:
+		_activate_pulse(Vector2.LEFT)
+		get_viewport().set_input_as_handled()
+	elif key_event.keycode == KEY_RIGHT:
+		_activate_pulse(Vector2.RIGHT)
+		get_viewport().set_input_as_handled()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -202,7 +264,54 @@ func _layout_chamber() -> void:
 	left_shape.size = Vector2(_wall_thickness, _chamber_rect.size.y + _wall_thickness)
 	right_shape.size = left_shape.size
 	floor_shape.size = Vector2(_chamber_rect.size.x + _wall_thickness, _wall_thickness)
+	danger_label.offset_top = _danger_line_y - 34.0
+	danger_label.offset_bottom = _danger_line_y - 6.0
+	_layout_safe_ui(viewport_size)
+	_update_next_preview()
 	queue_redraw()
+
+
+func _layout_safe_ui(viewport_size: Vector2) -> void:
+	var safe_insets := Vector4.ZERO
+	var window_size := Vector2(DisplayServer.window_get_size())
+	var safe_area := DisplayServer.get_display_safe_area()
+	if (
+		window_size.x > 0.0
+		and window_size.y > 0.0
+		and safe_area.size.x > 0
+		and safe_area.size.y > 0
+	):
+		var viewport_scale := viewport_size / window_size
+		safe_insets = Vector4(
+			safe_area.position.x * viewport_scale.x,
+			safe_area.position.y * viewport_scale.y,
+			maxf(0.0, window_size.x - safe_area.end.x) * viewport_scale.x,
+			maxf(0.0, window_size.y - safe_area.end.y) * viewport_scale.y
+		)
+
+	hud_panel.offset_left = safe_insets.x + UI_EDGE_MARGIN
+	hud_panel.offset_top = safe_insets.y + UI_EDGE_MARGIN
+	hud_panel.offset_right = -(safe_insets.z + UI_EDGE_MARGIN)
+	hud_panel.offset_bottom = hud_panel.offset_top + HUD_HEIGHT
+	controls_panel.offset_left = safe_insets.x + UI_EDGE_MARGIN
+	controls_panel.offset_top = -(safe_insets.w + UI_EDGE_MARGIN + CONTROLS_HEIGHT)
+	controls_panel.offset_right = -(safe_insets.z + UI_EDGE_MARGIN)
+	controls_panel.offset_bottom = -(safe_insets.w + UI_EDGE_MARGIN)
+
+
+func _update_next_preview() -> void:
+	if _next_tier < 1 or _next_tier > TIER_RADIUS_RATIOS.size():
+		return
+	var tier_index := _next_tier - 1
+	var radius: float = _chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index]
+	var diameter := ceilf(radius * 2.0)
+	next_preview.custom_minimum_size = Vector2(diameter, diameter)
+	_next_preview_style.bg_color = TIER_COLORS[tier_index]
+	var corner_radius := ceili(radius)
+	_next_preview_style.corner_radius_top_left = corner_radius
+	_next_preview_style.corner_radius_top_right = corner_radius
+	_next_preview_style.corner_radius_bottom_left = corner_radius
+	_next_preview_style.corner_radius_bottom_right = corner_radius
 
 
 func _drop_piece(viewport_x: float) -> void:
@@ -264,30 +373,80 @@ func _on_piece_body_entered(other_body: Node, source_piece: PrototypePiece) -> v
 	if source_piece.tier >= TIER_RADIUS_RATIOS.size():
 		return
 
-	source_piece.merge_pending = true
-	other_piece.merge_pending = true
-	var result_position := (source_piece.global_position + other_piece.global_position) * 0.5
-	var result_linear_velocity := (
-		source_piece.linear_velocity + other_piece.linear_velocity
-	) * 0.5
-	var result_angular_velocity := (
-		source_piece.angular_velocity + other_piece.angular_velocity
-	) * 0.5
-	var result_rotation := lerp_angle(
-		source_piece.global_rotation,
-		other_piece.global_rotation,
-		0.5
+	_queue_merge_pair(source_piece, other_piece)
+
+
+func _queue_merge_pair(first_piece: PrototypePiece, second_piece: PrototypePiece) -> void:
+	first_piece.merge_pending = true
+	second_piece.merge_pending = true
+	_queued_merge_pairs.append([first_piece, second_piece])
+	_try_resolve_next_merge()
+
+
+func _try_resolve_next_merge() -> void:
+	if game_over or _merge_resolution_pending or _merge_cooldown_remaining > 0.0:
+		return
+
+	while not _queued_merge_pairs.is_empty():
+		var pair: Array = _queued_merge_pairs.pop_front()
+		var first_piece := pair[0] as PrototypePiece
+		var second_piece := pair[1] as PrototypePiece
+		if not _is_valid_merge_pair(first_piece, second_piece):
+			_release_merge_pair(first_piece, second_piece)
+			continue
+
+		_merge_resolution_pending = true
+		var result_position := (
+			first_piece.global_position + second_piece.global_position
+		) * 0.5
+		var result_linear_velocity := (
+			first_piece.linear_velocity + second_piece.linear_velocity
+		) * 0.5
+		var result_angular_velocity := (
+			first_piece.angular_velocity + second_piece.angular_velocity
+		) * 0.5
+		var result_rotation := lerp_angle(
+			first_piece.global_rotation,
+			second_piece.global_rotation,
+			0.5
+		)
+		call_deferred(
+			"_resolve_merge",
+			first_piece,
+			second_piece,
+			first_piece.tier + 1,
+			result_position,
+			result_linear_velocity,
+			result_angular_velocity,
+			result_rotation
+		)
+		return
+
+
+func _is_valid_merge_pair(
+	first_piece: PrototypePiece,
+	second_piece: PrototypePiece
+) -> bool:
+	return (
+		_is_active_merge_source(first_piece)
+		and _is_active_merge_source(second_piece)
+		and first_piece != second_piece
+		and first_piece.tier == second_piece.tier
+		and first_piece.tier < TIER_RADIUS_RATIOS.size()
 	)
-	call_deferred(
-		"_resolve_merge",
-		source_piece,
-		other_piece,
-		source_piece.tier + 1,
-		result_position,
-		result_linear_velocity,
-		result_angular_velocity,
-		result_rotation
-	)
+
+
+func _release_merge_pair(
+	first_piece: PrototypePiece,
+	second_piece: PrototypePiece
+) -> void:
+	for piece in [first_piece, second_piece]:
+		if (
+			is_instance_valid(piece)
+			and not piece.is_queued_for_deletion()
+			and piece.get_parent() == pieces
+		):
+			piece.merge_pending = false
 
 
 func _resolve_merge(
@@ -300,24 +459,197 @@ func _resolve_merge(
 	result_rotation: float
 ) -> void:
 	if game_over:
+		_merge_resolution_pending = false
 		return
-	if not _is_active_merge_source(first_piece):
+	if not _is_valid_merge_pair(first_piece, second_piece):
+		_merge_resolution_pending = false
+		_release_merge_pair(first_piece, second_piece)
+		_try_resolve_next_merge()
 		return
-	if not _is_active_merge_source(second_piece):
-		return
-	if first_piece.tier + 1 != result_tier or second_piece.tier + 1 != result_tier:
+	if first_piece.tier + 1 != result_tier:
+		_merge_resolution_pending = false
+		_release_merge_pair(first_piece, second_piece)
+		_try_resolve_next_merge()
 		return
 
+	var result_radius: float = (
+		_chamber_rect.size.x * TIER_RADIUS_RATIOS[result_tier - 1]
+	)
+	var safe_result_position := _find_safe_merge_position(
+		result_position,
+		result_radius,
+		first_piece,
+		second_piece
+	)
 	first_piece.queue_free()
 	second_piece.queue_free()
-	_spawn_piece(
+	var result_piece := _spawn_piece(
 		result_tier,
-		result_position,
+		safe_result_position,
 		result_linear_velocity,
 		result_angular_velocity,
 		result_rotation
 	)
+	_apply_merge_expansion(result_piece)
+	_merge_cooldown_remaining = MERGE_RESOLUTION_COOLDOWN_SECONDS
+	_merge_resolution_pending = false
+	score += result_tier * result_tier * 2
+	pulse_charge = mini(MAX_PULSE_CHARGE, pulse_charge + PULSE_CHARGE_PER_MERGE)
+	if result_tier == TIER_RADIUS_RATIOS.size():
+		_max_merge_feedback_timer = MAX_MERGE_FEEDBACK_SECONDS
+		max_merge_feedback_label.visible = true
 	_update_debug_ui()
+
+
+func _find_safe_merge_position(
+	desired_position: Vector2,
+	result_radius: float,
+	first_piece: PrototypePiece,
+	second_piece: PrototypePiece
+) -> Vector2:
+	var clamped_position := _clamp_merge_position(desired_position, result_radius)
+	var best_position := clamped_position
+	var best_movement_squared := desired_position.distance_squared_to(clamped_position)
+	var best_vertical_movement := absf(clamped_position.y - desired_position.y)
+	var best_clearance := _merge_position_clearance(
+		clamped_position,
+		result_radius,
+		first_piece,
+		second_piece
+	)
+	if best_clearance >= MERGE_PLACEMENT_CLEARANCE:
+		return clamped_position
+
+	var found_safe_position := false
+	var nearest_safe_position := clamped_position
+	var nearest_safe_movement_squared := INF
+	var nearest_safe_vertical_movement := INF
+	var search_step := maxf(6.0, result_radius * 0.25)
+	for ring in range(1, MERGE_PLACEMENT_SEARCH_RINGS + 1):
+		var search_distance := search_step * ring
+		for direction_index in range(MERGE_PLACEMENT_SEARCH_DIRECTIONS):
+			var angle := TAU * direction_index / MERGE_PLACEMENT_SEARCH_DIRECTIONS
+			var candidate := _clamp_merge_position(
+				desired_position + Vector2.from_angle(angle) * search_distance,
+				result_radius
+			)
+			var candidate_clearance := _merge_position_clearance(
+				candidate,
+				result_radius,
+				first_piece,
+				second_piece
+			)
+			var movement_squared := desired_position.distance_squared_to(candidate)
+			var vertical_movement := absf(candidate.y - desired_position.y)
+			if candidate_clearance >= MERGE_PLACEMENT_CLEARANCE:
+				var same_distance := is_equal_approx(
+					movement_squared,
+					nearest_safe_movement_squared
+				)
+				if (
+					not found_safe_position
+					or (not same_distance and movement_squared < nearest_safe_movement_squared)
+					or (same_distance and vertical_movement < nearest_safe_vertical_movement)
+				):
+					found_safe_position = true
+					nearest_safe_position = candidate
+					nearest_safe_movement_squared = movement_squared
+					nearest_safe_vertical_movement = vertical_movement
+				continue
+			var same_clearance := is_equal_approx(candidate_clearance, best_clearance)
+			var same_fallback_distance := is_equal_approx(
+				movement_squared,
+				best_movement_squared
+			)
+			if (
+				(not same_clearance and candidate_clearance > best_clearance)
+				or (
+					same_clearance
+					and (
+						(not same_fallback_distance and movement_squared < best_movement_squared)
+						or (
+							same_fallback_distance
+							and vertical_movement < best_vertical_movement
+						)
+					)
+				)
+			):
+				best_clearance = candidate_clearance
+				best_position = candidate
+				best_movement_squared = movement_squared
+				best_vertical_movement = vertical_movement
+	if found_safe_position:
+		return nearest_safe_position
+	return best_position
+
+
+func _clamp_merge_position(position: Vector2, result_radius: float) -> Vector2:
+	var wall_inset := _wall_thickness * 0.5
+	return Vector2(
+		clampf(
+			position.x,
+			_chamber_rect.position.x + wall_inset + result_radius,
+			_chamber_rect.end.x - wall_inset - result_radius
+		),
+		clampf(
+			position.y,
+			_chamber_rect.position.y + wall_inset + result_radius,
+			_chamber_rect.end.y - wall_inset - result_radius
+		)
+	)
+
+
+func _merge_position_clearance(
+	position: Vector2,
+	result_radius: float,
+	first_piece: PrototypePiece,
+	second_piece: PrototypePiece
+) -> float:
+	var minimum_clearance := INF
+	for child in pieces.get_children():
+		if not child is PrototypePiece:
+			continue
+		var piece := child as PrototypePiece
+		if piece == first_piece or piece == second_piece:
+			continue
+		if piece.is_queued_for_deletion() or piece.merge_pending:
+			continue
+		var clearance := (
+			position.distance_to(piece.global_position)
+			- result_radius
+			- piece.radius
+		)
+		minimum_clearance = minf(minimum_clearance, clearance)
+	return minimum_clearance
+
+
+func _apply_merge_expansion(result_piece: PrototypePiece) -> void:
+	var influence_radius := result_piece.radius * MERGE_EXPANSION_RADIUS_MULTIPLIER
+	for child in pieces.get_children():
+		if not child is PrototypePiece:
+			continue
+		var piece := child as PrototypePiece
+		if piece == result_piece:
+			continue
+		if piece.is_queued_for_deletion() or piece.merge_pending:
+			continue
+
+		var offset := piece.global_position - result_piece.global_position
+		var distance := offset.length()
+		if distance <= 0.001 or distance >= influence_radius:
+			continue
+		var expansion_direction := offset / distance
+		expansion_direction.y = (
+			maxf(0.0, expansion_direction.y) * MERGE_EXPANSION_DOWNWARD_SCALE
+		)
+		if expansion_direction.is_zero_approx():
+			continue
+		var distance_influence := 1.0 - distance / influence_radius
+		var impulse_strength := minf(
+			MERGE_EXPANSION_MAX_IMPULSE,
+			MERGE_EXPANSION_BASE_IMPULSE * distance_influence / piece.mass
+		)
+		piece.apply_central_impulse(expansion_direction * impulse_strength)
 
 
 func _is_active_merge_source(piece: PrototypePiece) -> bool:
@@ -330,7 +662,12 @@ func _is_active_merge_source(piece: PrototypePiece) -> bool:
 
 
 func _roll_tier() -> int:
-	return _rng.randi_range(1, NORMAL_SPAWN_MAX_TIER)
+	var roll := _rng.randf()
+	if roll < 0.50:
+		return 1
+	if roll < 0.85:
+		return 2
+	return 3
 
 
 func _has_dangerous_piece() -> bool:
@@ -362,6 +699,56 @@ func _enter_game_over() -> void:
 	queue_redraw()
 
 
+func _activate_pulse(direction: Vector2) -> void:
+	if game_over or pulse_charge < MAX_PULSE_CHARGE:
+		return
+	var horizontal_direction := signf(direction.x)
+	if is_zero_approx(horizontal_direction):
+		return
+
+	pulse_charge = 0
+	_pulse_feedback_timer = PULSE_FEEDBACK_SECONDS
+	pulse_feedback_label.visible = true
+	var active_pieces: Array[PrototypePiece] = []
+	var push_center := Vector2.ZERO
+	for child in pieces.get_children():
+		if not child is PrototypePiece:
+			continue
+		var piece := child as PrototypePiece
+		if piece.is_queued_for_deletion() or piece.merge_pending:
+			continue
+		active_pieces.append(piece)
+		push_center += piece.global_position
+
+	if not active_pieces.is_empty():
+		push_center /= active_pieces.size()
+	var separation_radius := (
+		_chamber_rect.size.x * PULSE_SEPARATION_RADIUS_RATIO
+	)
+	for piece in active_pieces:
+		var impulse := Vector2(
+			horizontal_direction * PULSE_BASE_IMPULSE / piece.mass,
+			0.0
+		)
+		var offset := piece.global_position - push_center
+		var distance := offset.length()
+		if distance > 0.001 and distance < separation_radius:
+			var separation_direction := offset / distance
+			separation_direction.y = (
+				maxf(0.0, separation_direction.y)
+				* PULSE_SEPARATION_DOWNWARD_SCALE
+			)
+			if not separation_direction.is_zero_approx():
+				var distance_influence := 1.0 - distance / separation_radius
+				var separation_strength := minf(
+					PULSE_SEPARATION_MAX_IMPULSE,
+					PULSE_SEPARATION_BASE_IMPULSE * distance_influence
+				) / piece.mass
+				impulse += separation_direction * separation_strength
+		piece.apply_central_impulse(impulse)
+	_update_debug_ui()
+
+
 func _restart_sandbox() -> void:
 	for piece in pieces.get_children():
 		piece.queue_free()
@@ -369,6 +756,15 @@ func _restart_sandbox() -> void:
 	danger_active = false
 	danger_timer = 0.0
 	game_over = false
+	pulse_charge = 0
+	score = 0
+	_pulse_feedback_timer = 0.0
+	_max_merge_feedback_timer = 0.0
+	_merge_cooldown_remaining = 0.0
+	_merge_resolution_pending = false
+	_queued_merge_pairs.clear()
+	pulse_feedback_label.visible = false
+	max_merge_feedback_label.visible = false
 	game_over_label.visible = false
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
@@ -377,7 +773,10 @@ func _restart_sandbox() -> void:
 
 
 func _update_debug_ui() -> void:
-	seed_label.text = "Seed: %d" % INITIAL_SEED
-	body_count_label.text = "Bodies: %d" % pieces.get_child_count()
-	next_tier_label.text = "Next: T%d" % _next_tier
-	fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
+	_update_next_preview()
+	score_label.text = "Score: %d" % score
+	pulse_label.text = "Pulse: %d%%" % pulse_charge
+	danger_label.visible = danger_active
+	var pulse_available := pulse_charge >= MAX_PULSE_CHARGE and not game_over
+	pulse_left_button.disabled = not pulse_available
+	pulse_right_button.disabled = not pulse_available

@@ -47,47 +47,159 @@ shape = SubResource("RectangleShape2D_floor")
 
 [node name="DebugUI" type="CanvasLayer" parent="."]
 
-[node name="Panel" type="PanelContainer" parent="DebugUI"]
+[node name="HUDPanel" type="PanelContainer" parent="DebugUI"]
 anchors_preset = 10
 anchor_right = 1.0
-offset_left = 12.0
-offset_top = 12.0
-offset_right = -12.0
-offset_bottom = 52.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 104.0
 grow_horizontal = 2
 theme = SubResource("Theme_debug")
 
-[node name="Margin" type="MarginContainer" parent="DebugUI/Panel"]
+[node name="Margin" type="MarginContainer" parent="DebugUI/HUDPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="Row" type="HBoxContainer" parent="DebugUI/HUDPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Next" type="VBoxContainer" parent="DebugUI/HUDPanel/Margin/Row"]
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Title" type="Label" parent="DebugUI/HUDPanel/Margin/Row/Next"]
+layout_mode = 2
+text = "NEXT"
+horizontal_alignment = 1
+
+[node name="PreviewCenter" type="CenterContainer" parent="DebugUI/HUDPanel/Margin/Row/Next"]
+custom_minimum_size = Vector2(72, 58)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Preview" type="Panel" parent="DebugUI/HUDPanel/Margin/Row/Next/PreviewCenter"]
+custom_minimum_size = Vector2(42, 42)
+layout_mode = 2
+
+[node name="Pulse" type="Label" parent="DebugUI/HUDPanel/Margin/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Pulse: 0%"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="Score" type="Label" parent="DebugUI/HUDPanel/Margin/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Score: 0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ControlsPanel" type="PanelContainer" parent="DebugUI"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -68.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+theme = SubResource("Theme_debug")
+
+[node name="Margin" type="MarginContainer" parent="DebugUI/ControlsPanel"]
 layout_mode = 2
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 4
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 4
 
-[node name="Row" type="HBoxContainer" parent="DebugUI/Panel/Margin"]
+[node name="Row" type="HBoxContainer" parent="DebugUI/ControlsPanel/Margin"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Seed" type="Label" parent="DebugUI/Panel/Margin/Row"]
+[node name="PulseLeft" type="Button" parent="DebugUI/ControlsPanel/Margin/Row"]
 layout_mode = 2
-text = "Seed: 12345"
+size_flags_horizontal = 3
+disabled = true
+text = "◀ PUSH"
 
-[node name="BodyCount" type="Label" parent="DebugUI/Panel/Margin/Row"]
+[node name="Restart" type="Button" parent="DebugUI/ControlsPanel/Margin/Row"]
 layout_mode = 2
-text = "Bodies: 0"
-
-[node name="NextTier" type="Label" parent="DebugUI/Panel/Margin/Row"]
-layout_mode = 2
-text = "Next: T1"
-
-[node name="FPS" type="Label" parent="DebugUI/Panel/Margin/Row"]
-layout_mode = 2
-text = "FPS: 0"
-
-[node name="Restart" type="Button" parent="DebugUI/Panel/Margin/Row"]
-layout_mode = 2
-size_flags_horizontal = 10
 text = "Restart"
+
+[node name="PulseRight" type="Button" parent="DebugUI/ControlsPanel/Margin/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+disabled = true
+text = "PUSH ▶"
+
+[node name="PulseFeedback" type="Label" parent="DebugUI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -80.0
+offset_top = 100.0
+offset_right = 80.0
+offset_bottom = 144.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = SubResource("Theme_debug")
+theme_override_font_sizes/font_size = 28
+text = "PUSH!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="MaxMergeFeedback" type="Label" parent="DebugUI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -130.0
+offset_top = 40.0
+offset_right = 130.0
+offset_bottom = 84.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = SubResource("Theme_debug")
+theme_override_colors/font_color = Color(1, 0.788235, 0.341176, 1)
+theme_override_colors/font_outline_color = Color(0.0627451, 0.0901961, 0.133333, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 28
+text = "MAX MERGE!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Danger" type="Label" parent="DebugUI"]
+visible = false
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 248.0
+offset_bottom = 276.0
+grow_horizontal = 2
+mouse_filter = 2
+theme = SubResource("Theme_debug")
+theme_override_colors/font_color = Color(1, 0.231373, 0.188235, 1)
+theme_override_font_sizes/font_size = 22
+text = "DANGER"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="GameOver" type="Label" parent="DebugUI"]
 visible = false
