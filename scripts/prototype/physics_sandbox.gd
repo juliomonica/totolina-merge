@@ -1,6 +1,7 @@
 extends Node2D
 
 const PIECE_SCENE := preload("res://scenes/prototype/piece.tscn")
+const PIECE_VISUAL_SCRIPT := preload("res://scripts/prototype/piece_visual.gd")
 const INITIAL_SEED := 12345
 const CHAMBER_WIDTH_RATIO := 0.86
 const CHAMBER_HEIGHT_RATIO := 0.72
@@ -29,6 +30,9 @@ const MERGE_RESOLUTION_COOLDOWN_SECONDS := 0.45
 const UI_EDGE_MARGIN := 16.0
 const HUD_HEIGHT := 88.0
 const CONTROLS_HEIGHT := 52.0
+const TOLINA_SAFE_WIDTH := 90.0
+const TOLINA_SAFE_HEIGHT := 96.0
+const TOLINA_HUD_GAP := 10.0
 const NORMAL_SPAWN_MAX_TIER := 3
 const TIER_RADIUS_RATIOS := [
 	0.0460,
@@ -68,8 +72,10 @@ const TIER_COLORS := [
 @onready var left_wall: StaticBody2D = $Chamber/LeftWall
 @onready var right_wall: StaticBody2D = $Chamber/RightWall
 @onready var floor: StaticBody2D = $Chamber/Floor
+@onready var tolina_visual: TextureRect = $DebugUI/Tolina
 @onready var hud_panel: PanelContainer = $DebugUI/HUDPanel
 @onready var next_preview: Panel = $DebugUI/HUDPanel/Margin/Row/Next/PreviewCenter/Preview
+@onready var next_preview_ingredient: TextureRect = $DebugUI/HUDPanel/Margin/Row/Next/PreviewCenter/Preview/Ingredient
 @onready var score_label: Label = $DebugUI/HUDPanel/Margin/Row/Score
 @onready var pulse_label: Label = $DebugUI/HUDPanel/Margin/Row/Pulse
 @onready var controls_panel: PanelContainer = $DebugUI/ControlsPanel
@@ -80,6 +86,7 @@ const TIER_COLORS := [
 @onready var max_merge_feedback_label: Label = $DebugUI/MaxMergeFeedback
 @onready var danger_label: Label = $DebugUI/Danger
 @onready var game_over_label: Label = $DebugUI/GameOver
+@onready var presentation: PrototypeSandboxPresentation = $Presentation
 
 var _rng := RandomNumberGenerator.new()
 var _next_tier := 1
@@ -177,47 +184,12 @@ func _draw() -> void:
 	if _chamber_rect.size == Vector2.ZERO:
 		return
 
-	draw_rect(_chamber_rect, Color("101722"), true)
-	var wall_color := Color("7f8fa6")
-	draw_rect(
-		Rect2(
-			Vector2(
-				_chamber_rect.position.x - _wall_thickness * 0.5,
-				_chamber_rect.position.y - _wall_thickness * 0.5
-			),
-			Vector2(_wall_thickness, _chamber_rect.size.y + _wall_thickness)
-		),
-		wall_color,
-		true
-	)
 	var danger_line_color := Color("ff3b30") if danger_active else Color("ffb020")
 	draw_line(
 		Vector2(_chamber_rect.position.x, _danger_line_y),
 		Vector2(_chamber_rect.end.x, _danger_line_y),
 		danger_line_color,
 		3.0
-	)
-	draw_rect(
-		Rect2(
-			Vector2(
-				_chamber_rect.end.x - _wall_thickness * 0.5,
-				_chamber_rect.position.y - _wall_thickness * 0.5
-			),
-			Vector2(_wall_thickness, _chamber_rect.size.y + _wall_thickness)
-		),
-		wall_color,
-		true
-	)
-	draw_rect(
-		Rect2(
-			Vector2(
-				_chamber_rect.position.x - _wall_thickness * 0.5,
-				_chamber_rect.end.y - _wall_thickness * 0.5
-			),
-			Vector2(_chamber_rect.size.x + _wall_thickness, _wall_thickness)
-		),
-		wall_color,
-		true
 	)
 
 
@@ -267,6 +239,7 @@ func _layout_chamber() -> void:
 	danger_label.offset_top = _danger_line_y - 34.0
 	danger_label.offset_bottom = _danger_line_y - 6.0
 	_layout_safe_ui(viewport_size)
+	presentation.layout(_chamber_rect)
 	_update_next_preview()
 	queue_redraw()
 
@@ -289,7 +262,18 @@ func _layout_safe_ui(viewport_size: Vector2) -> void:
 			maxf(0.0, window_size.y - safe_area.end.y) * viewport_scale.y
 		)
 
-	hud_panel.offset_left = safe_insets.x + UI_EDGE_MARGIN
+	var tolina_left := safe_insets.x + UI_EDGE_MARGIN
+	var tolina_top := safe_insets.y + UI_EDGE_MARGIN
+	tolina_visual.offset_left = tolina_left
+	tolina_visual.offset_top = tolina_top
+	tolina_visual.offset_right = tolina_left + TOLINA_SAFE_WIDTH
+	tolina_visual.offset_bottom = minf(
+		tolina_top + TOLINA_SAFE_HEIGHT,
+		_chamber_rect.position.y - UI_EDGE_MARGIN * 0.5
+	)
+	hud_panel.offset_left = (
+		tolina_visual.offset_right + TOLINA_HUD_GAP
+	)
 	hud_panel.offset_top = safe_insets.y + UI_EDGE_MARGIN
 	hud_panel.offset_right = -(safe_insets.z + UI_EDGE_MARGIN)
 	hud_panel.offset_bottom = hud_panel.offset_top + HUD_HEIGHT
@@ -306,7 +290,14 @@ func _update_next_preview() -> void:
 	var radius: float = _chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index]
 	var diameter := ceilf(radius * 2.0)
 	next_preview.custom_minimum_size = Vector2(diameter, diameter)
-	_next_preview_style.bg_color = TIER_COLORS[tier_index]
+	var ingredient_texture: Texture2D = (
+		PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(_next_tier)
+	)
+	next_preview_ingredient.texture = ingredient_texture
+	next_preview_ingredient.visible = ingredient_texture != null
+	_next_preview_style.bg_color = (
+		Color.TRANSPARENT if ingredient_texture != null else TIER_COLORS[tier_index]
+	)
 	var corner_radius := ceili(radius)
 	_next_preview_style.corner_radius_top_left = corner_radius
 	_next_preview_style.corner_radius_top_right = corner_radius
@@ -325,6 +316,7 @@ func _drop_piece(viewport_x: float) -> void:
 	var drop_x := clampf(viewport_x, inner_left + radius, inner_right - radius)
 	var drop_y := _chamber_rect.position.y + radius + _wall_thickness * 0.5
 
+	presentation.show_throw()
 	_spawn_piece(_next_tier, Vector2(drop_x, drop_y))
 	_next_tier = _roll_tier()
 	_update_debug_ui()
@@ -491,6 +483,10 @@ func _resolve_merge(
 		result_rotation
 	)
 	_apply_merge_expansion(result_piece)
+	presentation.show_merge(
+		safe_result_position,
+		minf(result_radius * 3.0, _chamber_rect.size.x * 0.45)
+	)
 	_merge_cooldown_remaining = MERGE_RESOLUTION_COOLDOWN_SECONDS
 	_merge_resolution_pending = false
 	score += result_tier * result_tier * 2
@@ -763,6 +759,7 @@ func _restart_sandbox() -> void:
 	_merge_cooldown_remaining = 0.0
 	_merge_resolution_pending = false
 	_queued_merge_pairs.clear()
+	presentation.reset()
 	pulse_feedback_label.visible = false
 	max_merge_feedback_label.visible = false
 	game_over_label.visible = false

@@ -21,10 +21,4 @@ func configure(
 	var circle_shape := CircleShape2D.new()
 	circle_shape.radius = radius
 	$CollisionShape2D.shape = circle_shape
-	queue_redraw()
-
-
-func _draw() -> void:
-	draw_circle(Vector2.ZERO, radius, debug_color)
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, debug_color.lightened(0.35), 2.0)
-	draw_line(Vector2.ZERO, Vector2(radius * 0.72, 0.0), debug_color.darkened(0.35), 2.0)
+	$Visual.configure(tier, radius, debug_color)
