@@ -7,6 +7,10 @@ const INGREDIENT_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/cat_kitchen/ingredients/cookie.png"),
 	preload("res://assets/cat_kitchen/ingredients/cupcake.png"),
 	preload("res://assets/cat_kitchen/ingredients/cake_slice.png"),
+	preload("res://assets/cat_kitchen/ingredients/birthday_cake.png"),
+	preload("res://assets/cat_kitchen/ingredients/magical_cake.png"),
+	preload("res://assets/cat_kitchen/ingredients/cat_celebration_cake.png"),
+	preload("res://assets/cat_kitchen/ingredients/magical_cat_birthday_cake.png"),
 ]
 const INGREDIENT_DIAMETER_SCALES := [
 	1.46,
@@ -14,6 +18,10 @@ const INGREDIENT_DIAMETER_SCALES := [
 	1.82,
 	1.78,
 	1.74,
+	1.60,
+	1.88,
+	1.66,
+	1.62,
 ]
 
 var _radius := 24.0

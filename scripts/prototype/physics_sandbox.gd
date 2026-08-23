@@ -262,8 +262,8 @@ func _layout_chamber() -> void:
 	left_shape.size = Vector2(_wall_thickness, _chamber_rect.size.y + _wall_thickness)
 	right_shape.size = left_shape.size
 	floor_shape.size = Vector2(_chamber_rect.size.x + _wall_thickness, _wall_thickness)
-	danger_label.offset_top = _danger_line_y - 34.0
-	danger_label.offset_bottom = _danger_line_y - 6.0
+	danger_label.offset_top = _danger_line_y - 42.0
+	danger_label.offset_bottom = _danger_line_y + 2.0
 	_layout_safe_ui(viewport_size)
 	presentation.layout(_chamber_rect)
 	_update_next_preview()
@@ -784,8 +784,12 @@ func _show_run_result() -> void:
 	if highest_creation_reached <= 0:
 		run_result_label.visible = false
 		return
+	var highest_creation_heading := (
+		tr("RESULT_HIGHEST_CREATION") % ""
+	).strip_edges()
 	var result_lines := PackedStringArray([
-		tr("RESULT_HIGHEST_CREATION") % _tier_display_name(highest_creation_reached),
+		highest_creation_heading,
+		_tier_display_name(highest_creation_reached),
 	])
 	if not _new_discoveries_this_run.is_empty():
 		var highest_new_tier := 1
