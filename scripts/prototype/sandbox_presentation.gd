@@ -35,7 +35,11 @@ func _process(delta: float) -> void:
 	_contain_piece_visuals()
 
 
-func layout(chamber_rect: Rect2, physics_floor_y: float) -> void:
+func layout(
+	chamber_rect: Rect2,
+	physics_floor_y: float,
+	danger_threshold_y: float
+) -> void:
 	if bowl.texture == null:
 		return
 	var bowl_texture_size := bowl.texture.get_size()
@@ -58,21 +62,10 @@ func layout(chamber_rect: Rect2, physics_floor_y: float) -> void:
 		viewport_width
 		* GAMEPLAY_CONFIG.BOWL_RESPONSIVE_WIDTH_VIEWPORT_RATIO
 	)
-	var minimum_vertical_scale := (
-		chamber_rect.size.x
-		* GAMEPLAY_CONFIG.BOWL_RESPONSIVE_MIN_HEIGHT_CHAMBER_WIDTH_RATIO
-		/ bowl_texture_size.x
-	)
-	var maximum_vertical_scale := (
-		chamber_rect.size.x
-		* GAMEPLAY_CONFIG.BOWL_RESPONSIVE_MAX_HEIGHT_CHAMBER_WIDTH_RATIO
-		/ bowl_texture_size.x
-	)
 	var target_bowl_top := (
-		viewport_size.y
-			* GAMEPLAY_CONFIG.BOWL_RESPONSIVE_TOP_VIEWPORT_HEIGHT_RATIO
+		danger_threshold_y
 		+ chamber_rect.size.x
-			* GAMEPLAY_CONFIG.BOWL_RESPONSIVE_TOP_GAP_CHAMBER_WIDTH_RATIO
+			* GAMEPLAY_CONFIG.DANGER_TO_BOWL_TOP_GAP_CHAMBER_WIDTH_RATIO
 	)
 	var target_vertical_scale := (
 		(_physics_floor_y - target_bowl_top)
@@ -81,11 +74,7 @@ func layout(chamber_rect: Rect2, physics_floor_y: float) -> void:
 			* GAMEPLAY_CONFIG.BOWL_FLOOR_TEXTURE_Y_RATIO
 		)
 	)
-	var responsive_vertical_scale := clampf(
-		target_vertical_scale,
-		minimum_vertical_scale,
-		maximum_vertical_scale
-	)
+	var responsive_vertical_scale := maxf(target_vertical_scale, 0.001)
 	var responsive_size := Vector2(
 		responsive_width,
 		bowl_texture_size.y * responsive_vertical_scale

@@ -36,7 +36,7 @@ The chamber rectangle is the source of truth for gameplay dimensions. Walls, flo
 | --- | --- | ---: | --- | --- |
 | `CHAMBER_WIDTH_VIEWPORT_RATIO` | Maximum chamber width as a share of viewport width. | `0.86` | GAMEPLAY | Changing this resizes horizontal play space and every tier collision radius. |
 | `CHAMBER_HEIGHT_VIEWPORT_RATIO` | Chamber height as a share of viewport height. | `0.72` | GAMEPLAY | Changes available stacking height and floor position. |
-| `CHAMBER_TOP_VIEWPORT_RATIO` | Chamber top position as a share of viewport height. | `0.07` | GAMEPLAY | Moves the entire physics chamber vertically. It does not move the independently configured danger line. |
+| `CHAMBER_TOP_VIEWPORT_RATIO` | Chamber top position as a share of viewport height. | `0.07` | GAMEPLAY | Moves the entire physics chamber and its chamber-relative gameplay elements, including danger. |
 | `CHAMBER_MAX_WIDTH_TO_HEIGHT_RATIO` | Limits chamber width on shorter portrait screens. | `0.67` | GAMEPLAY | Keep this compatible with T8/T9 containment. |
 
 The effective width is the smaller of:
@@ -45,6 +45,21 @@ The effective width is the smaller of:
 viewport width × CHAMBER_WIDTH_VIEWPORT_RATIO
 chamber height × CHAMBER_MAX_WIDTH_TO_HEIGHT_RATIO
 ```
+
+### Screen coordinates and chamber coordinates
+
+Screen coordinates describe the device's logical viewport. They are used only to create the outer `_chamber_rect` and to place safe-area UI. The viewport can become taller or wider under Godot's `aspect="expand"` setting.
+
+Chamber coordinates describe gameplay positions inside `_chamber_rect`:
+
+```text
+chamber X = chamber left + chamber width × horizontal chamber ratio
+chamber Y = chamber top  + chamber height × vertical chamber ratio
+```
+
+Normalized chamber ratios are device independent: `0.0` is the chamber's top or left edge and `1.0` is its bottom or right edge. Walls, floor, spawn height, collision radii, and the danger threshold derive from these chamber coordinates. Their screen pixels change responsively, but their relationship to the chamber does not.
+
+Pixel values such as label offsets and UI margins are presentation adjustments, not chamber gameplay coordinates. The magical bowl PNG is also presentation: its top sits a chamber-scaled gap below the shared danger threshold and its floor anchor follows the chamber floor, but the artwork never becomes a physics boundary.
 
 ### Physics boundaries
 
@@ -88,34 +103,44 @@ These values change collision circles and merge placement clearance. They are no
 
 ## 2. Danger Zone
 
-The danger line is independent from the chamber and bowl configuration. Its position is calculated directly from viewport height. Moving it does not move walls, the floor, the chamber, or the bowl.
+Gameplay danger and danger presentation share one runtime coordinate: `_danger_threshold_y`.
 
-It still affects danger detection and game-over balance because the same position is used for the visual line and piece checks.
+The gameplay piece check, the visible danger line, and the warning label all use that exact value. There is no separate viewport-relative or bowl-relative visual estimate. The threshold is calculated inside `_chamber_rect`, so its relationship to the gameplay chamber remains constant across aspect ratios.
 
 ### Danger gameplay values
 
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
-| `DANGER_LINE_VIEWPORT_HEIGHT_RATIO` | Danger threshold as a share of viewport height. | `0.322` | GAMEPLAY | Smaller moves the threshold up; larger moves it down. It does not move physics. |
+| `DANGER_HEIGHT_CHAMBER_RATIO` | Shared gameplay and visual danger height inside the chamber. `0.0` is chamber top; `1.0` is chamber bottom. | `0.3888888889` | GAMEPLAY + VISUAL | Smaller moves the threshold, line, and warning toward chamber top; larger moves all three toward the floor. |
 | `DANGER_GRACE_SECONDS` | Continuous danger time required for game over. | `3.0` | GAMEPLAY | Changes recovery time. |
 | `DANGER_VERTICAL_SPEED_THRESHOLD` | Maximum vertical speed for a supported piece to count as dangerous. | `10.0` | GAMEPLAY | Prevents transient falling pieces from starting danger. |
 
-The current `0.322` matches the earlier layout calculation:
+The shared runtime coordinate is:
 
 ```text
-0.07 chamber top + (0.72 chamber height × 0.35) = 0.322 viewport height
+_danger_threshold_y = chamber top
+                    + chamber height × DANGER_HEIGHT_CHAMBER_RATIO
+```
+
+The current `0.3888888889` value preserves the earlier gameplay balance:
+
+```text
+(0.35 previous viewport ratio - 0.07 chamber top) / 0.72 chamber height
+= 0.3888888889 chamber ratio
 ```
 
 ### Danger presentation values
+
+The line is drawn at `_danger_threshold_y`. The label rectangle is anchored to the same value, with configurable offsets for readability. These offsets move only the label; they never create a second danger-line coordinate.
 
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
 | `DANGER_LINE_INACTIVE_COLOR` | Line color before danger is active. | `ffb020` | VISUAL | Does not affect detection. |
 | `DANGER_LINE_ACTIVE_COLOR` | Line color while danger is active. | `ff3b30` | VISUAL | Keep high contrast over the kitchen background. |
 | `DANGER_LINE_WIDTH` | Drawn line width in pixels. | `3.0` | VISUAL | Large values can obscure pieces near the threshold. |
-| `DANGER_LABEL_TOP_OFFSET` | Label top relative to the danger line. | `-42.0` | VISUAL | More negative moves the label upward. |
-| `DANGER_LABEL_BOTTOM_OFFSET` | Label bottom relative to the danger line. | `2.0` | VISUAL | Adjust with the top offset to preserve label height. |
-| `DANGER_TEXT_SCALE` | Additional Label node scale. | `Vector2.ONE` | VISUAL | Prefer font-size changes before nonuniform scaling. |
+| `DANGER_LABEL_TOP_OFFSET` | Label top relative to `_danger_threshold_y`. | `-42.0` | VISUAL | More negative moves only the label upward. |
+| `DANGER_LABEL_BOTTOM_OFFSET` | Label bottom relative to `_danger_threshold_y`. | `2.0` | VISUAL | Adjust with the top offset to preserve label height. |
+| `DANGER_LABEL_SCALE` | Additional Label node scale. | `Vector2.ONE` | VISUAL | Prefer font-size changes before nonuniform scaling. |
 | `DANGER_TEXT_FONT_SIZE` | Warning font size. | `30` | VISUAL | Verify Chinese glyph readability and narrow screens. |
 | `DANGER_TEXT_COLOR` | Warning text color. | `ff3b30` | VISUAL | Preserve strong contrast. |
 | `DANGER_TEXT_OUTLINE_COLOR` | Warning outline color. | `230408` | VISUAL | Dark outline improves readability over ingredients. |
@@ -150,10 +175,7 @@ When `BOWL_MATCH_CHAMBER_SIZE` is `false`, the existing responsive calculation r
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
 | `BOWL_RESPONSIVE_WIDTH_VIEWPORT_RATIO` | Responsive bowl width relative to viewport width. | `0.98` | VISUAL | Increasing can crop the side walls. |
-| `BOWL_RESPONSIVE_MIN_HEIGHT_CHAMBER_WIDTH_RATIO` | Minimum responsive vertical scale boundary. | `1.37` | VISUAL | Can clamp floor-anchor adjustments on shorter screens. |
-| `BOWL_RESPONSIVE_MAX_HEIGHT_CHAMBER_WIDTH_RATIO` | Maximum responsive vertical scale boundary. | `1.55` | VISUAL | Prevents excessive vertical stretching. |
-| `BOWL_RESPONSIVE_TOP_VIEWPORT_HEIGHT_RATIO` | Independent desired bowl-top position before the extra gap. | `0.322` | VISUAL | This deliberately does not read the danger position. |
-| `BOWL_RESPONSIVE_TOP_GAP_CHAMBER_WIDTH_RATIO` | Additional gap below the responsive top reference. | `0.035` | VISUAL | Increase to place the desired rim lower. |
+| `DANGER_TO_BOWL_TOP_GAP_CHAMBER_WIDTH_RATIO` | Fixed visual gap from the shared danger threshold down to the bowl texture's top. | `0.035` | VISUAL | Increase to place the bowl lower while keeping danger gameplay unchanged. |
 | `BOWL_MANUAL_SIZE_PIXELS` | Optional explicit width and height. Zero components keep responsive dimensions. | `Vector2.ZERO` | VISUAL | Absolute pixels are less portable across phones. |
 | `BOWL_MANUAL_SCALE` | Post-scale applied in responsive/manual mode. | `Vector2.ONE` | VISUAL | Nonuniform values can distort artwork. |
 | `BOWL_MANUAL_OFFSET_PIXELS` | Final X/Y bowl translation in responsive/manual mode. | `Vector2.ZERO` | VISUAL | Positive X moves right; positive Y moves down. |
@@ -162,10 +184,20 @@ When `BOWL_MATCH_CHAMBER_SIZE` is `false`, the existing responsive calculation r
 
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
-| `BOWL_FLOOR_TEXTURE_Y_RATIO` | Selects the texture-height position aligned to the physics floor. | `0.72` | VISUAL | Because the bowl is one sprite, this can alter its scale or position. Tune in small increments such as `0.005`. |
+| `BOWL_FLOOR_TEXTURE_Y_RATIO` | Selects the texture-height position aligned to the physics floor. | `0.80` | VISUAL | Because the bowl is one sprite, this can alter its scale or position. Tune in small increments such as `0.005`. |
 | `BOWL_VISUAL_FLOOR_OFFSET_PIXELS` | Moves the bowl's visual floor anchor relative to the physics floor. | `0.0` | VISUAL | Negative lifts the bowl anchor; positive lowers it. Does not move pieces or collisions. |
 
 `BOWL_FLOOR_TEXTURE_Y_RATIO` cannot move only the glowing floor while keeping both the complete bowl size and rim fixed. The floor is part of the single bowl PNG. Use the manual size/offset controls for composition, or separate the floor artwork in a dedicated future visual task.
+
+In the default responsive mode, the bowl's vertical size is solved from two chamber-owned anchors:
+
+```text
+bowl top target = _danger_threshold_y
+                + chamber width × DANGER_TO_BOWL_TOP_GAP_CHAMBER_WIDTH_RATIO
+bowl floor target = chamber floor + BOWL_VISUAL_FLOOR_OFFSET_PIXELS
+```
+
+This avoids aspect-dependent vertical clamps that could move the bowl rim away from the danger line. Manual bowl height or scale overrides can intentionally replace this automatic relationship and therefore require all target layouts to be rechecked.
 
 ## 4. Ingredient Visual Scaling
 
@@ -226,7 +258,7 @@ The current layout order is:
 ```text
 safe area
 Tolina + NEXT / Pulse / Score HUD
-danger warning and danger line
+danger warning and shared gameplay/visual threshold line
 magical bowl and pieces
 recipe progress strip
 Push Left / Hold Restart / Push Right
@@ -241,7 +273,7 @@ Always test:
 - iPhone notch/Dynamic Island safe areas on a real device
 - Android gesture/navigation insets on a real device
 
-Confirm that the complete bowl silhouette remains visible, the danger line remains above the rim, the recipe strip does not cover grounded pieces, and all three bottom controls remain reachable.
+Confirm that the complete bowl silhouette remains visible, the danger line matches the gameplay threshold, the recipe strip does not cover grounded pieces, and all three bottom controls remain reachable.
 
 ## Verification checklist after configuration edits
 

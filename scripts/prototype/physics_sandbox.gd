@@ -99,7 +99,7 @@ var _rng := RandomNumberGenerator.new()
 var _next_tier := 1
 var _chamber_rect := Rect2()
 var _wall_thickness := 0.0
-var _danger_line_y := 0.0
+var _danger_threshold_y := 0.0
 var _next_preview_style := StyleBoxFlat.new()
 var _pulse_feedback_timer := 0.0
 var _max_merge_feedback_timer := 0.0
@@ -223,15 +223,15 @@ func _draw() -> void:
 		else GAMEPLAY_CONFIG.DANGER_LINE_INACTIVE_COLOR
 	)
 	draw_line(
-		Vector2(_chamber_rect.position.x, _danger_line_y),
-		Vector2(_chamber_rect.end.x, _danger_line_y),
+		Vector2(_chamber_rect.position.x, _danger_threshold_y),
+		Vector2(_chamber_rect.end.x, _danger_threshold_y),
 		danger_line_color,
 		GAMEPLAY_CONFIG.DANGER_LINE_WIDTH
 	)
 
 
 func _apply_presentation_configuration() -> void:
-	danger_label.scale = GAMEPLAY_CONFIG.DANGER_TEXT_SCALE
+	danger_label.scale = GAMEPLAY_CONFIG.DANGER_LABEL_SCALE
 	danger_label.add_theme_font_size_override(
 		"font_size",
 		GAMEPLAY_CONFIG.DANGER_TEXT_FONT_SIZE
@@ -295,9 +295,10 @@ func _layout_chamber() -> void:
 		viewport_size.x
 			* GAMEPLAY_CONFIG.WALL_THICKNESS_VIEWPORT_WIDTH_RATIO
 	)
-	_danger_line_y = (
-		viewport_size.y
-		* GAMEPLAY_CONFIG.DANGER_LINE_VIEWPORT_HEIGHT_RATIO
+	_danger_threshold_y = (
+		_chamber_rect.position.y
+		+ _chamber_rect.size.y
+			* GAMEPLAY_CONFIG.DANGER_HEIGHT_CHAMBER_RATIO
 	)
 
 	left_wall.position = Vector2(
@@ -332,13 +333,17 @@ func _layout_chamber() -> void:
 	right_shape.size = left_shape.size
 	floor_shape.size = Vector2(_chamber_rect.size.x + _wall_thickness, _wall_thickness)
 	danger_label.offset_top = (
-		_danger_line_y + GAMEPLAY_CONFIG.DANGER_LABEL_TOP_OFFSET
+		_danger_threshold_y + GAMEPLAY_CONFIG.DANGER_LABEL_TOP_OFFSET
 	)
 	danger_label.offset_bottom = (
-		_danger_line_y + GAMEPLAY_CONFIG.DANGER_LABEL_BOTTOM_OFFSET
+		_danger_threshold_y + GAMEPLAY_CONFIG.DANGER_LABEL_BOTTOM_OFFSET
 	)
 	_layout_safe_ui(viewport_size)
-	presentation.layout(_chamber_rect, floor.position.y)
+	presentation.layout(
+		_chamber_rect,
+		floor.position.y,
+		_danger_threshold_y
+	)
 	_update_next_preview()
 	queue_redraw()
 
@@ -1067,7 +1072,7 @@ func _has_dangerous_piece() -> bool:
 		var bottom_edge := piece.global_position.y + piece.radius
 		var is_supported := piece.sleeping or not piece.get_colliding_bodies().is_empty()
 		if (
-			bottom_edge <= _danger_line_y
+			bottom_edge <= _danger_threshold_y
 			and absf(piece.linear_velocity.y)
 				<= GAMEPLAY_CONFIG.DANGER_VERTICAL_SPEED_THRESHOLD
 			and is_supported
