@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/menu/main_menu.gd" id="1_menu"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
@@ -77,18 +77,6 @@ border_width_top = 3
 border_width_right = 3
 border_width_bottom = 3
 border_color = Color(1, 0.788235, 0.341176, 1)
-corner_radius_top_left = 18
-corner_radius_top_right = 18
-corner_radius_bottom_right = 18
-corner_radius_bottom_left = 18
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_button_disabled"]
-bg_color = Color(0.360784, 0.278431, 0.431373, 0.9)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.776471, 0.682353, 0.815686, 0.65)
 corner_radius_top_left = 18
 corner_radius_top_right = 18
 corner_radius_bottom_right = 18
@@ -256,11 +244,17 @@ text = "MENU_START"
 [node name="Recipes" type="Button" parent="SafeArea/MenuColumn/ActionsPanel/ActionsMargin/Actions"]
 custom_minimum_size = Vector2(0, 62)
 layout_mode = 2
-disabled = true
+focus_neighbor_top = NodePath("../Start")
 mouse_default_cursor_shape = 2
-theme_override_colors/font_disabled_color = Color(0.878431, 0.823529, 0.901961, 0.8)
-theme_override_colors/font_outline_color = Color(0.176471, 0.105882, 0.211765, 1)
-theme_override_constants/outline_size = 2
+theme_override_colors/font_color = Color(1, 0.964706, 0.839216, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 0.929412, 0.760784, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.27451, 0.0352941, 0.184314, 1)
+theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 22
-theme_override_styles/disabled = SubResource("StyleBox_button_disabled")
+theme_override_styles/normal = SubResource("StyleBox_button_normal")
+theme_override_styles/hover = SubResource("StyleBox_button_hover")
+theme_override_styles/pressed = SubResource("StyleBox_button_pressed")
+theme_override_styles/focus = SubResource("StyleBox_button_hover")
 text = "MENU_RECIPES"

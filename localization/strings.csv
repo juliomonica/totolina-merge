@@ -4,6 +4,9 @@ MENU_TITLE,Cozy Cat Creations,Cozy Cat Creations,Cozy Cat Creations
 MENU_WORLD_KITCHEN,Kitchen,Cocina,厨房
 MENU_START,START,EMPEZAR,开始
 MENU_RECIPES,RECIPES,RECETAS,食谱
+COLLECTION_TITLE,Recipe Collection,Colección de recetas,食谱收藏
+COLLECTION_BACK,BACK,VOLVER,返回
+COLLECTION_UNKNOWN,Unknown,Desconocida,未知
 NEW_CREATION,NEW CREATION!,¡NUEVA CREACIÓN!,新作品！
 RESULT_GAME_OVER,GAME OVER,FIN DE LA PARTIDA,游戏结束
 RESULT_HIGHEST_CREATION,Highest Creation: %s,Creación más alta: %s,最高作品：%s

@@ -1,14 +1,17 @@
 extends Control
 
 const GAMEPLAY_SCENE_PATH := "res://scenes/prototype/physics_sandbox.tscn"
+const RECIPE_COLLECTION_SCENE_PATH := "res://scenes/menu/recipe_collection.tscn"
 const CONTENT_MARGIN := 24.0
 
 @onready var safe_area: MarginContainer = $SafeArea
 @onready var start_button: Button = $SafeArea/MenuColumn/ActionsPanel/ActionsMargin/Actions/Start
+@onready var recipes_button: Button = $SafeArea/MenuColumn/ActionsPanel/ActionsMargin/Actions/Recipes
 
 
 func _ready() -> void:
 	start_button.pressed.connect(_start_game)
+	recipes_button.pressed.connect(_open_recipes)
 	get_viewport().size_changed.connect(_layout_safe_area)
 	_layout_safe_area()
 	start_button.grab_focus()
@@ -57,3 +60,13 @@ func _start_game() -> void:
 	if change_error != OK:
 		start_button.disabled = false
 		push_error("Could not open gameplay scene: error %d" % change_error)
+
+
+func _open_recipes() -> void:
+	recipes_button.disabled = true
+	var change_error := get_tree().change_scene_to_file(
+		RECIPE_COLLECTION_SCENE_PATH
+	)
+	if change_error != OK:
+		recipes_button.disabled = false
+		push_error("Could not open recipe collection: error %d" % change_error)
