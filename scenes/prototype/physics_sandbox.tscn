@@ -283,27 +283,53 @@ custom_minimum_size = Vector2(156, 0)
 layout_mode = 2
 text = "GAME_RESTART"
 
-[node name="HoldProgress" type="ProgressBar" parent="DebugUI/ControlsPanel/Margin/Row/Restart"]
-visible = false
-layout_mode = 1
-anchors_preset = 12
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 8.0
-offset_top = -11.0
-offset_right = -8.0
-offset_bottom = -4.0
-grow_horizontal = 2
-grow_vertical = 0
-mouse_filter = 2
-show_percentage = false
-
 [node name="PulseRight" type="Button" parent="DebugUI/ControlsPanel/Margin/Row"]
 layout_mode = 2
 size_flags_horizontal = 3
 disabled = true
 text = "PUSH ▶"
+
+[node name="RestartHoldFeedback" type="PanelContainer" parent="DebugUI"]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme = SubResource("Theme_debug")
+theme_override_styles/panel = SubResource("StyleBox_recipe_progress")
+
+[node name="Margin" type="MarginContainer" parent="DebugUI/RestartHoldFeedback"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 5
+
+[node name="Content" type="VBoxContainer" parent="DebugUI/RestartHoldFeedback/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="Instruction" type="Label" parent="DebugUI/RestartHoldFeedback/Margin/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.952941, 0.839216, 1)
+theme_override_colors/font_outline_color = Color(0.239216, 0.121569, 0.0470588, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+text = "GAME_RESTART_HOLD"
+horizontal_alignment = 1
+
+[node name="HoldProgress" type="ProgressBar" parent="DebugUI/RestartHoldFeedback/Margin/Content"]
+custom_minimum_size = Vector2(174, 9)
+layout_mode = 2
+mouse_filter = 2
+show_percentage = false
 
 [node name="PulseFeedback" type="Label" parent="DebugUI"]
 visible = false

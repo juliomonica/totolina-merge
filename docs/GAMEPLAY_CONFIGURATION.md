@@ -248,6 +248,8 @@ These values control existing gameplay UI only. They do not create new UI system
 | `TOLINA_SAFE_SIZE` | Tolina's gameplay HUD width and height. | `Vector2(90, 96)` | VISUAL | Preserve aspect/readability and HUD separation. |
 | `TOLINA_HUD_GAP_PIXELS` | Horizontal gap between Tolina and the HUD panel. | `10.0` | VISUAL | Verify narrow screens after increasing. |
 | `RESTART_BUTTON_MINIMUM_WIDTH_PIXELS` | Minimum width of the hold-to-restart button. | `156.0` | VISUAL | Do not reduce touch readability. |
+| `RESTART_HOLD_FEEDBACK_SIZE_PIXELS` | Width and height of the temporary hold instruction above the controls. | `Vector2(190, 48)` | VISUAL | Keep wide enough for localized text without covering the recipe strip. |
+| `RESTART_HOLD_FEEDBACK_GAP_PIXELS` | Gap between the hold feedback and recipe strip. | `8.0` | VISUAL | Increase to move feedback farther from the player's finger. |
 
 ## 6. Mobile Layout
 

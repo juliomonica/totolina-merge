@@ -79,8 +79,10 @@ const TIER_NAME_KEYS := [
 @onready var controls_panel: PanelContainer = $DebugUI/ControlsPanel
 @onready var pulse_left_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseLeft
 @onready var restart_button: Button = $DebugUI/ControlsPanel/Margin/Row/Restart
-@onready var restart_hold_progress: ProgressBar = $DebugUI/ControlsPanel/Margin/Row/Restart/HoldProgress
 @onready var pulse_right_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseRight
+@onready var restart_hold_feedback: PanelContainer = $DebugUI/RestartHoldFeedback
+@onready var restart_hold_instruction: Label = $DebugUI/RestartHoldFeedback/Margin/Content/Instruction
+@onready var restart_hold_progress: ProgressBar = $DebugUI/RestartHoldFeedback/Margin/Content/HoldProgress
 @onready var pulse_feedback_label: Label = $DebugUI/PulseFeedback
 @onready var max_merge_feedback_label: Label = $DebugUI/MaxMergeFeedback
 @onready var new_creation_feedback_label: Label = $DebugUI/NewCreationFeedback
@@ -130,6 +132,7 @@ func _ready() -> void:
 	_next_tier = _roll_tier()
 	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
 	_build_recipe_progress_strip()
+	_reset_restart_hold_feedback()
 	restart_button.button_down.connect(_begin_restart_hold)
 	restart_button.button_up.connect(_cancel_restart_hold)
 	play_again_button.pressed.connect(_restart_sandbox)
@@ -420,6 +423,18 @@ func _layout_safe_ui(viewport_size: Vector2) -> void:
 	recipe_progress_panel.offset_bottom = (
 		controls_panel.offset_top
 		- GAMEPLAY_CONFIG.RECIPE_PROGRESS_CONTROLS_GAP_PIXELS
+	)
+	var restart_feedback_size: Vector2 = (
+		GAMEPLAY_CONFIG.RESTART_HOLD_FEEDBACK_SIZE_PIXELS
+	)
+	restart_hold_feedback.offset_left = -restart_feedback_size.x * 0.5
+	restart_hold_feedback.offset_right = restart_feedback_size.x * 0.5
+	restart_hold_feedback.offset_bottom = (
+		recipe_progress_panel.offset_top
+		- GAMEPLAY_CONFIG.RESTART_HOLD_FEEDBACK_GAP_PIXELS
+	)
+	restart_hold_feedback.offset_top = (
+		restart_hold_feedback.offset_bottom - restart_feedback_size.y
 	)
 	result_safe_margin.add_theme_constant_override(
 		"margin_left",
@@ -1149,8 +1164,8 @@ func _begin_restart_hold() -> void:
 	_restart_hold_active = true
 	_restart_hold_elapsed = 0.0
 	restart_hold_progress.value = 0.0
-	restart_hold_progress.visible = true
-	restart_button.text = tr("GAME_RESTART_HOLD")
+	restart_hold_instruction.text = tr("GAME_RESTART_HOLD")
+	restart_hold_feedback.visible = true
 
 
 func _cancel_restart_hold() -> void:
@@ -1163,7 +1178,7 @@ func _reset_restart_hold_feedback() -> void:
 	_restart_hold_active = false
 	_restart_hold_elapsed = 0.0
 	restart_hold_progress.value = 0.0
-	restart_hold_progress.visible = false
+	restart_hold_feedback.visible = false
 	restart_button.text = tr("GAME_RESTART")
 
 
