@@ -5,8 +5,10 @@ MENU_WORLD_KITCHEN,Kitchen,Cocina,厨房
 MENU_START,START,EMPEZAR,开始
 MENU_RECIPES,RECIPES,RECETAS,食谱
 NEW_CREATION,NEW CREATION!,¡NUEVA CREACIÓN!,新作品！
+RESULT_GAME_OVER,GAME OVER,FIN DE LA PARTIDA,游戏结束
 RESULT_HIGHEST_CREATION,Highest Creation: %s,Creación más alta: %s,最高作品：%s
 RESULT_NEW_RECIPE,New Recipe: %s,Nueva receta: %s,新配方：%s
+RESULT_PLAY_AGAIN,PLAY AGAIN,JUGAR DE NUEVO,再玩一次
 RECIPE_TIER_1,Strawberry,Fresa,草莓
 RECIPE_TIER_2,Strawberry Milkshake,Batido de fresa,草莓奶昔
 RECIPE_TIER_3,Cookie,Galleta,曲奇

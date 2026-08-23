@@ -101,8 +101,14 @@ const TIER_NAME_KEYS := [
 @onready var max_merge_feedback_label: Label = $DebugUI/MaxMergeFeedback
 @onready var new_creation_feedback_label: Label = $DebugUI/NewCreationFeedback
 @onready var danger_label: Label = $DebugUI/Danger
-@onready var game_over_label: Label = $DebugUI/GameOver
-@onready var run_result_label: Label = $DebugUI/RunResult
+@onready var result_overlay: Control = $DebugUI/ResultOverlay
+@onready var result_safe_margin: MarginContainer = $DebugUI/ResultOverlay/SafeMargin
+@onready var result_tolina: TextureRect = $DebugUI/ResultOverlay/SafeMargin/Center/Panel/ResultMargin/Content/Showcase/Tolina
+@onready var result_creation: TextureRect = $DebugUI/ResultOverlay/SafeMargin/Center/Panel/ResultMargin/Content/Showcase/Creation
+@onready var result_highest_heading: Label = $DebugUI/ResultOverlay/SafeMargin/Center/Panel/ResultMargin/Content/HighestHeading
+@onready var result_creation_name: Label = $DebugUI/ResultOverlay/SafeMargin/Center/Panel/ResultMargin/Content/CreationName
+@onready var result_new_recipe: Label = $DebugUI/ResultOverlay/SafeMargin/Center/Panel/ResultMargin/Content/NewRecipe
+@onready var play_again_button: Button = $DebugUI/ResultOverlay/SafeMargin/Center/Panel/ResultMargin/Content/PlayAgain
 @onready var presentation: PrototypeSandboxPresentation = $Presentation
 
 var _rng := RandomNumberGenerator.new()
@@ -136,6 +142,7 @@ func _ready() -> void:
 	_next_tier = _roll_tier()
 	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
 	restart_button.pressed.connect(_restart_sandbox)
+	play_again_button.pressed.connect(_restart_sandbox)
 	pulse_left_button.pressed.connect(_activate_pulse.bind(Vector2.LEFT))
 	pulse_right_button.pressed.connect(_activate_pulse.bind(Vector2.RIGHT))
 	get_viewport().size_changed.connect(_layout_chamber)
@@ -307,6 +314,22 @@ func _layout_safe_ui(viewport_size: Vector2) -> void:
 	controls_panel.offset_top = -(safe_insets.w + UI_EDGE_MARGIN + CONTROLS_HEIGHT)
 	controls_panel.offset_right = -(safe_insets.z + UI_EDGE_MARGIN)
 	controls_panel.offset_bottom = -(safe_insets.w + UI_EDGE_MARGIN)
+	result_safe_margin.add_theme_constant_override(
+		"margin_left",
+		ceili(safe_insets.x + UI_EDGE_MARGIN)
+	)
+	result_safe_margin.add_theme_constant_override(
+		"margin_top",
+		ceili(safe_insets.y + UI_EDGE_MARGIN)
+	)
+	result_safe_margin.add_theme_constant_override(
+		"margin_right",
+		ceili(safe_insets.z + UI_EDGE_MARGIN)
+	)
+	result_safe_margin.add_theme_constant_override(
+		"margin_bottom",
+		ceili(safe_insets.w + UI_EDGE_MARGIN)
+	)
 
 
 func _update_next_preview() -> void:
@@ -781,26 +804,35 @@ func _tier_display_name(tier: int) -> String:
 
 
 func _show_run_result() -> void:
-	if highest_creation_reached <= 0:
-		run_result_label.visible = false
-		return
-	var highest_creation_heading := (
+	result_highest_heading.text = (
 		tr("RESULT_HIGHEST_CREATION") % ""
 	).strip_edges()
-	var result_lines := PackedStringArray([
-		highest_creation_heading,
-		_tier_display_name(highest_creation_reached),
-	])
+	var has_creation := highest_creation_reached > 0
+	result_creation.visible = has_creation
+	result_creation_name.visible = has_creation
+	if has_creation:
+		result_creation.texture = PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(
+			highest_creation_reached
+		)
+		result_creation_name.text = _tier_display_name(highest_creation_reached)
+	else:
+		result_creation.texture = null
+		result_creation_name.text = ""
+
+	var highest_new_tier := 0
 	if not _new_discoveries_this_run.is_empty():
-		var highest_new_tier := 1
 		for discovered_tier in _new_discoveries_this_run:
 			highest_new_tier = maxi(highest_new_tier, discovered_tier)
-		result_lines.append(
-			tr("RESULT_NEW_RECIPE") % _tier_display_name(highest_new_tier)
-		)
-	run_result_label.text = "\n".join(result_lines)
-	run_result_label.visible = true
+	result_new_recipe.visible = highest_new_tier > 0
+	result_new_recipe.text = (
+		tr("RESULT_NEW_RECIPE") % _tier_display_name(highest_new_tier)
+		if highest_new_tier > 0
+		else ""
+	)
 	presentation.show_result()
+	result_tolina.texture = tolina_visual.texture
+	result_overlay.visible = true
+	play_again_button.grab_focus()
 
 
 func _has_dangerous_piece() -> bool:
@@ -825,7 +857,6 @@ func _enter_game_over() -> void:
 	game_over = true
 	danger_active = true
 	danger_timer = DANGER_GRACE_SECONDS
-	game_over_label.visible = true
 	for child in pieces.get_children():
 		if child is PrototypePiece:
 			child.set_deferred("freeze", true)
@@ -901,11 +932,15 @@ func _restart_sandbox() -> void:
 	_new_discoveries_this_run.clear()
 	highest_creation_reached = 0
 	presentation.reset()
+	result_overlay.visible = false
+	result_creation.texture = null
+	result_creation_name.text = ""
+	result_new_recipe.visible = false
+	result_new_recipe.text = ""
+	play_again_button.release_focus()
 	pulse_feedback_label.visible = false
 	max_merge_feedback_label.visible = false
 	new_creation_feedback_label.visible = false
-	game_over_label.visible = false
-	run_result_label.visible = false
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
 	queue_redraw()
