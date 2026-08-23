@@ -3,8 +3,8 @@
 [ext_resource type="Script" path="res://scripts/prototype/physics_sandbox.gd" id="1_sandbox"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
 [ext_resource type="Script" path="res://scripts/prototype/sandbox_presentation.gd" id="3_presentation"]
-[ext_resource type="Texture2D" path="res://assets/cat_kitchen/environment/cat_kitchen/cat_kitchen_background.png" id="4_background"]
-[ext_resource type="Texture2D" path="res://assets/cat_kitchen/environment/cat_kitchen/magical_kitchen_bowl.png" id="5_bowl"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/background.png" id="4_background"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/magical_bowl.png" id="5_bowl"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_chamber"]
 friction = 0.45

@@ -10,8 +10,10 @@ config_version=5
 
 [application]
 
-config/name="Game01"
-run/main_scene="res://scenes/prototype/physics_sandbox.tscn"
+config/name="Cozy Cat Creations"
+run/main_scene="res://scenes/menu/main_menu.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="Godot/app_userdata/Game01"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://5ygwtmpp721d"
-path="res://.godot/imported/tolinа_happy.png-b114f9e8a91a923a419345932f81aa74.ctex"
+uid="uid://dixe88ku382ph"
+path="res://.godot/imported/strawberry.png-fd74a96b538bd414dbc6094ee8f706ce.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/characters/tolinа_happy.png"
-dest_files=["res://.godot/imported/tolinа_happy.png-b114f9e8a91a923a419345932f81aa74.ctex"]
+source_file="res://assets/worlds/kitchen/ingredients/strawberry.png"
+dest_files=["res://.godot/imported/strawberry.png-fd74a96b538bd414dbc6094ee8f706ce.ctex"]
 
 [params]
 

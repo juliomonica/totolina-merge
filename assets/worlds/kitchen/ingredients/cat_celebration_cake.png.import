@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqydtu5fwxikh"
-path="res://.godot/imported/merge_magic.png-63b8f7ac3c4c2d93b9fa30e42f9e3307.ctex"
+uid="uid://bayh0j0aoovtu"
+path="res://.godot/imported/cat_celebration_cake.png-915b65af96ae1b150407908d01f13d60.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/effects/merge_magic.png"
-dest_files=["res://.godot/imported/merge_magic.png-63b8f7ac3c4c2d93b9fa30e42f9e3307.ctex"]
+source_file="res://assets/worlds/kitchen/ingredients/cat_celebration_cake.png"
+dest_files=["res://.godot/imported/cat_celebration_cake.png-915b65af96ae1b150407908d01f13d60.ctex"]
 
 [params]
 

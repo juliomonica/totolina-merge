@@ -1,5 +1,9 @@
 keys,en,es,zh_CN
-GAME01_PROTOTYPE,Game 01 Prototype,Prototipo del Juego 01,游戏 01 原型
+MENU_STUDIO,Lunitora Games,Lunitora Games,Lunitora Games
+MENU_TITLE,Cozy Cat Creations,Cozy Cat Creations,Cozy Cat Creations
+MENU_WORLD_KITCHEN,Kitchen,Cocina,厨房
+MENU_START,START,EMPEZAR,开始
+MENU_RECIPES,RECIPES,RECETAS,食谱
 NEW_CREATION,NEW CREATION!,¡NUEVA CREACIÓN!,新作品！
 RESULT_HIGHEST_CREATION,Highest Creation: %s,Creación más alta: %s,最高作品：%s
 RESULT_NEW_RECIPE,New Recipe: %s,Nueva receta: %s,新配方：%s

@@ -1,0 +1,266 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://scripts/menu/main_menu.gd" id="1_menu"]
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/background.png" id="3_background"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/magical_bowl.png" id="4_bowl"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/characters/tolinа_idle.png" id="5_tolina"]
+
+[sub_resource type="Theme" id="Theme_menu"]
+default_font = ExtResource("2_font")
+default_font_size = 18
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_title"]
+bg_color = Color(0.207843, 0.0666667, 0.227451, 0.86)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.819608, 0.396078, 0.9)
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
+shadow_color = Color(0.109804, 0.0196078, 0.121569, 0.5)
+shadow_size = 8
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_actions"]
+bg_color = Color(0.207843, 0.0666667, 0.227451, 0.82)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.819608, 0.396078, 0.75)
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
+shadow_color = Color(0.109804, 0.0196078, 0.121569, 0.5)
+shadow_size = 8
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_normal"]
+bg_color = Color(0.921569, 0.313725, 0.568627, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.85098, 0.470588, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+shadow_color = Color(0.168627, 0.0196078, 0.12549, 0.55)
+shadow_size = 5
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_hover"]
+bg_color = Color(1, 0.423529, 0.654902, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.917647, 0.654902, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+shadow_color = Color(0.168627, 0.0196078, 0.12549, 0.65)
+shadow_size = 6
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_pressed"]
+bg_color = Color(0.780392, 0.211765, 0.466667, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.788235, 0.341176, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_disabled"]
+bg_color = Color(0.360784, 0.278431, 0.431373, 0.9)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.776471, 0.682353, 0.815686, 0.65)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_menu")
+script = ExtResource("1_menu")
+
+[node name="KitchenBackground" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("3_background")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="ContrastOverlay" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.101961, 0.027451, 0.12549, 0.14)
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="MenuColumn" type="VBoxContainer" parent="SafeArea"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TitlePanel" type="PanelContainer" parent="SafeArea/MenuColumn"]
+custom_minimum_size = Vector2(0, 142)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBox_title")
+
+[node name="TitleMargin" type="MarginContainer" parent="SafeArea/MenuColumn/TitlePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 12
+
+[node name="Identity" type="VBoxContainer" parent="SafeArea/MenuColumn/TitlePanel/TitleMargin"]
+layout_mode = 2
+theme_override_constants/separation = 1
+
+[node name="Studio" type="Label" parent="SafeArea/MenuColumn/TitlePanel/TitleMargin/Identity"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.72549, 0.827451, 1)
+theme_override_colors/font_outline_color = Color(0.254902, 0.0627451, 0.286275, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+text = "MENU_STUDIO"
+horizontal_alignment = 1
+
+[node name="Title" type="Label" parent="SafeArea/MenuColumn/TitlePanel/TitleMargin/Identity"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.941176, 0.760784, 1)
+theme_override_colors/font_outline_color = Color(0.254902, 0.0627451, 0.286275, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 6
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 3
+theme_override_font_sizes/font_size = 32
+text = "MENU_TITLE"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="World" type="Label" parent="SafeArea/MenuColumn/TitlePanel/TitleMargin/Identity"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.823529, 0.454902, 1)
+theme_override_colors/font_outline_color = Color(0.254902, 0.0627451, 0.286275, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 18
+text = "MENU_WORLD_KITCHEN"
+horizontal_alignment = 1
+
+[node name="Hero" type="Control" parent="SafeArea/MenuColumn"]
+custom_minimum_size = Vector2(0, 420)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="KitchenBowl" type="TextureRect" parent="SafeArea/MenuColumn/Hero"]
+layout_mode = 1
+anchor_left = 0.04
+anchor_top = 0.46
+anchor_right = 0.96
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("4_bowl")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Tolina" type="TextureRect" parent="SafeArea/MenuColumn/Hero"]
+layout_mode = 1
+anchor_left = 0.1
+anchor_right = 0.9
+anchor_bottom = 0.86
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("5_tolina")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ActionsPanel" type="PanelContainer" parent="SafeArea/MenuColumn"]
+custom_minimum_size = Vector2(0, 170)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBox_actions")
+
+[node name="ActionsMargin" type="MarginContainer" parent="SafeArea/MenuColumn/ActionsPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="Actions" type="VBoxContainer" parent="SafeArea/MenuColumn/ActionsPanel/ActionsMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Start" type="Button" parent="SafeArea/MenuColumn/ActionsPanel/ActionsMargin/Actions"]
+custom_minimum_size = Vector2(0, 62)
+layout_mode = 2
+focus_neighbor_bottom = NodePath("../Recipes")
+theme_override_colors/font_color = Color(1, 0.964706, 0.839216, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 0.929412, 0.760784, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.27451, 0.0352941, 0.184314, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 24
+theme_override_styles/normal = SubResource("StyleBox_button_normal")
+theme_override_styles/hover = SubResource("StyleBox_button_hover")
+theme_override_styles/pressed = SubResource("StyleBox_button_pressed")
+theme_override_styles/focus = SubResource("StyleBox_button_hover")
+text = "MENU_START"
+
+[node name="Recipes" type="Button" parent="SafeArea/MenuColumn/ActionsPanel/ActionsMargin/Actions"]
+custom_minimum_size = Vector2(0, 62)
+layout_mode = 2
+disabled = true
+mouse_default_cursor_shape = 2
+theme_override_colors/font_disabled_color = Color(0.878431, 0.823529, 0.901961, 0.8)
+theme_override_colors/font_outline_color = Color(0.176471, 0.105882, 0.211765, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 22
+theme_override_styles/disabled = SubResource("StyleBox_button_disabled")
+text = "MENU_RECIPES"

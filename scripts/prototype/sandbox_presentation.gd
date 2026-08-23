@@ -1,10 +1,10 @@
 class_name PrototypeSandboxPresentation
 extends Node2D
 
-const TOLINA_IDLE := preload("res://assets/cat_kitchen/characters/tolinа_idle.png")
-const TOLINA_HAPPY := preload("res://assets/cat_kitchen/characters/tolinа_happy.png")
-const TOLINA_THROW := preload("res://assets/cat_kitchen/characters/tolinа_throw.png")
-const MERGE_MAGIC := preload("res://assets/cat_kitchen/effects/merge_magic.png")
+const TOLINA_IDLE := preload("res://assets/worlds/kitchen/characters/tolinа_idle.png")
+const TOLINA_HAPPY := preload("res://assets/worlds/kitchen/characters/tolinа_happy.png")
+const TOLINA_THROW := preload("res://assets/worlds/kitchen/characters/tolinа_throw.png")
+const MERGE_MAGIC := preload("res://assets/worlds/kitchen/effects/merge_magic.png")
 const THROW_POSE_SECONDS := 0.35
 const HAPPY_POSE_SECONDS := 0.75
 const RESULT_POSE_SECONDS := 1.5

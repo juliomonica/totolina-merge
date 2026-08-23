@@ -1,10 +1,14 @@
-# Game01 GDD
+# Cozy Cat Creations GDD
 
-## Title
+## Identity
 
-Working title:
+**Studio:** Lunitora Games
 
-**Tolina's Magical Cake**
+**Game:** Cozy Cat Creations
+
+**World 01:** Kitchen
+
+**First character:** Tolina
 
 Genre:
 
@@ -153,9 +157,9 @@ Current prototype mechanics:
 
 # 7. Creation Progression
 
-Initial theme:
+World 01:
 
-## Cat Kitchen
+## Kitchen
 
 Example progression:
 
@@ -323,9 +327,9 @@ The underlying merge system remains reusable.
 
 ------------------------------------------------------------------------
 
-# 13. What Game01 Is NOT
+# 13. What Cozy Cat Creations Is NOT
 
-Game01 is NOT:
+Cozy Cat Creations is NOT:
 
 -   a pet simulator
 -   a farming game
@@ -348,7 +352,7 @@ The first complete version should include:
 Required:
 
 -   Tolina character
--   Cat Kitchen theme
+-   Kitchen world
 -   9 creation tiers
 -   physics merge gameplay
 -   score

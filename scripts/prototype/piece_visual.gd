@@ -2,15 +2,15 @@ class_name PrototypePieceVisual
 extends Node2D
 
 const INGREDIENT_TEXTURES: Array[Texture2D] = [
-	preload("res://assets/cat_kitchen/ingredients/strawberry.png"),
-	preload("res://assets/cat_kitchen/ingredients/milkshake.png"),
-	preload("res://assets/cat_kitchen/ingredients/cookie.png"),
-	preload("res://assets/cat_kitchen/ingredients/cupcake.png"),
-	preload("res://assets/cat_kitchen/ingredients/cake_slice.png"),
-	preload("res://assets/cat_kitchen/ingredients/birthday_cake.png"),
-	preload("res://assets/cat_kitchen/ingredients/magical_cake.png"),
-	preload("res://assets/cat_kitchen/ingredients/cat_celebration_cake.png"),
-	preload("res://assets/cat_kitchen/ingredients/magical_cat_birthday_cake.png"),
+	preload("res://assets/worlds/kitchen/ingredients/strawberry.png"),
+	preload("res://assets/worlds/kitchen/ingredients/milkshake.png"),
+	preload("res://assets/worlds/kitchen/ingredients/cookie.png"),
+	preload("res://assets/worlds/kitchen/ingredients/cupcake.png"),
+	preload("res://assets/worlds/kitchen/ingredients/cake_slice.png"),
+	preload("res://assets/worlds/kitchen/ingredients/birthday_cake.png"),
+	preload("res://assets/worlds/kitchen/ingredients/magical_cake.png"),
+	preload("res://assets/worlds/kitchen/ingredients/cat_celebration_cake.png"),
+	preload("res://assets/worlds/kitchen/ingredients/magical_cat_birthday_cake.png"),
 ]
 const INGREDIENT_DIAMETER_SCALES := [
 	1.46,

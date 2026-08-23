@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bv24w1yt5k524"
-path="res://.godot/imported/cat_kitchen_background.png-df7d51d8d8507c3fa3b6f6647c01ff5e.ctex"
+uid="uid://4ua66desch81"
+path="res://.godot/imported/tolinа_idle.png-89bac7b441ddc5554060970d6c1c2e53.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/environment/cat_kitchen/cat_kitchen_background.png"
-dest_files=["res://.godot/imported/cat_kitchen_background.png-df7d51d8d8507c3fa3b6f6647c01ff5e.ctex"]
+source_file="res://assets/worlds/kitchen/characters/tolinа_idle.png"
+dest_files=["res://.godot/imported/tolinа_idle.png-89bac7b441ddc5554060970d6c1c2e53.ctex"]
 
 [params]
 

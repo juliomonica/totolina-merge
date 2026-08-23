@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dqj1i6f45hxp4"
-path="res://.godot/imported/cupcake.png-355bdd61d1d3ea6e264ba8fc902e5c0f.ctex"
+path="res://.godot/imported/cupcake.png-023f359c720c720c4189d188159067f5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/ingredients/cupcake.png"
-dest_files=["res://.godot/imported/cupcake.png-355bdd61d1d3ea6e264ba8fc902e5c0f.ctex"]
+source_file="res://assets/worlds/kitchen/ingredients/cupcake.png"
+dest_files=["res://.godot/imported/cupcake.png-023f359c720c720c4189d188159067f5.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cot8aqnbext4k"
-path="res://.godot/imported/magical_cake.png-7c22c7835cb4475773d50e533bf5bc39.ctex"
+uid="uid://df61q8a7t7dt"
+path="res://.godot/imported/birthday_cake.png-f90aa74eae921ff049c6faa6b61e00a4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/ingredients/magical_cake.png"
-dest_files=["res://.godot/imported/magical_cake.png-7c22c7835cb4475773d50e533bf5bc39.ctex"]
+source_file="res://assets/worlds/kitchen/ingredients/birthday_cake.png"
+dest_files=["res://.godot/imported/birthday_cake.png-f90aa74eae921ff049c6faa6b61e00a4.ctex"]
 
 [params]
 

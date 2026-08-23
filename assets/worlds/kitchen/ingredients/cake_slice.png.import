@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://4ua66desch81"
-path="res://.godot/imported/tolinа_idle.png-63608af9f47b73f3e4dc93112f82f09d.ctex"
+uid="uid://lx4l4rmgnii0"
+path="res://.godot/imported/cake_slice.png-9439a027b7ccc3527da005f7e18ca11f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/characters/tolinа_idle.png"
-dest_files=["res://.godot/imported/tolinа_idle.png-63608af9f47b73f3e4dc93112f82f09d.ctex"]
+source_file="res://assets/worlds/kitchen/ingredients/cake_slice.png"
+dest_files=["res://.godot/imported/cake_slice.png-9439a027b7ccc3527da005f7e18ca11f.ctex"]
 
 [params]
 

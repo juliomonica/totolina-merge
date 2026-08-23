@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://pd71ujuleryc"
-path="res://.godot/imported/milkshake.png-a7f49bf9256f869950b427175634d878.ctex"
+uid="uid://bv24w1yt5k524"
+path="res://.godot/imported/background.png-ed9be5484d6b4e166b02d8a6a6f8798b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/cat_kitchen/ingredients/milkshake.png"
-dest_files=["res://.godot/imported/milkshake.png-a7f49bf9256f869950b427175634d878.ctex"]
+source_file="res://assets/worlds/kitchen/environment/background.png"
+dest_files=["res://.godot/imported/background.png-ed9be5484d6b4e166b02d8a6a6f8798b.ctex"]
 
 [params]
 
