@@ -2,14 +2,8 @@ extends Node2D
 
 const PIECE_SCENE := preload("res://scenes/prototype/piece.tscn")
 const PIECE_VISUAL_SCRIPT := preload("res://scripts/prototype/piece_visual.gd")
+const GAMEPLAY_CONFIG := preload("res://scripts/config/gameplay_configuration.gd")
 const INITIAL_SEED := 12345
-const CHAMBER_WIDTH_RATIO := 0.86
-const CHAMBER_HEIGHT_RATIO := 0.72
-const CHAMBER_TOP_RATIO := 0.17
-const CHAMBER_MAX_ASPECT_RATIO := 0.67
-const DANGER_LINE_CHAMBER_RATIO := 0.35
-const DANGER_GRACE_SECONDS := 3.0
-const DANGER_VERTICAL_SPEED_THRESHOLD := 10.0
 const MAX_PULSE_CHARGE := 100
 const PULSE_CHARGE_PER_MERGE := 12
 const PULSE_BASE_IMPULSE := 300.0
@@ -31,24 +25,9 @@ const MERGE_EXPANSION_BASE_IMPULSE := 40.0
 const MERGE_EXPANSION_MAX_IMPULSE := 32.0
 const MERGE_EXPANSION_DOWNWARD_SCALE := 0.25
 const MERGE_RESOLUTION_COOLDOWN_SECONDS := 0.45
-const UI_EDGE_MARGIN := 16.0
-const HUD_HEIGHT := 88.0
-const CONTROLS_HEIGHT := 52.0
-const TOLINA_SAFE_WIDTH := 90.0
-const TOLINA_SAFE_HEIGHT := 96.0
-const TOLINA_HUD_GAP := 10.0
+const RESTART_HOLD_SECONDS := 1.0
 const NORMAL_SPAWN_MAX_TIER := 3
-const TIER_RADIUS_RATIOS := [
-	0.0460,
-	0.0538,
-	0.0630,
-	0.0737,
-	0.0862,
-	0.1009,
-	0.1180,
-	0.1900,
-	0.2600,
-]
+const TIER_RADIUS_RATIOS := GAMEPLAY_CONFIG.TIER_RADIUS_RATIOS
 const TIER_MASSES := [
 	1.00,
 	1.30,
@@ -83,6 +62,8 @@ const TIER_NAME_KEYS := [
 	"RECIPE_TIER_9",
 ]
 
+@export var recipe_locked_silhouette_material: ShaderMaterial
+
 @onready var pieces: Node2D = $Pieces
 @onready var left_wall: StaticBody2D = $Chamber/LeftWall
 @onready var right_wall: StaticBody2D = $Chamber/RightWall
@@ -93,9 +74,12 @@ const TIER_NAME_KEYS := [
 @onready var next_preview_ingredient: TextureRect = $DebugUI/HUDPanel/Margin/Row/Next/PreviewCenter/Preview/Ingredient
 @onready var score_label: Label = $DebugUI/HUDPanel/Margin/Row/Score
 @onready var pulse_label: Label = $DebugUI/HUDPanel/Margin/Row/Pulse
+@onready var recipe_progress_panel: PanelContainer = $DebugUI/RecipeProgressPanel
+@onready var recipe_progress_row: HBoxContainer = $DebugUI/RecipeProgressPanel/Margin/Row
 @onready var controls_panel: PanelContainer = $DebugUI/ControlsPanel
 @onready var pulse_left_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseLeft
 @onready var restart_button: Button = $DebugUI/ControlsPanel/Margin/Row/Restart
+@onready var restart_hold_progress: ProgressBar = $DebugUI/ControlsPanel/Margin/Row/Restart/HoldProgress
 @onready var pulse_right_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseRight
 @onready var pulse_feedback_label: Label = $DebugUI/PulseFeedback
 @onready var max_merge_feedback_label: Label = $DebugUI/MaxMergeFeedback
@@ -125,6 +109,9 @@ var _merge_resolution_pending := false
 var _queued_merge_pairs: Array = []
 var _new_discoveries_this_run: Array[int] = []
 var _discovery_save_path := DISCOVERY_SAVE_PATH
+var _recipe_progress_slots: Array[PanelContainer] = []
+var _restart_hold_active := false
+var _restart_hold_elapsed := 0.0
 
 var danger_active := false
 var danger_timer := 0.0
@@ -137,11 +124,14 @@ var discovered_creation_tiers: Array[int] = []
 
 func _ready() -> void:
 	Engine.physics_ticks_per_second = 60
+	_apply_presentation_configuration()
 	_load_recipe_discoveries()
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
 	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
-	restart_button.pressed.connect(_restart_sandbox)
+	_build_recipe_progress_strip()
+	restart_button.button_down.connect(_begin_restart_hold)
+	restart_button.button_up.connect(_cancel_restart_hold)
 	play_again_button.pressed.connect(_restart_sandbox)
 	pulse_left_button.pressed.connect(_activate_pulse.bind(Vector2.LEFT))
 	pulse_right_button.pressed.connect(_activate_pulse.bind(Vector2.RIGHT))
@@ -151,6 +141,16 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _restart_hold_active:
+		_restart_hold_elapsed = minf(
+			RESTART_HOLD_SECONDS,
+			_restart_hold_elapsed + delta
+		)
+		restart_hold_progress.value = (
+			_restart_hold_elapsed / RESTART_HOLD_SECONDS * 100.0
+		)
+		if _restart_hold_elapsed >= RESTART_HOLD_SECONDS:
+			_restart_sandbox()
 	if _pulse_feedback_timer > 0.0:
 		_pulse_feedback_timer = maxf(0.0, _pulse_feedback_timer - delta)
 		pulse_feedback_label.visible = _pulse_feedback_timer > 0.0
@@ -178,7 +178,7 @@ func _physics_process(delta: float) -> void:
 			danger_timer = 0.0
 			queue_redraw()
 		danger_timer += delta
-		if danger_timer >= DANGER_GRACE_SECONDS:
+		if danger_timer >= GAMEPLAY_CONFIG.DANGER_GRACE_SECONDS:
 			_enter_game_over()
 	elif danger_active:
 		danger_active = false
@@ -217,12 +217,55 @@ func _draw() -> void:
 	if _chamber_rect.size == Vector2.ZERO:
 		return
 
-	var danger_line_color := Color("ff3b30") if danger_active else Color("ffb020")
+	var danger_line_color: Color = (
+		GAMEPLAY_CONFIG.DANGER_LINE_ACTIVE_COLOR
+		if danger_active
+		else GAMEPLAY_CONFIG.DANGER_LINE_INACTIVE_COLOR
+	)
 	draw_line(
 		Vector2(_chamber_rect.position.x, _danger_line_y),
 		Vector2(_chamber_rect.end.x, _danger_line_y),
 		danger_line_color,
-		3.0
+		GAMEPLAY_CONFIG.DANGER_LINE_WIDTH
+	)
+
+
+func _apply_presentation_configuration() -> void:
+	danger_label.scale = GAMEPLAY_CONFIG.DANGER_TEXT_SCALE
+	danger_label.add_theme_font_size_override(
+		"font_size",
+		GAMEPLAY_CONFIG.DANGER_TEXT_FONT_SIZE
+	)
+	danger_label.add_theme_color_override(
+		"font_color",
+		GAMEPLAY_CONFIG.DANGER_TEXT_COLOR
+	)
+	danger_label.add_theme_color_override(
+		"font_outline_color",
+		GAMEPLAY_CONFIG.DANGER_TEXT_OUTLINE_COLOR
+	)
+	danger_label.add_theme_color_override(
+		"font_shadow_color",
+		GAMEPLAY_CONFIG.DANGER_TEXT_SHADOW_COLOR
+	)
+	danger_label.add_theme_constant_override(
+		"outline_size",
+		GAMEPLAY_CONFIG.DANGER_TEXT_OUTLINE_SIZE
+	)
+	danger_label.add_theme_constant_override(
+		"shadow_offset_x",
+		roundi(GAMEPLAY_CONFIG.DANGER_TEXT_SHADOW_OFFSET.x)
+	)
+	danger_label.add_theme_constant_override(
+		"shadow_offset_y",
+		roundi(GAMEPLAY_CONFIG.DANGER_TEXT_SHADOW_OFFSET.y)
+	)
+	danger_label.add_theme_constant_override(
+		"shadow_outline_size",
+		GAMEPLAY_CONFIG.DANGER_TEXT_SHADOW_OUTLINE_SIZE
+	)
+	restart_button.custom_minimum_size.x = (
+		GAMEPLAY_CONFIG.RESTART_BUTTON_MINIMUM_WIDTH_PIXELS
 	)
 
 
@@ -231,36 +274,55 @@ func _layout_chamber() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	var chamber_height := viewport_size.y * CHAMBER_HEIGHT_RATIO
+	var chamber_height := (
+		viewport_size.y * GAMEPLAY_CONFIG.CHAMBER_HEIGHT_VIEWPORT_RATIO
+	)
 	var chamber_width := minf(
-		viewport_size.x * CHAMBER_WIDTH_RATIO,
-		chamber_height * CHAMBER_MAX_ASPECT_RATIO
+		viewport_size.x * GAMEPLAY_CONFIG.CHAMBER_WIDTH_VIEWPORT_RATIO,
+		chamber_height
+			* GAMEPLAY_CONFIG.CHAMBER_MAX_WIDTH_TO_HEIGHT_RATIO
 	)
 	var chamber_size := Vector2(chamber_width, chamber_height)
 	_chamber_rect = Rect2(
 		Vector2(
 			(viewport_size.x - chamber_size.x) * 0.5,
-			viewport_size.y * CHAMBER_TOP_RATIO
+			viewport_size.y * GAMEPLAY_CONFIG.CHAMBER_TOP_VIEWPORT_RATIO
 		),
 		chamber_size
 	)
-	_wall_thickness = maxf(8.0, viewport_size.x * 0.018)
+	_wall_thickness = maxf(
+		GAMEPLAY_CONFIG.WALL_THICKNESS_MIN_PIXELS,
+		viewport_size.x
+			* GAMEPLAY_CONFIG.WALL_THICKNESS_VIEWPORT_WIDTH_RATIO
+	)
 	_danger_line_y = (
-		_chamber_rect.position.y
-		+ _chamber_rect.size.y * DANGER_LINE_CHAMBER_RATIO
+		viewport_size.y
+		* GAMEPLAY_CONFIG.DANGER_LINE_VIEWPORT_HEIGHT_RATIO
 	)
 
 	left_wall.position = Vector2(
-		_chamber_rect.position.x,
-		_chamber_rect.position.y + _chamber_rect.size.y * 0.5
+		_chamber_rect.position.x
+			+ _chamber_rect.size.x
+				* GAMEPLAY_CONFIG.LEFT_WALL_X_CHAMBER_RATIO,
+		_chamber_rect.position.y
+			+ _chamber_rect.size.y
+				* GAMEPLAY_CONFIG.SIDE_WALL_CENTER_Y_CHAMBER_RATIO
 	)
 	right_wall.position = Vector2(
-		_chamber_rect.end.x,
-		_chamber_rect.position.y + _chamber_rect.size.y * 0.5
+		_chamber_rect.position.x
+			+ _chamber_rect.size.x
+				* GAMEPLAY_CONFIG.RIGHT_WALL_X_CHAMBER_RATIO,
+		_chamber_rect.position.y
+			+ _chamber_rect.size.y
+				* GAMEPLAY_CONFIG.SIDE_WALL_CENTER_Y_CHAMBER_RATIO
 	)
 	floor.position = Vector2(
-		_chamber_rect.position.x + _chamber_rect.size.x * 0.5,
-		_chamber_rect.end.y
+		_chamber_rect.position.x
+			+ _chamber_rect.size.x
+				* GAMEPLAY_CONFIG.FLOOR_CENTER_X_CHAMBER_RATIO,
+		_chamber_rect.position.y
+			+ _chamber_rect.size.y
+				* GAMEPLAY_CONFIG.FLOOR_Y_CHAMBER_RATIO
 	)
 
 	var left_shape := left_wall.get_node("CollisionShape2D").shape as RectangleShape2D
@@ -269,10 +331,14 @@ func _layout_chamber() -> void:
 	left_shape.size = Vector2(_wall_thickness, _chamber_rect.size.y + _wall_thickness)
 	right_shape.size = left_shape.size
 	floor_shape.size = Vector2(_chamber_rect.size.x + _wall_thickness, _wall_thickness)
-	danger_label.offset_top = _danger_line_y - 42.0
-	danger_label.offset_bottom = _danger_line_y + 2.0
+	danger_label.offset_top = (
+		_danger_line_y + GAMEPLAY_CONFIG.DANGER_LABEL_TOP_OFFSET
+	)
+	danger_label.offset_bottom = (
+		_danger_line_y + GAMEPLAY_CONFIG.DANGER_LABEL_BOTTOM_OFFSET
+	)
 	_layout_safe_ui(viewport_size)
-	presentation.layout(_chamber_rect)
+	presentation.layout(_chamber_rect, floor.position.y)
 	_update_next_preview()
 	queue_redraw()
 
@@ -295,40 +361,76 @@ func _layout_safe_ui(viewport_size: Vector2) -> void:
 			maxf(0.0, window_size.y - safe_area.end.y) * viewport_scale.y
 		)
 
-	var tolina_left := safe_insets.x + UI_EDGE_MARGIN
-	var tolina_top := safe_insets.y + UI_EDGE_MARGIN
+	var tolina_left := (
+		safe_insets.x + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	var tolina_top := (
+		safe_insets.y + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
 	tolina_visual.offset_left = tolina_left
 	tolina_visual.offset_top = tolina_top
-	tolina_visual.offset_right = tolina_left + TOLINA_SAFE_WIDTH
-	tolina_visual.offset_bottom = minf(
-		tolina_top + TOLINA_SAFE_HEIGHT,
-		_chamber_rect.position.y - UI_EDGE_MARGIN * 0.5
+	tolina_visual.offset_right = (
+		tolina_left + GAMEPLAY_CONFIG.TOLINA_SAFE_SIZE.x
+	)
+	tolina_visual.offset_bottom = (
+		tolina_top + GAMEPLAY_CONFIG.TOLINA_SAFE_SIZE.y
 	)
 	hud_panel.offset_left = (
-		tolina_visual.offset_right + TOLINA_HUD_GAP
+		tolina_visual.offset_right + GAMEPLAY_CONFIG.TOLINA_HUD_GAP_PIXELS
 	)
-	hud_panel.offset_top = safe_insets.y + UI_EDGE_MARGIN
-	hud_panel.offset_right = -(safe_insets.z + UI_EDGE_MARGIN)
-	hud_panel.offset_bottom = hud_panel.offset_top + HUD_HEIGHT
-	controls_panel.offset_left = safe_insets.x + UI_EDGE_MARGIN
-	controls_panel.offset_top = -(safe_insets.w + UI_EDGE_MARGIN + CONTROLS_HEIGHT)
-	controls_panel.offset_right = -(safe_insets.z + UI_EDGE_MARGIN)
-	controls_panel.offset_bottom = -(safe_insets.w + UI_EDGE_MARGIN)
+	hud_panel.offset_top = (
+		safe_insets.y + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	hud_panel.offset_right = -(
+		safe_insets.z + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	hud_panel.offset_bottom = (
+		hud_panel.offset_top + GAMEPLAY_CONFIG.HUD_HEIGHT_PIXELS
+	)
+	controls_panel.offset_left = (
+		safe_insets.x + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	controls_panel.offset_top = -(
+		safe_insets.w
+		+ GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+		+ GAMEPLAY_CONFIG.CONTROLS_HEIGHT_PIXELS
+	)
+	controls_panel.offset_right = -(
+		safe_insets.z + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	controls_panel.offset_bottom = -(
+		safe_insets.w + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	recipe_progress_panel.offset_left = (
+		safe_insets.x + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	recipe_progress_panel.offset_top = (
+		controls_panel.offset_top
+		- GAMEPLAY_CONFIG.RECIPE_PROGRESS_CONTROLS_GAP_PIXELS
+		- GAMEPLAY_CONFIG.RECIPE_PROGRESS_HEIGHT_PIXELS
+	)
+	recipe_progress_panel.offset_right = -(
+		safe_insets.z + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
+	)
+	recipe_progress_panel.offset_bottom = (
+		controls_panel.offset_top
+		- GAMEPLAY_CONFIG.RECIPE_PROGRESS_CONTROLS_GAP_PIXELS
+	)
 	result_safe_margin.add_theme_constant_override(
 		"margin_left",
-		ceili(safe_insets.x + UI_EDGE_MARGIN)
+		ceili(safe_insets.x + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS)
 	)
 	result_safe_margin.add_theme_constant_override(
 		"margin_top",
-		ceili(safe_insets.y + UI_EDGE_MARGIN)
+		ceili(safe_insets.y + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS)
 	)
 	result_safe_margin.add_theme_constant_override(
 		"margin_right",
-		ceili(safe_insets.z + UI_EDGE_MARGIN)
+		ceili(safe_insets.z + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS)
 	)
 	result_safe_margin.add_theme_constant_override(
 		"margin_bottom",
-		ceili(safe_insets.w + UI_EDGE_MARGIN)
+		ceili(safe_insets.w + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS)
 	)
 
 
@@ -343,6 +445,8 @@ func _update_next_preview() -> void:
 	var preview_diameter := ceilf(
 		radius
 		* PIECE_VISUAL_SCRIPT.ingredient_diameter_scale_for_tier(_next_tier)
+		* GAMEPLAY_CONFIG.INGREDIENT_GLOBAL_VISUAL_SCALE
+		* GAMEPLAY_CONFIG.INGREDIENT_PREVIEW_SCALE
 	)
 	next_preview.custom_minimum_size = Vector2(preview_diameter, preview_diameter)
 	next_preview_ingredient.texture = ingredient_texture
@@ -357,16 +461,133 @@ func _update_next_preview() -> void:
 	_next_preview_style.corner_radius_bottom_right = corner_radius
 
 
+func _build_recipe_progress_strip() -> void:
+	for child in recipe_progress_row.get_children():
+		child.queue_free()
+	_recipe_progress_slots.clear()
+	for tier in range(1, TIER_NAME_KEYS.size() + 1):
+		var slot := PanelContainer.new()
+		slot.name = "Tier%d" % tier
+		slot.custom_minimum_size = (
+			GAMEPLAY_CONFIG.RECIPE_PROGRESS_SLOT_MINIMUM_SIZE
+		)
+		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.set_meta("tier", tier)
+		recipe_progress_row.add_child(slot)
+		_recipe_progress_slots.append(slot)
+
+		var visual_layer := Control.new()
+		visual_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(visual_layer)
+
+		var artwork := TextureRect.new()
+		artwork.name = "Artwork"
+		artwork.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var artwork_inset := (
+			GAMEPLAY_CONFIG.RECIPE_PROGRESS_ARTWORK_INSET_PIXELS
+		)
+		artwork.offset_left = artwork_inset
+		artwork.offset_top = artwork_inset
+		artwork.offset_right = -artwork_inset
+		artwork.offset_bottom = -artwork_inset
+		artwork.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		artwork.texture = PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(tier)
+		artwork.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		artwork.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		visual_layer.add_child(artwork)
+
+		var unknown_marker := Label.new()
+		unknown_marker.name = "Unknown"
+		unknown_marker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		unknown_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		unknown_marker.text = "?"
+		unknown_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		unknown_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		unknown_marker.add_theme_color_override("font_color", Color("d7cadb"))
+		unknown_marker.add_theme_color_override(
+			"font_outline_color",
+			Color("2a172e")
+		)
+		unknown_marker.add_theme_constant_override("outline_size", 3)
+		unknown_marker.add_theme_font_size_override(
+			"font_size",
+			GAMEPLAY_CONFIG.RECIPE_PROGRESS_UNKNOWN_FONT_SIZE
+		)
+		visual_layer.add_child(unknown_marker)
+	_update_recipe_progress()
+
+
+func _update_recipe_progress(highlight_tier: int = 0) -> void:
+	for tier in range(1, TIER_NAME_KEYS.size() + 1):
+		var discovered := discovered_creation_tiers.has(tier)
+		var slot := _recipe_progress_slots[tier - 1]
+		var artwork := slot.find_child("Artwork", true, false) as TextureRect
+		var unknown_marker := slot.find_child("Unknown", true, false) as Label
+		slot.set_meta("discovered", discovered)
+		slot.tooltip_text = (
+			tr(TIER_NAME_KEYS[tier - 1])
+			if discovered
+			else tr("COLLECTION_UNKNOWN")
+		)
+		artwork.material = (
+			null if discovered else recipe_locked_silhouette_material
+		)
+		unknown_marker.visible = not discovered
+		slot.add_theme_stylebox_override(
+			"panel",
+			_recipe_progress_slot_style(discovered)
+		)
+		if tier == highlight_tier:
+			slot.modulate = Color("fff0a8")
+			var tween := slot.create_tween()
+			tween.tween_property(slot, "modulate", Color.WHITE, 0.45)
+
+
+func _recipe_progress_slot_style(discovered: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = (
+		Color(0.31, 0.10, 0.32, 0.96)
+		if discovered
+		else Color(0.10, 0.07, 0.13, 0.94)
+	)
+	style.border_color = (
+		Color(1.0, 0.82, 0.40, 0.9)
+		if discovered
+		else Color(0.42, 0.35, 0.46, 0.8)
+	)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	return style
+
+
 func _drop_piece(viewport_x: float) -> void:
 	if game_over or _chamber_rect.size == Vector2.ZERO:
 		return
 
 	var tier_index := _next_tier - 1
 	var radius: float = _chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index]
-	var inner_left := _chamber_rect.position.x + _wall_thickness * 0.5
-	var inner_right := _chamber_rect.end.x - _wall_thickness * 0.5
+	var wall_clearance := (
+		_wall_thickness
+		* GAMEPLAY_CONFIG.SPAWN_WALL_CLEARANCE_MULTIPLIER
+	)
+	var inner_left := (
+		left_wall.position.x
+		+ wall_clearance
+		+ GAMEPLAY_CONFIG.SPAWN_HORIZONTAL_INSET_PIXELS
+	)
+	var inner_right := (
+		right_wall.position.x
+		- wall_clearance
+		- GAMEPLAY_CONFIG.SPAWN_HORIZONTAL_INSET_PIXELS
+	)
 	var drop_x := clampf(viewport_x, inner_left + radius, inner_right - radius)
-	var drop_y := _chamber_rect.position.y + radius + _wall_thickness * 0.5
+	var drop_y := (
+		_chamber_rect.position.y
+		+ _chamber_rect.size.y * GAMEPLAY_CONFIG.SPAWN_HEIGHT_CHAMBER_RATIO
+		+ radius
+		+ wall_clearance
+	)
 
 	presentation.show_throw()
 	var spawned_piece := _spawn_piece(_next_tier, Vector2(drop_x, drop_y))
@@ -648,13 +869,13 @@ func _clamp_merge_position(position: Vector2, result_radius: float) -> Vector2:
 	return Vector2(
 		clampf(
 			position.x,
-			_chamber_rect.position.x + wall_inset + result_radius,
-			_chamber_rect.end.x - wall_inset - result_radius
+			left_wall.position.x + wall_inset + result_radius,
+			right_wall.position.x - wall_inset - result_radius
 		),
 		clampf(
 			position.y,
 			_chamber_rect.position.y + wall_inset + result_radius,
-			_chamber_rect.end.y - wall_inset - result_radius
+			floor.position.y - wall_inset - result_radius
 		)
 	)
 
@@ -746,6 +967,7 @@ func _register_creation(
 	discovered_creation_tiers.sort()
 	_new_discoveries_this_run.append(tier)
 	_save_recipe_discoveries()
+	_update_recipe_progress(tier)
 	_discovery_feedback_timer = DISCOVERY_FEEDBACK_SECONDS
 	new_creation_feedback_label.text = tr("NEW_CREATION")
 	new_creation_feedback_label.visible = true
@@ -846,7 +1068,8 @@ func _has_dangerous_piece() -> bool:
 		var is_supported := piece.sleeping or not piece.get_colliding_bodies().is_empty()
 		if (
 			bottom_edge <= _danger_line_y
-			and absf(piece.linear_velocity.y) <= DANGER_VERTICAL_SPEED_THRESHOLD
+			and absf(piece.linear_velocity.y)
+				<= GAMEPLAY_CONFIG.DANGER_VERTICAL_SPEED_THRESHOLD
 			and is_supported
 		):
 			return true
@@ -854,9 +1077,10 @@ func _has_dangerous_piece() -> bool:
 
 
 func _enter_game_over() -> void:
+	_reset_restart_hold_feedback()
 	game_over = true
 	danger_active = true
-	danger_timer = DANGER_GRACE_SECONDS
+	danger_timer = GAMEPLAY_CONFIG.DANGER_GRACE_SECONDS
 	for child in pieces.get_children():
 		if child is PrototypePiece:
 			child.set_deferred("freeze", true)
@@ -914,7 +1138,32 @@ func _activate_pulse(direction: Vector2) -> void:
 	_update_debug_ui()
 
 
+func _begin_restart_hold() -> void:
+	if game_over:
+		return
+	_restart_hold_active = true
+	_restart_hold_elapsed = 0.0
+	restart_hold_progress.value = 0.0
+	restart_hold_progress.visible = true
+	restart_button.text = tr("GAME_RESTART_HOLD")
+
+
+func _cancel_restart_hold() -> void:
+	if not _restart_hold_active:
+		return
+	_reset_restart_hold_feedback()
+
+
+func _reset_restart_hold_feedback() -> void:
+	_restart_hold_active = false
+	_restart_hold_elapsed = 0.0
+	restart_hold_progress.value = 0.0
+	restart_hold_progress.visible = false
+	restart_button.text = tr("GAME_RESTART")
+
+
 func _restart_sandbox() -> void:
+	_reset_restart_hold_feedback()
 	for piece in pieces.get_children():
 		piece.queue_free()
 
@@ -943,6 +1192,7 @@ func _restart_sandbox() -> void:
 	new_creation_feedback_label.visible = false
 	_rng.seed = INITIAL_SEED
 	_next_tier = _roll_tier()
+	_update_recipe_progress()
 	queue_redraw()
 	_update_debug_ui()
 

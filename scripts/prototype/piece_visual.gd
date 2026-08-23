@@ -1,6 +1,7 @@
 class_name PrototypePieceVisual
 extends Node2D
 
+const GAMEPLAY_CONFIG := preload("res://scripts/config/gameplay_configuration.gd")
 const INGREDIENT_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/worlds/kitchen/ingredients/strawberry.png"),
 	preload("res://assets/worlds/kitchen/ingredients/milkshake.png"),
@@ -12,18 +13,6 @@ const INGREDIENT_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/worlds/kitchen/ingredients/cat_celebration_cake.png"),
 	preload("res://assets/worlds/kitchen/ingredients/magical_cat_birthday_cake.png"),
 ]
-const INGREDIENT_DIAMETER_SCALES := [
-	1.46,
-	1.90,
-	1.82,
-	1.78,
-	1.74,
-	1.60,
-	1.88,
-	1.66,
-	1.62,
-]
-
 var _radius := 24.0
 var _fallback_color := Color("79c7ff")
 var _uses_ingredient := false
@@ -36,14 +25,15 @@ static func ingredient_texture_for_tier(tier: int) -> Texture2D:
 
 
 static func ingredient_diameter_scale_for_tier(tier: int) -> float:
-	if tier < 1 or tier > INGREDIENT_DIAMETER_SCALES.size():
+	if tier < 1 or tier > GAMEPLAY_CONFIG.INGREDIENT_TIER_DIAMETER_SCALES.size():
 		return 2.0
-	return INGREDIENT_DIAMETER_SCALES[tier - 1]
+	return GAMEPLAY_CONFIG.INGREDIENT_TIER_DIAMETER_SCALES[tier - 1]
 
 
 func configure(tier: int, radius: float, fallback_color: Color) -> void:
 	_radius = radius
 	_fallback_color = fallback_color
+	position = GAMEPLAY_CONFIG.INGREDIENT_VISUAL_OFFSET_PIXELS
 	var ingredient_sprite := $IngredientSprite as Sprite2D
 	var ingredient_texture := ingredient_texture_for_tier(tier)
 	ingredient_sprite.texture = ingredient_texture
@@ -53,7 +43,10 @@ func configure(tier: int, radius: float, fallback_color: Color) -> void:
 		var texture_size := ingredient_texture.get_size()
 		var texture_extent := maxf(texture_size.x, texture_size.y)
 		var visual_scale := (
-			radius * ingredient_diameter_scale_for_tier(tier) / texture_extent
+			radius
+			* ingredient_diameter_scale_for_tier(tier)
+			* GAMEPLAY_CONFIG.INGREDIENT_GLOBAL_VISUAL_SCALE
+			/ texture_extent
 		)
 		ingredient_sprite.scale = Vector2.ONE * visual_scale
 	queue_redraw()

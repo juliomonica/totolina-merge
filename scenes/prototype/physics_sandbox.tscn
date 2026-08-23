@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/prototype/physics_sandbox.gd" id="1_sandbox"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
@@ -74,8 +74,27 @@ corner_radius_top_right = 18
 corner_radius_bottom_right = 18
 corner_radius_bottom_left = 18
 
+[sub_resource type="StyleBoxFlat" id="StyleBox_recipe_progress"]
+bg_color = Color(0.207843, 0.0666667, 0.227451, 0.9)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.819608, 0.396078, 0.72)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="Shader" id="Shader_recipe_locked"]
+code = "shader_type canvas_item;\n\nvoid fragment() {\n\tfloat alpha = texture(TEXTURE, UV).a;\n\tCOLOR = vec4(0.10, 0.07, 0.12, alpha * 0.92);\n}\n"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_recipe_locked"]
+shader = SubResource("Shader_recipe_locked")
+
 [node name="PhysicsSandbox" type="Node2D"]
 script = ExtResource("1_sandbox")
+recipe_locked_silhouette_material = SubResource("ShaderMaterial_recipe_locked")
 
 [node name="BackgroundCanvas" type="CanvasLayer" parent="."]
 layer = -10
@@ -201,6 +220,34 @@ text = "Score: 0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="RecipeProgressPanel" type="PanelContainer" parent="DebugUI"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -120.0
+offset_right = -16.0
+offset_bottom = -74.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme = SubResource("Theme_debug")
+theme_override_styles/panel = SubResource("StyleBox_recipe_progress")
+
+[node name="Margin" type="MarginContainer" parent="DebugUI/RecipeProgressPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 4
+
+[node name="Row" type="HBoxContainer" parent="DebugUI/RecipeProgressPanel/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+
 [node name="ControlsPanel" type="PanelContainer" parent="DebugUI"]
 anchors_preset = 12
 anchor_top = 1.0
@@ -232,8 +279,25 @@ disabled = true
 text = "◀ PUSH"
 
 [node name="Restart" type="Button" parent="DebugUI/ControlsPanel/Margin/Row"]
+custom_minimum_size = Vector2(156, 0)
 layout_mode = 2
-text = "Restart"
+text = "GAME_RESTART"
+
+[node name="HoldProgress" type="ProgressBar" parent="DebugUI/ControlsPanel/Margin/Row/Restart"]
+visible = false
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -11.0
+offset_right = -8.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+show_percentage = false
 
 [node name="PulseRight" type="Button" parent="DebugUI/ControlsPanel/Margin/Row"]
 layout_mode = 2

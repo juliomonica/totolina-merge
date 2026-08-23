@@ -7,6 +7,8 @@ MENU_RECIPES,RECIPES,RECETAS,食谱
 COLLECTION_TITLE,Recipe Collection,Colección de recetas,食谱收藏
 COLLECTION_BACK,BACK,VOLVER,返回
 COLLECTION_UNKNOWN,Unknown,Desconocida,未知
+GAME_RESTART,RESTART,REINICIAR,重新开始
+GAME_RESTART_HOLD,Hold Restart,Mantén para reiniciar,按住重新开始
 NEW_CREATION,NEW CREATION!,¡NUEVA CREACIÓN!,新作品！
 RESULT_GAME_OVER,GAME OVER,FIN DE LA PARTIDA,游戏结束
 RESULT_HIGHEST_CREATION,Highest Creation: %s,Creación más alta: %s,最高作品：%s
