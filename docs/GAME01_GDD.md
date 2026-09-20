@@ -34,9 +34,9 @@
 Help Tolina the cat create increasingly elaborate magical cakes through a
 satisfying physics-based merging puzzle.
 
-The player drops creations into a magical bowl, combines matching tiers,
-discovers new recipes, manages the growing pile, and tries to reach the
-ultimate Magical Cat Birthday Cake.
+The player drops creations into a magical bowl, combines valid recipe
+pairs, discovers new creations, manages the growing pile, and tries to
+reach the ultimate Fancy Cake.
 
 Tolina is more than static presentation. She should feel expressive and
 alive through reactions, animations, and a Living Home presentation,
@@ -213,7 +213,8 @@ danger, or recipe progression.
 # 6. Core Gameplay Loop
 
 Living Home → Start Kitchen Run → Check Next Creation → Choose Drop
-Position → Creation Falls Through Physics → Matching Creations Merge →
+Position → Creation Falls Through Physics → Matching Creations Merge /
+Visual-Only Baking Flavor →
 Score / Push / Recipe Progress → Tolina Reacts to Meaningful Events →
 Manage Growing Pile → Use Push Strategically → Game Over → Results →
 Play Again or Return Home
@@ -232,9 +233,9 @@ Current core mechanics:
 
 - horizontal drop placement
 - physics-based falling and stacking
-- same-tier merging
+- eight physical same-item recipes
 - physics-driven chain reactions
-- nine creation tiers
+- nine semantic Kitchen creations across nine progression ranks
 - score
 - recipe discovery
 - visible danger threshold
@@ -242,15 +243,16 @@ Current core mechanics:
 - Game Over
 - directional Push rescue mechanic
 - deterministic seeded spawning
-- weighted T1–T3 spawning
+- data-driven run-based spawn unlocks: Wheat-only → 75/25 → 60/30/10
+- three short visual-only merge flavor effects
 - hold-to-restart protection
 
-The validated pair-based P3.9 merge behavior remains the intended
-baseline:
+Physical same-item merges retain the validated pair replacement behavior:
 
-- one valid pair resolves at a time
-- merge-resolution cooldown remains
-- additional chains occur through normal physics contacts
+- one physical pair resolves per 0.45-second cooldown
+- safe placement, inherited motion and controlled expansion remain
+- chains continue through actual physics contacts
+- guarded live-neighbour waking prevents unsupported sleeping pieces
 
 Do not redesign validated gameplay without testing evidence.
 
@@ -260,26 +262,68 @@ Do not redesign validated gameplay without testing evidence.
 
 ## Kitchen
 
-The implemented Kitchen creation ladder is the source of truth.
+The Kitchen board uses one rule: **two identical pieces merge into the next
+creation**, except Fancy Cake, which is final. There are nine semantic board
+creations and eight physical same-item recipes; there are no mixed or automatic
+board recipes.
 
-| Tier | Creation |
-| --- | --- |
-| T1 | Strawberry |
-| T2 | Strawberry Milkshake |
-| T3 | Cookie |
-| T4 | Cupcake |
-| T5 | Cake Slice |
-| T6 | Birthday Cake |
-| T7 | Magical Cake |
-| T8 | Cat Celebration Cake |
-| T9 | Magical Cat Birthday Cake |
+The native `CreationDefinition`, `MergeRecipe` and
+`WorldContentConfiguration` resources in
+`res://config/worlds/kitchen/kitchen_content.tres` remain the source of truth.
 
-Two equal tiers create one creation of the next tier.
+| Size / collection order / rank | ID | Creation | Preserved growth % | Effective radius ratio |
+| ---: | --- | --- | ---: | ---: |
+| 1 | `wheat` | Wheat | 0 | 0.046000000 |
+| 2 | `flour` | Flour | 15 | 0.052900000 |
+| 3 | `cake_mix` | Cake Mix | 15 | 0.060835000 |
+| 4 | `cake_batter` | Cake Batter | 15 | 0.069960250 |
+| 5 | `sponge_cake` | Sponge Cake | 15 | 0.080454287 |
+| 6 | `frosted_cake` | Frosted Cake | 15 | 0.092522431 |
+| 7 | `layer_cake` | Layer Cake | 20 | 0.111026917 |
+| 8 | `decorated_cake` | Decorated Cake | 25 | 0.138783646 |
+| 9 | `fancy_cake` | Fancy Cake | 30 | 0.180418740 |
 
-T9 is the maximum tier and does not merge further.
+Each adjacent pair of rows defines one recipe: two of the earlier creation
+produce one of the next. Results award rank² × 2: 8, 18, 32, 50, 72, 98, 128,
+162 points, and +12 Push. One physical result resolves per 0.45-second cooldown.
+Actual contacts, pending-source protection, safe result placement, inherited
+motion, controlled expansion and guarded neighbour waking remain.
 
-Older example ladders containing Milk, Donut, Fancy Cake, or Royal Cake
-are obsolete.
+Normal drops unlock per run: **Wheat 100** initially; after merge-creating Flour,
+**Wheat 75 / Flour 25**; after merge-creating Cake Mix,
+**Wheat 60 / Flour 30 / Cake Mix 10**. Later creations never normally spawn.
+The three configurable spawn stages live in the Kitchen world resource.
+Unlocks occur at successful merge-result creation, not after settling or from
+saved discoveries. Restart, Play Again and new runs always begin Wheat-only.
+The existing seeded generator selects current DROP and buffered NEXT. Stage
+changes never reroll either piece or consume RNG; the new weights apply only
+to future selections. There is no adaptive spawn bias or crafted-result queue.
+
+The nine collection slots always remain in `collection_order`; discovery only
+changes real artwork versus the locked/mystery state. The existing semantic
+save format/version remains. Both save consumers filter IDs against current
+content, retaining surviving discoveries and ignoring removed identities;
+the next ordinary save writes valid IDs and preserves unrelated settings.
+
+Egg, Milk and Cream exist only as merge-flavor artwork, never as board bodies,
+colliders, spawnables, recipes or discovery slots. Three recipes have optional
+approved `effect_animation` names in their `MergeRecipe`:
+
+- Flour ×2 → Cake Mix: egg bubble, then egg crack.
+- Cake Mix ×2 → Cake Batter: milk bubble, then milk pour.
+- Sponge Cake ×2 → Frosted Cake: cream bubble, then cream swirl.
+
+Each effect uses the approved shared AnimationPlayer timeline: Egg 0.56s,
+Milk 0.66s, Cream 0.64s, with 65ms crossfades. The lab and production use the same
+pose/pivot implementation. The physical result remains visible and moves normally;
+animation never delays a result/reward, moves physics nodes or makes a fake
+creation. Ordinary merges retain normal merge magic. Completion only removes
+the visual overlay; Restart/scene teardown stops/frees it safely.
+
+All surviving `size_growth_percent` values were intentionally preserved, as
+were base radius 0.046 and visual calibration 2.18. Removing intermediate size
+steps changes effective radii cumulatively; this migration does not compensate.
+See GAMEPLAY_CONFIGURATION.md before tuning.
 
 ---
 
@@ -287,13 +331,13 @@ are obsolete.
 
 Current scoring:
 
-**result tier × result tier × 2**
+**result progression rank × result progression rank × 2**
 
 Score is currently run-based.
 
 Current persistent progression:
 
-- discovered recipe tiers
+- discovered semantic creation IDs
 
 Current non-persistent run state includes:
 
@@ -303,6 +347,8 @@ Current non-persistent run state includes:
 - danger state
 - highest creation
 - seeded sequence position
+- current drop and buffered NEXT
+- pending physical merge pairs
 
 For version 1.0:
 
@@ -340,7 +386,7 @@ Examples:
 
 - sleeping
 - looking around
-- playing with a strawberry
+- playing with a creation bubble
 - running briefly
 - hiding
 - peeking
@@ -382,9 +428,9 @@ Examples:
 
 Examples:
 
-- first high-tier discovery
-- first T9 creation
-- completing all nine Kitchen recipes
+- first high-rank discovery
+- first Fancy Cake creation
+- completing all nine Kitchen creations
 
 Possible responses:
 
@@ -453,7 +499,7 @@ Contains:
 - danger threshold and warning
 - magical bowl
 - physical creations
-- nine-slot recipe discovery strip
+- compact nine-creation discovery strip
 - Push Left
 - Hold Restart
 - Push Right
@@ -488,7 +534,7 @@ Planned for version 1.0:
 
 Contains:
 
-- all nine Kitchen recipe slots
+- all nine Kitchen creation slots
 - artwork for discovered recipes
 - localized creation names
 - silhouettes for undiscovered recipes
@@ -664,7 +710,7 @@ physics puzzle as the main game.
 
 - Tolina character
 - Kitchen gameplay world
-- nine creation tiers
+- nine Kitchen creations and eight same-item recipes
 - physics merge gameplay
 - Push mechanic
 - danger/grace system

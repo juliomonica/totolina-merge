@@ -1,8 +1,8 @@
 extends Node2D
 
 const PIECE_SCENE := preload("res://scenes/prototype/piece.tscn")
-const PIECE_VISUAL_SCRIPT := preload("res://scripts/prototype/piece_visual.gd")
 const GAMEPLAY_CONFIG := preload("res://scripts/config/gameplay_configuration.gd")
+const KITCHEN_CONTENT := preload("res://config/worlds/kitchen/kitchen_content.tres")
 const INITIAL_SEED := 12345
 const MAX_PULSE_CHARGE := 100
 const PULSE_CHARGE_PER_MERGE := 12
@@ -16,7 +16,9 @@ const MAX_MERGE_FEEDBACK_SECONDS := 1.0
 const DISCOVERY_FEEDBACK_SECONDS := 1.25
 const DISCOVERY_SAVE_PATH := "user://recipe_discoveries.cfg"
 const DISCOVERY_SAVE_SECTION := "recipes"
-const DISCOVERY_SAVE_KEY := "discovered_tiers"
+const DISCOVERY_SAVE_FORMAT_KEY := "format_version"
+const DISCOVERY_SAVE_CONTENT_KEY := "content_id"
+const DISCOVERY_SAVE_IDS_KEY := "discovered_creation_ids"
 const MERGE_PLACEMENT_CLEARANCE := 0.5
 const MERGE_PLACEMENT_SEARCH_RINGS := 16
 const MERGE_PLACEMENT_SEARCH_DIRECTIONS := 16
@@ -26,41 +28,6 @@ const MERGE_EXPANSION_MAX_IMPULSE := 32.0
 const MERGE_EXPANSION_DOWNWARD_SCALE := 0.25
 const MERGE_RESOLUTION_COOLDOWN_SECONDS := 0.45
 const RESTART_HOLD_SECONDS := 1.0
-const NORMAL_SPAWN_MAX_TIER := 3
-const TIER_RADIUS_RATIOS := GAMEPLAY_CONFIG.TIER_RADIUS_RATIOS
-const TIER_MASSES := [
-	1.00,
-	1.30,
-	1.69,
-	2.20,
-	2.86,
-	3.71,
-	4.83,
-	6.27,
-	8.16,
-]
-const TIER_COLORS := [
-	Color("79c7ff"),
-	Color("ffc857"),
-	Color("ff7b89"),
-	Color("72e0a1"),
-	Color("b88cff"),
-	Color("ff9f43"),
-	Color("47e6e6"),
-	Color("f368e0"),
-	Color("f5f5f5"),
-]
-const TIER_NAME_KEYS := [
-	"RECIPE_TIER_1",
-	"RECIPE_TIER_2",
-	"RECIPE_TIER_3",
-	"RECIPE_TIER_4",
-	"RECIPE_TIER_5",
-	"RECIPE_TIER_6",
-	"RECIPE_TIER_7",
-	"RECIPE_TIER_8",
-	"RECIPE_TIER_9",
-]
 
 @export var recipe_locked_silhouette_material: ShaderMaterial
 
@@ -72,8 +39,9 @@ const TIER_NAME_KEYS := [
 @onready var hud_panel: PanelContainer = $DebugUI/HUDPanel
 @onready var next_preview: Panel = $DebugUI/HUDPanel/Margin/Row/Next/PreviewCenter/Preview
 @onready var next_preview_ingredient: TextureRect = $DebugUI/HUDPanel/Margin/Row/Next/PreviewCenter/Preview/Ingredient
-@onready var score_label: Label = $DebugUI/HUDPanel/Margin/Row/Score
-@onready var pulse_label: Label = $DebugUI/HUDPanel/Margin/Row/Pulse
+@onready var score_label: Label = $DebugUI/HUDPanel/Margin/Row/Information/Stats/Score
+@onready var pulse_label: Label = $DebugUI/HUDPanel/Margin/Row/Information/Stats/Pulse
+@onready var upcoming_preview: TextureRect = $DebugUI/HUDPanel/Margin/Row/Information/Upcoming/Ingredient
 @onready var recipe_progress_panel: PanelContainer = $DebugUI/RecipeProgressPanel
 @onready var recipe_progress_row: HBoxContainer = $DebugUI/RecipeProgressPanel/Margin/Row
 @onready var controls_panel: PanelContainer = $DebugUI/ControlsPanel
@@ -98,7 +66,16 @@ const TIER_NAME_KEYS := [
 @onready var presentation: PrototypeSandboxPresentation = $Presentation
 
 var _rng := RandomNumberGenerator.new()
-var _next_tier := 1
+# Ephemeral progression, independent of permanent creation discoveries.
+var _spawn_stage_index := 0
+# The large preview is the controlled DROP; the small preview is buffered NEXT.
+var _current_creation_id: StringName
+var _raw_next_creation_id: StringName
+var _piece_sequence := 0
+var _recipe_evaluation_pending := false
+var _physical_contacts: Dictionary = {}
+var _resolving_merge_pair: Array = []
+var _merge_generation := 0
 var _chamber_rect := Rect2()
 var _wall_thickness := 0.0
 var _danger_threshold_y := 0.0
@@ -109,27 +86,35 @@ var _discovery_feedback_timer := 0.0
 var _merge_cooldown_remaining := 0.0
 var _merge_resolution_pending := false
 var _queued_merge_pairs: Array = []
-var _new_discoveries_this_run: Array[int] = []
+var _new_discoveries_this_run: Array[StringName] = []
 var _discovery_save_path := DISCOVERY_SAVE_PATH
 var _recipe_progress_slots: Array[PanelContainer] = []
 var _restart_hold_active := false
 var _restart_hold_elapsed := 0.0
+# Ownership lasts until this finger ends, even though the drop commits on press.
+var _active_drop_touch_index := -1
+var _held_drop_touch_indices: Dictionary = {}
+var _debug_spawn_panel: Control
 
 var danger_active := false
 var danger_timer := 0.0
 var game_over := false
 var pulse_charge := 0
 var score := 0
-var highest_creation_reached := 0
-var discovered_creation_tiers: Array[int] = []
+var highest_creation_id: StringName
+var discovered_creation_ids: Array[StringName] = []
 
 
 func _ready() -> void:
 	Engine.physics_ticks_per_second = 60
 	_apply_presentation_configuration()
 	_load_recipe_discoveries()
+	for error in KITCHEN_CONTENT.spawn_stage_errors():
+		push_error("World spawning: " + error)
+	_spawn_stage_index = 0
 	_rng.seed = INITIAL_SEED
-	_next_tier = _roll_tier()
+	_current_creation_id = _roll_spawn_creation_id()
+	_raw_next_creation_id = _roll_spawn_creation_id()
 	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
 	_build_recipe_progress_strip()
 	_reset_restart_hold_feedback()
@@ -140,7 +125,9 @@ func _ready() -> void:
 	pulse_right_button.pressed.connect(_activate_pulse.bind(Vector2.RIGHT))
 	get_viewport().size_changed.connect(_layout_chamber)
 	_layout_chamber()
+	_create_debug_spawn_panel()
 	_update_debug_ui()
+	_request_recipe_evaluation()
 
 
 func _process(delta: float) -> void:
@@ -190,6 +177,14 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		# Observe endings BEFORE GUI routing: a finger may finish over a button.
+		# Do not consume here; Controls keep their ordinary touch behavior.
+		if event.device != InputEvent.DEVICE_ID_EMULATION and (not event.pressed or event.canceled):
+			_held_drop_touch_indices.erase(event.index)
+			if event.index == _active_drop_touch_index:
+				_active_drop_touch_index = -1
+		return
 	if not event is InputEventKey:
 		return
 	var key_event := event as InputEventKey
@@ -206,14 +201,36 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
-		if touch.pressed:
-			_drop_piece(touch.position.x)
+		if touch.device == InputEvent.DEVICE_ID_EMULATION:
+			return # A real desktop mouse click owns its own drop, not its touch copy.
+		if touch.pressed and not touch.canceled:
+			if not _held_drop_touch_indices.has(touch.index):
+				_held_drop_touch_indices[touch.index] = true
+				if _active_drop_touch_index == -1 and not game_over and _chamber_rect.has_area():
+					_active_drop_touch_index = touch.index
+					_drop_piece(touch.position.x)
 			get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag:
+		# There is no post-press aiming stage in this game. Neither the owner nor
+		# ignored fingers may move a committed body, advance NEXT or drop again.
+		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton:
 		var click := event as InputEventMouseButton
-		if click.button_index == MOUSE_BUTTON_LEFT and click.pressed:
+		if click.device == InputEvent.DEVICE_ID_EMULATION:
+			return # Ignore touchscreen mouse copies only here, AFTER normal GUI input.
+		if click.button_index == MOUSE_BUTTON_LEFT and click.pressed and _active_drop_touch_index == -1:
 			_drop_piece(click.position.x)
 			get_viewport().set_input_as_handled()
+
+
+func _clear_drop_touch_state() -> void:
+	_active_drop_touch_index = -1
+	_held_drop_touch_indices.clear()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		_clear_drop_touch_state()
 
 
 func _draw() -> void:
@@ -452,28 +469,99 @@ func _layout_safe_ui(viewport_size: Vector2) -> void:
 		"margin_bottom",
 		ceili(safe_insets.w + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS)
 	)
+	_layout_debug_spawn_panel()
+
+
+func _debug_tools_enabled() -> bool:
+	# Native compile-time build type, never a saved setting or player toggle.
+	return OS.is_debug_build()
+
+
+func _create_debug_spawn_panel() -> void:
+	if not _debug_tools_enabled() or is_instance_valid(_debug_spawn_panel):
+		return
+	_debug_spawn_panel = load("res://scripts/prototype/debug_spawn_panel.gd").new()
+	_debug_spawn_panel.content = KITCHEN_CONTENT
+	_debug_spawn_panel.spawn_requested.connect(_debug_spawn_creations)
+	_debug_spawn_panel.clear_requested.connect(_debug_clear_board)
+	_debug_spawn_panel.layout_requested.connect(_layout_debug_spawn_panel)
+	$DebugUI.add_child(_debug_spawn_panel)
+	_layout_debug_spawn_panel()
+
+
+func _layout_debug_spawn_panel() -> void:
+	if is_instance_valid(_debug_spawn_panel):
+		_debug_spawn_panel.place(hud_panel.get_global_rect())
+
+
+func _debug_spawn_creations(creation_id: StringName, count: int) -> Array[PrototypePiece]:
+	# Guard actions as well as UI creation: hidden controls cannot spawn in release.
+	if not _debug_tools_enabled() or game_over or not is_instance_valid(_debug_spawn_panel):
+		return []
+	var definition := KITCHEN_CONTENT.creation_for_id(creation_id)
+	if definition == null or count < 1 or count > 2 or not _chamber_rect.has_area():
+		return []
+	var radius := _chamber_rect.size.x * KITCHEN_CONTENT.effective_radius_ratio(definition)
+	var inset := _wall_thickness * 0.5
+	var bounds := Rect2(Vector2(left_wall.position.x + inset, _chamber_rect.position.y + inset),
+		Vector2(right_wall.position.x - left_wall.position.x - 2.0 * inset,
+			floor.position.y - _chamber_rect.position.y - 2.0 * inset))
+	var active := pieces.get_children().filter(func(piece): return piece is PrototypePiece)
+	var positions: Array[Vector2] = _debug_spawn_panel.spawn_positions(bounds, radius, count, active)
+	_debug_spawn_panel.show_space_warning(positions.size() != count)
+	var spawned: Array[PrototypePiece] = []
+	# All positions are validated before creating anything; no partial pair.
+	for point in positions:
+		spawned.append(_spawn_piece(definition, point))
+	return spawned
+
+
+func _debug_clear_board() -> void:
+	if not _debug_tools_enabled():
+		return
+	_clear_recipe_resolution()
+	for piece in pieces.get_children():
+		if piece is PrototypePiece:
+			piece.queue_free()
+	_merge_cooldown_remaining = 0.0
+	presentation.reset()
+	_discovery_feedback_timer = 0.0
+	_max_merge_feedback_timer = 0.0
+	new_creation_feedback_label.hide()
+	max_merge_feedback_label.hide()
+	if not game_over:
+		danger_active = false
+		danger_timer = 0.0
+	# Keep score, charge, discoveries, stage, DROP/NEXT and RNG; never restart here.
+	queue_redraw()
+	_update_debug_ui()
 
 
 func _update_next_preview() -> void:
-	if _next_tier < 1 or _next_tier > TIER_RADIUS_RATIOS.size():
+	var definition: CreationDefinition = KITCHEN_CONTENT.creation_for_id(
+		_current_creation_id
+	)
+	if definition == null:
+		next_preview_ingredient.texture = null
+		next_preview_ingredient.visible = false
 		return
-	var tier_index := _next_tier - 1
-	var radius: float = _chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index]
-	var ingredient_texture: Texture2D = (
-		PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(_next_tier)
+	var radius := (
+		_chamber_rect.size.x * KITCHEN_CONTENT.effective_radius_ratio(definition)
 	)
 	var preview_diameter := ceilf(
 		radius
-		* PIECE_VISUAL_SCRIPT.ingredient_diameter_scale_for_tier(_next_tier)
+		* definition.visual_diameter_scale
 		* GAMEPLAY_CONFIG.INGREDIENT_GLOBAL_VISUAL_SCALE
 		* GAMEPLAY_CONFIG.INGREDIENT_PREVIEW_SCALE
 	)
+	# Derived drops use the same artwork without allowing large radii to expand the HUD.
+	preview_diameter = minf(preview_diameter, 58.0)
 	next_preview.custom_minimum_size = Vector2(preview_diameter, preview_diameter)
-	next_preview_ingredient.texture = ingredient_texture
-	next_preview_ingredient.visible = ingredient_texture != null
-	_next_preview_style.bg_color = (
-		Color.TRANSPARENT if ingredient_texture != null else TIER_COLORS[tier_index]
-	)
+	var upcoming := KITCHEN_CONTENT.creation_for_id(_raw_next_creation_id)
+	upcoming_preview.texture = upcoming.texture if upcoming != null else null
+	next_preview_ingredient.texture = definition.texture
+	next_preview_ingredient.visible = true
+	_next_preview_style.bg_color = Color.TRANSPARENT
 	var corner_radius := ceili(radius)
 	_next_preview_style.corner_radius_top_left = corner_radius
 	_next_preview_style.corner_radius_top_right = corner_radius
@@ -485,15 +573,15 @@ func _build_recipe_progress_strip() -> void:
 	for child in recipe_progress_row.get_children():
 		child.queue_free()
 	_recipe_progress_slots.clear()
-	for tier in range(1, TIER_NAME_KEYS.size() + 1):
+	for definition in KITCHEN_CONTENT.collection_creations():
 		var slot := PanelContainer.new()
-		slot.name = "Tier%d" % tier
+		slot.name = "Creation_%s" % definition.id
 		slot.custom_minimum_size = (
 			GAMEPLAY_CONFIG.RECIPE_PROGRESS_SLOT_MINIMUM_SIZE
 		)
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.set_meta("tier", tier)
+		slot.set_meta("creation_id", definition.id)
 		recipe_progress_row.add_child(slot)
 		_recipe_progress_slots.append(slot)
 
@@ -512,7 +600,7 @@ func _build_recipe_progress_strip() -> void:
 		artwork.offset_right = -artwork_inset
 		artwork.offset_bottom = -artwork_inset
 		artwork.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		artwork.texture = PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(tier)
+		artwork.texture = definition.texture
 		artwork.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		artwork.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		visual_layer.add_child(artwork)
@@ -538,15 +626,19 @@ func _build_recipe_progress_strip() -> void:
 	_update_recipe_progress()
 
 
-func _update_recipe_progress(highlight_tier: int = 0) -> void:
-	for tier in range(1, TIER_NAME_KEYS.size() + 1):
-		var discovered := discovered_creation_tiers.has(tier)
-		var slot := _recipe_progress_slots[tier - 1]
+func _update_recipe_progress(
+	highlight_creation_id: StringName = &""
+) -> void:
+	var definitions := KITCHEN_CONTENT.collection_creations()
+	for index in range(definitions.size()):
+		var definition: CreationDefinition = definitions[index]
+		var discovered := discovered_creation_ids.has(definition.id)
+		var slot := _recipe_progress_slots[index]
 		var artwork := slot.find_child("Artwork", true, false) as TextureRect
 		var unknown_marker := slot.find_child("Unknown", true, false) as Label
 		slot.set_meta("discovered", discovered)
 		slot.tooltip_text = (
-			tr(TIER_NAME_KEYS[tier - 1])
+			tr(String(definition.display_name_key))
 			if discovered
 			else tr("COLLECTION_UNKNOWN")
 		)
@@ -558,7 +650,7 @@ func _update_recipe_progress(highlight_tier: int = 0) -> void:
 			"panel",
 			_recipe_progress_slot_style(discovered)
 		)
-		if tier == highlight_tier:
+		if definition.id == highlight_creation_id:
 			slot.modulate = Color("fff0a8")
 			var tween := slot.create_tween()
 			tween.tween_property(slot, "modulate", Color.WHITE, 0.45)
@@ -585,8 +677,14 @@ func _drop_piece(viewport_x: float) -> void:
 	if game_over or _chamber_rect.size == Vector2.ZERO:
 		return
 
-	var tier_index := _next_tier - 1
-	var radius: float = _chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index]
+	var definition: CreationDefinition = KITCHEN_CONTENT.creation_for_id(
+		_current_creation_id
+	)
+	if definition == null:
+		return
+	var radius := (
+		_chamber_rect.size.x * KITCHEN_CONTENT.effective_radius_ratio(definition)
+	)
 	var wall_clearance := (
 		_wall_thickness
 		* GAMEPLAY_CONFIG.SPAWN_WALL_CLEARANCE_MULTIPLIER
@@ -610,11 +708,13 @@ func _drop_piece(viewport_x: float) -> void:
 	)
 
 	presentation.show_throw()
-	var spawned_piece := _spawn_piece(_next_tier, Vector2(drop_x, drop_y))
-	_next_tier = _roll_tier()
+	var spawned_piece := _spawn_piece(definition, Vector2(drop_x, drop_y))
+	_current_creation_id = _raw_next_creation_id
+	_raw_next_creation_id = _roll_spawn_creation_id()
 	_update_debug_ui()
+	_request_recipe_evaluation()
 	_register_creation(
-		spawned_piece.tier,
+		spawned_piece.creation_id,
 		spawned_piece.global_position,
 		spawned_piece.radius,
 		false
@@ -622,71 +722,100 @@ func _drop_piece(viewport_x: float) -> void:
 
 
 func _spawn_piece(
-	tier: int,
+	definition: CreationDefinition,
 	spawn_position: Vector2,
 	initial_linear_velocity: Vector2 = Vector2.ZERO,
 	initial_angular_velocity: float = 0.0,
 	initial_rotation: float = 0.0
 ) -> PrototypePiece:
-	var tier_index := tier - 1
+	if definition == null or KITCHEN_CONTENT.creation_for_id(definition.id) != definition:
+		return null
 	var piece := PIECE_SCENE.instantiate() as PrototypePiece
 	piece.configure(
-		tier,
-		_chamber_rect.size.x * TIER_RADIUS_RATIOS[tier_index],
-		TIER_MASSES[tier_index],
-		TIER_COLORS[tier_index]
+		definition,
+		_chamber_rect.size.x * KITCHEN_CONTENT.effective_radius_ratio(definition)
 	)
 	piece.position = pieces.to_local(spawn_position)
 	piece.rotation = initial_rotation
 	piece.linear_velocity = initial_linear_velocity
 	piece.angular_velocity = initial_angular_velocity
+	_piece_sequence += 1
+	piece.spawn_sequence = _piece_sequence
 	piece.body_entered.connect(_on_piece_body_entered.bind(piece))
+	piece.body_exited.connect(_on_piece_body_exited.bind(piece))
+	piece.tree_exiting.connect(_on_piece_exiting.bind(piece))
 	pieces.add_child(piece)
 	piece.sleeping = false
+	_request_recipe_evaluation()
 	return piece
 
 
 func _on_piece_body_entered(other_body: Node, source_piece: PrototypePiece) -> void:
-	if game_over:
+	if game_over or not other_body is PrototypePiece:
 		return
-	if not is_instance_valid(source_piece) or source_piece.merge_pending:
-		return
-	if not other_body is PrototypePiece:
-		return
-
 	var other_piece := other_body as PrototypePiece
-	if source_piece == other_piece or other_piece.merge_pending:
+	if source_piece == other_piece or not _is_live_piece(source_piece) or not _is_live_piece(other_piece):
 		return
-	if source_piece.get_parent() != pieces or other_piece.get_parent() != pieces:
+	var recipe := KITCHEN_CONTENT.recipe_for(source_piece.creation_id, other_piece.creation_id)
+	if recipe == null:
 		return
-	if source_piece.tier != other_piece.tier:
-		return
-	if source_piece.tier >= TIER_RADIUS_RATIOS.size():
-		return
+	if source_piece.creation_id == other_piece.creation_id:
+		var pair := _ordered_pair(source_piece, other_piece)
+		_physical_contacts[_contact_key(pair[0], pair[1])] = pair
+		# Resolve batched contacts outside the physics callback.
+		_request_recipe_evaluation()
 
-	_queue_merge_pair(source_piece, other_piece)
+
+func _on_piece_body_exited(other_body: Node, source_piece: PrototypePiece) -> void:
+	if other_body is PrototypePiece:
+		if _physical_contacts.erase(_contact_key(source_piece, other_body)):
+			_request_recipe_evaluation()
 
 
-func _queue_merge_pair(first_piece: PrototypePiece, second_piece: PrototypePiece) -> void:
+func _ordered_pair(first: PrototypePiece, second: PrototypePiece) -> Array:
+	return [first, second] if first.spawn_sequence < second.spawn_sequence else [second, first]
+
+
+func _contact_key(first: PrototypePiece, second: PrototypePiece) -> Vector2i:
+	return Vector2i(mini(first.spawn_sequence, second.spawn_sequence),
+		maxi(first.spawn_sequence, second.spawn_sequence))
+
+
+func _is_live_piece(piece: Variant) -> bool:
+	return is_instance_valid(piece) and not piece.is_queued_for_deletion() and piece.get_parent() == pieces
+
+
+func _queue_merge_pair(
+	first_piece: PrototypePiece,
+	second_piece: PrototypePiece,
+	result_creation_id: StringName
+) -> void:
 	first_piece.merge_pending = true
 	second_piece.merge_pending = true
-	_queued_merge_pairs.append([first_piece, second_piece])
-	_try_resolve_next_merge()
+	_queued_merge_pairs.append(
+		[first_piece, second_piece, result_creation_id]
+	)
 
 
 func _try_resolve_next_merge() -> void:
-	if game_over or _merge_resolution_pending or _merge_cooldown_remaining > 0.0:
+	if game_over or _recipe_evaluation_pending or _merge_resolution_pending or _merge_cooldown_remaining > 0.0:
 		return
 
 	while not _queued_merge_pairs.is_empty():
 		var pair: Array = _queued_merge_pairs.pop_front()
 		var first_piece := pair[0] as PrototypePiece
 		var second_piece := pair[1] as PrototypePiece
-		if not _is_valid_merge_pair(first_piece, second_piece):
+		var result_creation_id := StringName(pair[2])
+		if not _is_valid_merge_pair(
+			first_piece,
+			second_piece,
+			result_creation_id
+		):
 			_release_merge_pair(first_piece, second_piece)
 			continue
 
 		_merge_resolution_pending = true
+		_resolving_merge_pair = pair
 		var result_position := (
 			first_piece.global_position + second_piece.global_position
 		) * 0.5
@@ -705,31 +834,37 @@ func _try_resolve_next_merge() -> void:
 			"_resolve_merge",
 			first_piece,
 			second_piece,
-			first_piece.tier + 1,
+			result_creation_id,
 			result_position,
 			result_linear_velocity,
 			result_angular_velocity,
-			result_rotation
+			result_rotation,
+			_merge_generation
 		)
 		return
 
 
 func _is_valid_merge_pair(
 	first_piece: PrototypePiece,
-	second_piece: PrototypePiece
+	second_piece: PrototypePiece,
+	result_creation_id: StringName
 ) -> bool:
-	return (
+	if not (
 		_is_active_merge_source(first_piece)
 		and _is_active_merge_source(second_piece)
 		and first_piece != second_piece
-		and first_piece.tier == second_piece.tier
-		and first_piece.tier < TIER_RADIUS_RATIOS.size()
+	):
+		return false
+	var recipe: MergeRecipe = KITCHEN_CONTENT.recipe_for(
+		first_piece.creation_id,
+		second_piece.creation_id
 	)
+	return recipe != null and first_piece.creation_id == second_piece.creation_id and recipe.result == result_creation_id
 
 
 func _release_merge_pair(
-	first_piece: PrototypePiece,
-	second_piece: PrototypePiece
+	first_piece: Variant,
+	second_piece: Variant
 ) -> void:
 	for piece in [first_piece, second_piece]:
 		if (
@@ -743,28 +878,39 @@ func _release_merge_pair(
 func _resolve_merge(
 	first_piece: PrototypePiece,
 	second_piece: PrototypePiece,
-	result_tier: int,
+	result_creation_id: StringName,
 	result_position: Vector2,
 	result_linear_velocity: Vector2,
 	result_angular_velocity: float,
-	result_rotation: float
+	result_rotation: float,
+	generation: int
 ) -> void:
-	if game_over:
-		_merge_resolution_pending = false
+	if game_over or generation != _merge_generation:
 		return
-	if not _is_valid_merge_pair(first_piece, second_piece):
+	if _recipe_evaluation_pending:
+		_evaluate_recipes()
+		return
+	if not _is_valid_merge_pair(
+		first_piece,
+		second_piece,
+		result_creation_id
+	):
 		_merge_resolution_pending = false
 		_release_merge_pair(first_piece, second_piece)
 		_try_resolve_next_merge()
 		return
-	if first_piece.tier + 1 != result_tier:
+	var result_definition: CreationDefinition = (
+		KITCHEN_CONTENT.creation_for_id(result_creation_id)
+	)
+	if result_definition == null:
 		_merge_resolution_pending = false
 		_release_merge_pair(first_piece, second_piece)
 		_try_resolve_next_merge()
 		return
 
+	_resolving_merge_pair.clear()
 	var result_radius: float = (
-		_chamber_rect.size.x * TIER_RADIUS_RATIOS[result_tier - 1]
+		_chamber_rect.size.x * KITCHEN_CONTENT.effective_radius_ratio(result_definition)
 	)
 	var safe_result_position := _find_safe_merge_position(
 		result_position,
@@ -772,34 +918,40 @@ func _resolve_merge(
 		first_piece,
 		second_piece
 	)
+	var recipe := KITCHEN_CONTENT.recipe_for(first_piece.creation_id, second_piece.creation_id)
+	_wake_merge_neighbours(first_piece, second_piece)
 	first_piece.queue_free()
 	second_piece.queue_free()
 	var result_piece := _spawn_piece(
-		result_tier,
+		result_definition,
 		safe_result_position,
 		result_linear_velocity,
 		result_angular_velocity,
 		result_rotation
 	)
 	_apply_merge_expansion(result_piece)
-	presentation.show_merge(
+	presentation.show_recipe_merge(
+		recipe,
 		safe_result_position,
 		minf(result_radius * 3.0, _chamber_rect.size.x * 0.45)
 	)
 	_merge_cooldown_remaining = MERGE_RESOLUTION_COOLDOWN_SECONDS
 	_merge_resolution_pending = false
-	score += result_tier * result_tier * 2
+	_award_creation(result_definition, safe_result_position, result_radius)
+	_request_recipe_evaluation()
+
+
+func _award_creation(definition: CreationDefinition, world_position: Vector2, radius: float) -> void:
+	# Called only after the physical merge result exists, before any settling wait.
+	# Advance future selections only: never reroll the controlled/buffered drops.
+	_spawn_stage_index = KITCHEN_CONTENT.spawn_stage_after_merge(_spawn_stage_index, definition.id)
+	score += definition.progression_rank * definition.progression_rank * 2
 	pulse_charge = mini(MAX_PULSE_CHARGE, pulse_charge + PULSE_CHARGE_PER_MERGE)
-	if result_tier == TIER_RADIUS_RATIOS.size():
+	if definition.id == KITCHEN_CONTENT.final_creation_id:
 		_max_merge_feedback_timer = MAX_MERGE_FEEDBACK_SECONDS
 		max_merge_feedback_label.visible = true
+	_register_creation(definition.id, world_position, radius, true)
 	_update_debug_ui()
-	_register_creation(
-		result_tier,
-		safe_result_position,
-		result_radius,
-		true
-	)
 
 
 func _find_safe_merge_position(
@@ -953,7 +1105,7 @@ func _apply_merge_expansion(result_piece: PrototypePiece) -> void:
 		piece.apply_central_impulse(expansion_direction * impulse_strength)
 
 
-func _is_active_merge_source(piece: PrototypePiece) -> bool:
+func _is_active_merge_source(piece: Variant) -> bool:
 	return (
 		is_instance_valid(piece)
 		and not piece.is_queued_for_deletion()
@@ -962,32 +1114,131 @@ func _is_active_merge_source(piece: PrototypePiece) -> bool:
 	)
 
 
-func _roll_tier() -> int:
-	var roll := _rng.randf()
-	if roll < 0.50:
-		return 1
-	if roll < 0.85:
-		return 2
-	return 3
+func _request_recipe_evaluation() -> void:
+	if _recipe_evaluation_pending or game_over or not is_inside_tree():
+		return
+	_recipe_evaluation_pending = true
+	_evaluate_recipes.call_deferred()
+
+
+func _evaluate_recipes() -> void:
+	if not _recipe_evaluation_pending or game_over or not is_inside_tree():
+		return
+	_recipe_evaluation_pending = false
+	# Batch contacts outside the physics callback; preserve pending contact pairs
+	# across the existing cooldown with deterministic oldest-pair arbitration.
+	_merge_generation += 1
+	var contact_pairs := _physical_contacts.duplicate()
+	var latched_pairs := _queued_merge_pairs.duplicate()
+	if not _resolving_merge_pair.is_empty():
+		latched_pairs.append(_resolving_merge_pair.duplicate())
+	for pair in latched_pairs:
+		if _is_live_piece(pair[0]) and _is_live_piece(pair[1]):
+			var ordered := _ordered_pair(pair[0], pair[1])
+			contact_pairs[_contact_key(ordered[0], ordered[1])] = ordered
+		_release_merge_pair(pair[0], pair[1])
+	_queued_merge_pairs.clear()
+	_resolving_merge_pair.clear()
+	_merge_resolution_pending = false
+
+	var contacts: Array = contact_pairs.values()
+	contacts.sort_custom(func(a: Array, b: Array) -> bool:
+		if not _is_live_piece(a[0]) or not _is_live_piece(a[1]):
+			return false
+		if not _is_live_piece(b[0]) or not _is_live_piece(b[1]):
+			return true
+		if a[0].spawn_sequence != b[0].spawn_sequence:
+			return a[0].spawn_sequence < b[0].spawn_sequence
+		return a[1].spawn_sequence < b[1].spawn_sequence
+	)
+	for pair in contacts:
+		var first := pair[0] as PrototypePiece
+		var second := pair[1] as PrototypePiece
+		if not _is_live_piece(first) or not _is_live_piece(second):
+			continue
+		if first.merge_pending or second.merge_pending or first.creation_id != second.creation_id:
+			continue
+		var recipe := KITCHEN_CONTENT.recipe_for(first.creation_id, second.creation_id)
+		if recipe != null:
+			_queue_merge_pair(first, second, recipe.result)
+	_try_resolve_next_merge()
+
+
+func _wake_merge_neighbours(first: PrototypePiece, second: PrototypePiece) -> void:
+	# Replacement runs outside collision callbacks. Wake actual live
+	# contacts before their support disappears, including vertical neighbours
+	# that intentionally receive no controlled-expansion impulse.
+	for source in [first, second]:
+		if not _is_live_piece(source):
+			continue
+		for body in source.get_colliding_bodies():
+			if not is_instance_valid(body) or not body is PrototypePiece:
+				continue
+			if body != first and body != second and _is_live_piece(body) and not body.merge_pending:
+				body.sleeping = false
+
+
+func _on_piece_exiting(piece: PrototypePiece) -> void:
+	for key in _physical_contacts.keys():
+		if key.x == piece.spawn_sequence or key.y == piece.spawn_sequence:
+			_physical_contacts.erase(key)
+	_request_recipe_evaluation()
+
+
+func _clear_recipe_resolution() -> void:
+	_merge_generation += 1
+	_recipe_evaluation_pending = false
+	for child in pieces.get_children():
+		if child is PrototypePiece:
+			child.merge_pending = false
+	_physical_contacts.clear()
+	_queued_merge_pairs.clear()
+	_resolving_merge_pair.clear()
+	_merge_resolution_pending = false
+
+
+func _exit_tree() -> void:
+	_clear_drop_touch_state()
+	_clear_recipe_resolution()
+
+
+func _roll_spawn_creation_id() -> StringName:
+	if _spawn_stage_index < 0 or _spawn_stage_index >= KITCHEN_CONTENT.spawn_stages.size():
+		return &""
+	return KITCHEN_CONTENT.spawn_stages[_spawn_stage_index].select_creation(_rng)
 
 
 func _register_creation(
-	tier: int,
+	creation_id: StringName,
 	world_position: Vector2,
 	radius: float,
 	visual_feedback_already_playing: bool
 ) -> bool:
-	if tier < 1 or tier > TIER_NAME_KEYS.size():
+	var definition: CreationDefinition = KITCHEN_CONTENT.creation_for_id(
+		creation_id
+	)
+	if definition == null:
 		return false
-	highest_creation_reached = maxi(highest_creation_reached, tier)
-	if discovered_creation_tiers.has(tier):
+	var highest_definition: CreationDefinition = (
+		KITCHEN_CONTENT.creation_for_id(highest_creation_id)
+	)
+	if (
+		highest_definition == null
+		or definition.progression_rank > highest_definition.progression_rank
+		or (
+			definition.progression_rank == highest_definition.progression_rank
+			and definition.collection_order > highest_definition.collection_order
+		)
+	):
+		highest_creation_id = creation_id
+	if discovered_creation_ids.has(creation_id):
 		return false
 
-	discovered_creation_tiers.append(tier)
-	discovered_creation_tiers.sort()
-	_new_discoveries_this_run.append(tier)
+	discovered_creation_ids.append(creation_id)
+	_sort_discovered_creation_ids()
+	_new_discoveries_this_run.append(creation_id)
 	_save_recipe_discoveries()
-	_update_recipe_progress(tier)
+	_update_recipe_progress(creation_id)
 	_discovery_feedback_timer = DISCOVERY_FEEDBACK_SECONDS
 	new_creation_feedback_label.text = tr("NEW_CREATION")
 	new_creation_feedback_label.visible = true
@@ -1000,7 +1251,7 @@ func _register_creation(
 
 
 func _load_recipe_discoveries() -> void:
-	discovered_creation_tiers.clear()
+	discovered_creation_ids.clear()
 	var save_file := ConfigFile.new()
 	var load_error := save_file.load(_discovery_save_path)
 	if load_error == ERR_FILE_NOT_FOUND:
@@ -1009,66 +1260,127 @@ func _load_recipe_discoveries() -> void:
 		push_warning("Could not load recipe discoveries: error %d" % load_error)
 		return
 
-	var stored_tiers: Variant = save_file.get_value(
+	var stored_format_version := int(save_file.get_value(
 		DISCOVERY_SAVE_SECTION,
-		DISCOVERY_SAVE_KEY,
-		[]
-	)
-	if not (stored_tiers is Array or stored_tiers is PackedInt32Array):
+		DISCOVERY_SAVE_FORMAT_KEY,
+		0
+	))
+	var stored_content_id := StringName(str(save_file.get_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_CONTENT_KEY,
+		""
+	)))
+	if (
+		stored_format_version != KITCHEN_CONTENT.content_version
+		or stored_content_id != KITCHEN_CONTENT.content_id
+	):
 		return
-	for stored_tier in stored_tiers:
-		var tier := int(stored_tier)
+	var stored_ids: Variant = save_file.get_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_IDS_KEY,
+		PackedStringArray()
+	)
+	if not (stored_ids is Array or stored_ids is PackedStringArray):
+		return
+	for stored_id_value in stored_ids:
+		var stored_id := StringName(str(stored_id_value))
 		if (
-			tier >= 1
-			and tier <= TIER_NAME_KEYS.size()
-			and not discovered_creation_tiers.has(tier)
+			KITCHEN_CONTENT.creation_for_id(stored_id) != null
+			and not discovered_creation_ids.has(stored_id)
 		):
-			discovered_creation_tiers.append(tier)
-	discovered_creation_tiers.sort()
+			discovered_creation_ids.append(stored_id)
+	_sort_discovered_creation_ids()
 
 
 func _save_recipe_discoveries() -> void:
 	var save_file := ConfigFile.new()
+	var load_error := save_file.load(_discovery_save_path)
+	if load_error != OK and load_error != ERR_FILE_NOT_FOUND:
+		push_warning(
+			"Could not preserve existing discovery save data: error %d"
+			% load_error
+		)
+		save_file = ConfigFile.new()
 	save_file.set_value(
 		DISCOVERY_SAVE_SECTION,
-		DISCOVERY_SAVE_KEY,
-		discovered_creation_tiers.duplicate()
+		DISCOVERY_SAVE_FORMAT_KEY,
+		KITCHEN_CONTENT.content_version
+	)
+	save_file.set_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_CONTENT_KEY,
+		String(KITCHEN_CONTENT.content_id)
+	)
+	save_file.set_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_IDS_KEY,
+		PackedStringArray(discovered_creation_ids)
 	)
 	var save_error := save_file.save(_discovery_save_path)
 	if save_error != OK:
 		push_warning("Could not save recipe discoveries: error %d" % save_error)
 
 
-func _tier_display_name(tier: int) -> String:
-	if tier < 1 or tier > TIER_NAME_KEYS.size():
+func _sort_discovered_creation_ids() -> void:
+	var ordered_ids: Array[StringName] = []
+	for definition in KITCHEN_CONTENT.collection_creations():
+		if discovered_creation_ids.has(definition.id):
+			ordered_ids.append(definition.id)
+	discovered_creation_ids = ordered_ids
+
+
+func _creation_display_name(creation_id: StringName) -> String:
+	var definition: CreationDefinition = KITCHEN_CONTENT.creation_for_id(
+		creation_id
+	)
+	if definition == null:
 		return ""
-	return tr(TIER_NAME_KEYS[tier - 1])
+	return tr(String(definition.display_name_key))
 
 
 func _show_run_result() -> void:
 	result_highest_heading.text = (
 		tr("RESULT_HIGHEST_CREATION") % ""
 	).strip_edges()
-	var has_creation := highest_creation_reached > 0
+	var highest_definition: CreationDefinition = (
+		KITCHEN_CONTENT.creation_for_id(highest_creation_id)
+	)
+	var has_creation := highest_definition != null
 	result_creation.visible = has_creation
 	result_creation_name.visible = has_creation
 	if has_creation:
-		result_creation.texture = PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(
-			highest_creation_reached
-		)
-		result_creation_name.text = _tier_display_name(highest_creation_reached)
+		result_creation.texture = highest_definition.texture
+		result_creation_name.text = _creation_display_name(highest_creation_id)
 	else:
 		result_creation.texture = null
 		result_creation_name.text = ""
 
-	var highest_new_tier := 0
+	var highest_new_creation_id: StringName
 	if not _new_discoveries_this_run.is_empty():
-		for discovered_tier in _new_discoveries_this_run:
-			highest_new_tier = maxi(highest_new_tier, discovered_tier)
-	result_new_recipe.visible = highest_new_tier > 0
+		for discovered_creation_id in _new_discoveries_this_run:
+			var discovered_definition: CreationDefinition = (
+				KITCHEN_CONTENT.creation_for_id(discovered_creation_id)
+			)
+			var current_highest_definition: CreationDefinition = (
+				KITCHEN_CONTENT.creation_for_id(highest_new_creation_id)
+			)
+			if (
+				current_highest_definition == null
+				or discovered_definition.progression_rank
+					> current_highest_definition.progression_rank
+				or (
+					discovered_definition.progression_rank
+						== current_highest_definition.progression_rank
+					and discovered_definition.collection_order
+						> current_highest_definition.collection_order
+				)
+			):
+				highest_new_creation_id = discovered_creation_id
+	result_new_recipe.visible = not highest_new_creation_id.is_empty()
 	result_new_recipe.text = (
-		tr("RESULT_NEW_RECIPE") % _tier_display_name(highest_new_tier)
-		if highest_new_tier > 0
+		tr("RESULT_NEW_RECIPE")
+			% _creation_display_name(highest_new_creation_id)
+		if not highest_new_creation_id.is_empty()
 		else ""
 	)
 	presentation.show_result()
@@ -1097,14 +1409,18 @@ func _has_dangerous_piece() -> bool:
 
 
 func _enter_game_over() -> void:
+	_clear_drop_touch_state()
 	_reset_restart_hold_feedback()
 	game_over = true
+	_clear_recipe_resolution()
 	danger_active = true
 	danger_timer = GAMEPLAY_CONFIG.DANGER_GRACE_SECONDS
 	for child in pieces.get_children():
 		if child is PrototypePiece:
 			child.set_deferred("freeze", true)
 	_show_run_result()
+	if is_instance_valid(_debug_spawn_panel):
+		_debug_spawn_panel.set_run_active(false)
 	queue_redraw()
 
 
@@ -1183,7 +1499,9 @@ func _reset_restart_hold_feedback() -> void:
 
 
 func _restart_sandbox() -> void:
+	_clear_drop_touch_state()
 	_reset_restart_hold_feedback()
+	_clear_recipe_resolution()
 	for piece in pieces.get_children():
 		piece.queue_free()
 
@@ -1199,7 +1517,9 @@ func _restart_sandbox() -> void:
 	_merge_resolution_pending = false
 	_queued_merge_pairs.clear()
 	_new_discoveries_this_run.clear()
-	highest_creation_reached = 0
+	highest_creation_id = &""
+	if is_instance_valid(_debug_spawn_panel):
+		_debug_spawn_panel.set_run_active(true)
 	presentation.reset()
 	result_overlay.visible = false
 	result_creation.texture = null
@@ -1210,9 +1530,12 @@ func _restart_sandbox() -> void:
 	pulse_feedback_label.visible = false
 	max_merge_feedback_label.visible = false
 	new_creation_feedback_label.visible = false
+	_spawn_stage_index = 0
 	_rng.seed = INITIAL_SEED
-	_next_tier = _roll_tier()
+	_current_creation_id = _roll_spawn_creation_id()
+	_raw_next_creation_id = _roll_spawn_creation_id()
 	_update_recipe_progress()
+	_request_recipe_evaluation()
 	queue_redraw()
 	_update_debug_ui()
 

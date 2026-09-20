@@ -10,6 +10,12 @@ It is a plain constants script. Gameplay and presentation scripts preload it dir
 
 Use this file to tune the gameplay chamber, danger zone, magical bowl, ingredient artwork, and existing gameplay HUD layout. Avoid duplicating these values in scenes or feature scripts.
 
+Creation size curves are world/theme data in
+`res://config/worlds/kitchen/kitchen_content.tres`, using the reusable
+`WorldContentConfiguration` resource and its `CreationDefinition` subresources.
+Edit the world base radius and per-creation growth below, then run the game;
+no separate collider or sprite edits are needed.
+
 ### Value categories
 
 **GAMEPLAY VALUES** affect collision boundaries, spawning, piece collision sizes, danger detection, or game-over timing. Changing them can change balance and requires full gameplay regression testing.
@@ -20,7 +26,7 @@ Do not casually move physics materials, masses, merge timing, scoring, Push beha
 
 ### Safe tuning workflow
 
-1. Change one constant at a time.
+1. Change one constant or world sizing field at a time.
 2. Run the project and check for parser/runtime errors.
 3. Check 405×720, 390×844, and 540×960 portrait layouts.
 4. For gameplay values, repeat merge, danger, Push, restart, and spawning regressions.
@@ -34,10 +40,10 @@ The chamber rectangle is the source of truth for gameplay dimensions. Walls, flo
 
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
-| `CHAMBER_WIDTH_VIEWPORT_RATIO` | Maximum chamber width as a share of viewport width. | `0.86` | GAMEPLAY | Changing this resizes horizontal play space and every tier collision radius. |
+| `CHAMBER_WIDTH_VIEWPORT_RATIO` | Maximum chamber width as a share of viewport width. | `0.86` | GAMEPLAY | Changing this resizes horizontal play space and every creation collision radius. |
 | `CHAMBER_HEIGHT_VIEWPORT_RATIO` | Chamber height as a share of viewport height. | `0.72` | GAMEPLAY | Changes available stacking height and floor position. |
 | `CHAMBER_TOP_VIEWPORT_RATIO` | Chamber top position as a share of viewport height. | `0.07` | GAMEPLAY | Moves the entire physics chamber and its chamber-relative gameplay elements, including danger. |
-| `CHAMBER_MAX_WIDTH_TO_HEIGHT_RATIO` | Limits chamber width on shorter portrait screens. | `0.67` | GAMEPLAY | Keep this compatible with T8/T9 containment. |
+| `CHAMBER_MAX_WIDTH_TO_HEIGHT_RATIO` | Limits chamber width on shorter portrait screens. | `0.67` | GAMEPLAY | Keep this compatible with Decorated Cake and Fancy Cake containment. |
 
 The effective width is the smaller of:
 
@@ -83,23 +89,103 @@ Boundary positions use normalized chamber coordinates: `0.0` is the chamber's to
 | `SPAWN_HORIZONTAL_INSET_PIXELS` | Extra left/right inset inside the physical walls. | `0.0` | GAMEPLAY | Increase to keep drops farther from walls. |
 | `SPAWN_WALL_CLEARANCE_MULTIPLIER` | Portion of wall thickness reserved between spawn centers and wall centers. | `0.5` | GAMEPLAY | `0.5` aligns limits with the inner wall surface. |
 
-### Tier collision sizes
+### Sequential creation sizes
 
-`TIER_RADIUS_RATIOS` contains the physics radius for T1–T9 relative to chamber width.
+These **GAMEPLAY VALUES** live in `config/worlds/kitchen/kitchen_content.tres`:
 
-| Tier | Current ratio | Effect |
-| ---: | ---: | --- |
-| T1 | `0.0460` | GAMEPLAY |
-| T2 | `0.0538` | GAMEPLAY |
-| T3 | `0.0630` | GAMEPLAY |
-| T4 | `0.0737` | GAMEPLAY |
-| T5 | `0.0862` | GAMEPLAY |
-| T6 | `0.1009` | GAMEPLAY |
-| T7 | `0.1180` | GAMEPLAY |
-| T8 | `0.1900` | GAMEPLAY |
-| T9 | `0.2600` | GAMEPLAY |
+| Field | Owner | Purpose | Example |
+| --- | --- | --- | --- |
+| `base_radius_ratio` | WorldContentConfiguration, final `[resource]` section | Physical radius of size order 1 as a fraction of chamber width. | `0.046` |
+| `size_order` | Each CreationDefinition subresource | Unique physical size sequence, contiguous from 1. | Flour = `2` |
+| `size_growth_percent` | Each CreationDefinition subresource | Percentage increase over the immediately preceding size order. | Flour = `15.0` |
 
-These values change collision circles and merge placement clearance. They are not artwork scaling controls. After changing them, test the complete merge ladder, wall/floor containment, Push, danger, and crowded merges.
+`progression_rank` still controls gameplay/scoring/progression semantics;
+it does **not** control physical size. `collection_order` still controls the
+collection display, independently of `size_order`. The strip and collection
+always keep all 9 canonical slots; discovery only changes locked/artwork state.
+
+Growth is **cumulative**, not calculated independently from the base:
+order 1 uses `base_radius_ratio`; each later order multiplies the preceding
+radius by `1 + this_creation.size_growth_percent / 100`.
+For example, changing Flour from 15% to 20% leaves Wheat unchanged,
+but multiplies Flour and every subsequent radius by `1.20 / 1.15`.
+
+Designer workflow: set the world's base radius, edit one creation's growth
+percentage, then rerun. Do not edit collision or sprite sizes separately.
+There is only this sequential curve; no rank-size bands or independent radius
+overrides. Resource array order does not define size. No result table is
+hardcoded or cached. Mass and artwork calibration remain unchanged.
+
+| Size / collection order / rank | ID | Creation | Growth % | Effective radius ratio |
+| ---: | --- | --- | ---: | ---: |
+| 1 | `wheat` | Wheat | 0 | 0.046000000 |
+| 2 | `flour` | Flour | 15 | 0.052900000 |
+| 3 | `cake_mix` | Cake Mix | 15 | 0.060835000 |
+| 4 | `cake_batter` | Cake Batter | 15 | 0.069960250 |
+| 5 | `sponge_cake` | Sponge Cake | 15 | 0.080454287 |
+| 6 | `frosted_cake` | Frosted Cake | 15 | 0.092522431 |
+| 7 | `layer_cake` | Layer Cake | 20 | 0.111026917 |
+| 8 | `decorated_cake` | Decorated Cake | 25 | 0.138783646 |
+| 9 | `fancy_cake` | Fancy Cake | 30 | 0.180418740 |
+
+These are the current nine-stage ratios, not hardcoded runtime values.
+Surviving growth values and base 0.046 were preserved exactly during the
+nine-stage simplification; removed steps are not compensated for.
+
+Validation requires unique contiguous orders, including order 1, with 0%
+growth for order 1. Growth must be finite/nonnegative, and the base must be
+positive/finite. Decimal percentages and single-creation worlds are supported.
+Generic worlds may use 0% later growth; Kitchen's strict validation
+(`sizing_errors(true)` and the focused sizing tests) rejects equal-size steps.
+Keep all Kitchen growth percentages after order 1 positive.
+
+Malformed sequences warn once per issue per resource and use only the valid
+base radius (or `0.046` when the base is invalid), rather than guessing which
+duplicate/missing creation should drive the curve. Fix those warnings before
+playtesting. Nonfinite cumulative overflow also falls back to the base.
+Very large finite curves are not automatically balanced to fit the chamber.
+
+`effective_radius_ratio(definition) × chamber width` drives drop clamping,
+spawn height, safe merge placement and the piece's unique `CircleShape2D.radius`.
+That same pixel radius enters the existing visual fitting:
+`sprite scale = radius × visual_diameter_scale × global_visual_scale / texture_extent`.
+Keep `visual_diameter_scale = 2.18` and global visual scale `1.0` for the current
+bubble art. Physics/body/collider node transforms and centering do not change.
+The radius is not derived from the 512×512 PNG. Preview sizing uses the same
+radius with its existing UI cap; collection/result icons remain UI-fitted.
+
+Changing the curve intentionally changes physical sizes and matching artwork.
+Rerun all eight physical recipes, wall/floor containment, Push, danger
+and crowded merges. Existing pieces do not resize mid-run; edit the
+world resource and rerun to compare curves.
+
+### Board spawning (gameplay tuning)
+
+`WorldContentConfiguration.spawn_stages` in
+`config/worlds/kitchen/kitchen_content.tres` is the only spawn-weight source.
+Each native `SpawnStage` resource has `unlock_creation_id` (empty for the opening
+stage, otherwise a successful merge result) and `weights` (semantic creation IDs
+to relative weights; absent IDs cannot spawn). Stages are ordered by unlock
+progression; weights use their serialized entry order for deterministic selection.
+
+| Run stage | Unlock in this run | Wheat | Flour | Cake Mix |
+| --- | --- | ---: | ---: | ---: |
+| 1 | New run | 100 | 0 | 0 |
+| 2 | Merge-create Flour | 75 | 25 | 0 |
+| 3 | Merge-create Cake Mix | 60 | 30 | 10 |
+
+These are **GAMEPLAY** values. Change the stage subresources to tune the pools;
+do not add independent weights to CreationDefinition. All six later creations
+remain merge-only. Successful result creation advances the run's stage once,
+without waiting for settling, and never downgrades it. Preview, effects, drops
+and permanent discovery loads do not unlock stages.
+
+The controlled DROP and buffered NEXT remain untouched on unlock. Only the next
+fresh selection uses the new weights, with exactly one draw from the existing
+seeded RNG (including Wheat-only). Same seed + same run actions gives the same
+sequence. Restart, Play Again and a new gameplay scene reset to stage 1 before
+selecting the two opening pieces; saved collection progress remains separate.
+No adaptive bias, anti-streak state, crafted queue or second RNG remains.
 
 ## 2. Danger Zone
 
@@ -201,35 +287,65 @@ This avoids aspect-dependent vertical clamps that could move the bowl rim away f
 
 ## 4. Ingredient Visual Scaling
 
-Ingredient artwork configuration does not change collision circles. Physics size is controlled separately by `TIER_RADIUS_RATIOS`.
+The sequential creation-size configuration drives collision and artwork size together.
+The separate visual-only values below are artwork calibration, not the size
+curve; leave them at the calibrated defaults when tuning world percentages.
 
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
-| `INGREDIENT_GLOBAL_VISUAL_SCALE` | Multiplies all in-bowl ingredient artwork sizes. | `1.0` | VISUAL | Preview sizing and floor support calculations follow this value. |
-| `INGREDIENT_VISUAL_OFFSET_PIXELS` | Base local offset of every ingredient visual. | `Vector2.ZERO` | VISUAL | The offset rotates with the piece. Use small values. |
+| `INGREDIENT_GLOBAL_VISUAL_SCALE` | Multiplies all in-bowl ingredient artwork sizes. | `1.0` | VISUAL | Preview sizing follows this value. |
+| `INGREDIENT_VISUAL_OFFSET_PIXELS` | Base local offset of every ingredient visual. | `Vector2.ZERO` | VISUAL | Keep this at zero for centered bubble artwork. |
 | `INGREDIENT_PREVIEW_SCALE` | Additional scale for the NEXT preview only. | `1.0` | VISUAL | Keep near `1.0` so preview and spawned artwork remain comparable. |
-| `INGREDIENT_VISUAL_SIDE_INSET_VIEWPORT_RATIO` | Left/right visual containment inset. | `0.10` | VISUAL | Keeps artwork inside the visible bowl walls without moving physics bodies. |
-| `INGREDIENT_FLOOR_CONTACT_CHAMBER_WIDTH_RATIO` | Visual resting line above the physical floor. | `0.033` | VISUAL | Increase to lift grounded artwork; decrease to lower it. |
-| `INGREDIENT_ROTATED_SUPPORT_REDUCTION` | Rotation correction used by floor grounding. | `0.04` | VISUAL | Tune with rotated wide/tall artwork. |
-| `INGREDIENT_FLOOR_BODY_TOLERANCE_PIXELS` | Distance within which a body is considered physically floor-supported for visual grounding. | `8.0` | VISUAL | Increasing applies grounding correction to pieces farther from the floor. |
 
-### Per-tier artwork fitting
+Standardized circular bubble artwork stays centered on its physics body.
+The presentation layer does not translate visuals independently for floor
+contact or side containment; containment therefore follows the actual
+CircleShape2D rather than a separate visual correction.
 
-`INGREDIENT_TIER_DIAMETER_SCALES` sets artwork diameter relative to the tier's physics radius.
+### Per-creation artwork fitting
 
-| Tier | Current visual scale | Effect |
-| ---: | ---: | --- |
-| T1 | `1.46` | VISUAL |
-| T2 | `1.90` | VISUAL |
-| T3 | `1.82` | VISUAL |
-| T4 | `1.78` | VISUAL |
-| T5 | `1.74` | VISUAL |
-| T6 | `1.60` | VISUAL |
-| T7 | `1.88` | VISUAL |
-| T8 | `1.66` | VISUAL |
-| T9 | `1.62` | VISUAL |
+Every Kitchen definition currently uses `visual_diameter_scale = 2.18`.
+The final 512×512 artwork places a 480×480 visible bubble inside a
+16-pixel transparent margin. The resulting visible bubble diameter is
+approximately `2.18 × 480 / 512 = 2.044` times the collision radius,
+leaving the CircleShape2D roughly 2.1% inside the visible outer edge.
+Change this property per creation only if future art uses different
+transparent-bound fitting.
 
-These values fit transparent artwork bounds, not just the visible dessert shape. Test rotation, floor contact, side containment, NEXT preview matching, and T8/T9 readability after changes.
+### Physical recipes and optional merge flavor
+
+The nine entries in the sizing table also form the board ladder: two identical
+pieces create the next entry, with Fancy Cake final. All eight recipes use
+actual contacts, pending-source protection and the existing 0.45-second
+cooldown. Safe placement, inherited motion, controlled expansion and guarded
+neighbour waking are preserved. There is no mixed-recipe execution path.
+
+Optional visual fields live on each `MergeRecipe`:
+
+| Field | Purpose | Current value |
+| --- | --- | --- |
+| `effect_animation` | Approved timeline name, or empty for ordinary merge magic. | `egg_crack`, `milk_pour`, `cream_swirl`. Unknown names also use normal magic. |
+
+Only Flour ×2 → Cake Mix (egg), Cake Mix ×2 → Cake Batter (milk), and
+Sponge Cake ×2 → Frosted Cake (cream) configure this field. Textures stay in
+`assets/worlds/kitchen/effects/merges/`; they have no board identity, collision,
+spawn probability or discovery slot.
+
+The physical result and rank² × 2 score / +12 Push reward occur immediately,
+once. The approved shared AnimationPlayer component in
+`scripts/presentation/merge_flavor_effect.gd` plays Egg for 0.56s, Milk for
+0.66s and Cream for 0.64s, with 65ms crossfades. The lab uses the exact same
+implementation. Uniform visual-root fitting keeps the source canvases inside
+the viewport and the anchor at the actual safe merge position; the existing HUD
+CanvasLayer remains above it. The real result stays visible and moves normally
+throughout; no fake result, collider or physics transform is animated. Completion
+only frees the overlay. Restart/scene teardown frees/stops the component; game
+over may let it finish cosmetically without further gameplay callbacks.
+
+The existing semantic discovery format remains unchanged. Current content
+filters obsolete IDs on load; surviving discoveries remain in the nine fixed
+collection slots. The next normal save writes valid IDs without deleting
+unrelated settings.
 
 ## 5. UI Presentation
 
@@ -242,9 +358,9 @@ These values control existing gameplay UI only. They do not create new UI system
 | `CONTROLS_HEIGHT_PIXELS` | Bottom Push/Restart controls height. | `52.0` | VISUAL | Preserve comfortable touch targets. |
 | `RECIPE_PROGRESS_HEIGHT_PIXELS` | Recipe progress strip height. | `46.0` | VISUAL | Larger values reduce free space above controls. |
 | `RECIPE_PROGRESS_CONTROLS_GAP_PIXELS` | Gap between recipe strip and controls. | `6.0` | VISUAL | Keep enough separation for readability. |
-| `RECIPE_PROGRESS_SLOT_MINIMUM_SIZE` | Minimum size of each T1–T9 progress slot. | `Vector2(42, 34)` | VISUAL | All nine slots must still fit at 390-pixel width. |
-| `RECIPE_PROGRESS_ARTWORK_INSET_PIXELS` | Padding inside every progress slot. | `3.0` | VISUAL | Large values make tier artwork too small. |
-| `RECIPE_PROGRESS_UNKNOWN_FONT_SIZE` | Font size of the locked `?` marker. | `15` | VISUAL | Check English, Spanish, and Chinese layouts. |
+| `RECIPE_PROGRESS_SLOT_MINIMUM_SIZE` | Minimum size of each creation slot. | `Vector2(24, 34)` | VISUAL | All nine slots must still fit at 390-pixel width. |
+| `RECIPE_PROGRESS_ARTWORK_INSET_PIXELS` | Padding inside every progress slot. | `2.0` | VISUAL | Large values make creation artwork too small. |
+| `RECIPE_PROGRESS_UNKNOWN_FONT_SIZE` | Font size of the locked `?` marker. | `12` | VISUAL | Check English, Spanish, and Chinese layouts. |
 | `TOLINA_SAFE_SIZE` | Tolina's gameplay HUD width and height. | `Vector2(90, 96)` | VISUAL | Preserve aspect/readability and HUD separation. |
 | `TOLINA_HUD_GAP_PIXELS` | Horizontal gap between Tolina and the HUD panel. | `10.0` | VISUAL | Verify narrow screens after increasing. |
 | `RESTART_BUTTON_MINIMUM_WIDTH_PIXELS` | Minimum width of the hold-to-restart button. | `156.0` | VISUAL | Do not reduce touch readability. |
@@ -282,12 +398,13 @@ Confirm that the complete bowl silhouette remains visible, the danger line match
 - Project parses and launches without red errors.
 - Chamber dimensions and boundary positions match the intended values.
 - Desktop click and mobile touch spawn inside the walls.
-- T1+T1 through T8+T8 merge normally.
-- T9 remains non-merging.
+- All eight same-item recipes resolve on contact; Fancy Cake is final.
+- Higher-result-rank arbitration, reservation and sequential crafting hold under competing contacts.
+- Invalid creation pairs remain non-merging.
 - Score and Push charge remain unchanged for the same merge sequence.
 - Danger starts, clears, and reaches game over at the configured threshold/timing.
 - Bowl and ingredient visuals remain aligned without changing physics bodies.
-- NEXT preview matches the next spawned tier.
+- DROP matches the controlled piece; NEXT matches the buffered Wheat/Flour/Cake Mix selection.
 - Recipe progress and Recipe Collection still reflect the existing discovery save.
 - Hold Restart and Play Again reset only the current run as before.
-- No localization, discovery save, export, or mobile input configuration changed.
+- Localization imports, versioned discovery saves, export settings, and mobile input remain valid.

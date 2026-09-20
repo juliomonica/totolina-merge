@@ -9,17 +9,19 @@ COLLECTION_BACK,BACK,VOLVER,返回
 COLLECTION_UNKNOWN,Unknown,Desconocida,未知
 GAME_RESTART,RESTART,REINICIAR,重新开始
 GAME_RESTART_HOLD,Hold Restart,Mantén para reiniciar,按住重新开始
+DROP_CURRENT,DROP,SOLTAR,投放
+DROP_NEXT,NEXT,SIGUIENTE,下一个
 NEW_CREATION,NEW CREATION!,¡NUEVA CREACIÓN!,新作品！
 RESULT_GAME_OVER,GAME OVER,FIN DE LA PARTIDA,游戏结束
 RESULT_HIGHEST_CREATION,Highest Creation: %s,Creación más alta: %s,最高作品：%s
 RESULT_NEW_RECIPE,New Recipe: %s,Nueva receta: %s,新配方：%s
 RESULT_PLAY_AGAIN,PLAY AGAIN,JUGAR DE NUEVO,再玩一次
-RECIPE_TIER_1,Strawberry,Fresa,草莓
-RECIPE_TIER_2,Strawberry Milkshake,Batido de fresa,草莓奶昔
-RECIPE_TIER_3,Cookie,Galleta,曲奇
-RECIPE_TIER_4,Cupcake,Magdalena,纸杯蛋糕
-RECIPE_TIER_5,Cake Slice,Porción de pastel,蛋糕片
-RECIPE_TIER_6,Birthday Cake,Pastel de cumpleaños,生日蛋糕
-RECIPE_TIER_7,Magical Cake,Pastel mágico,魔法蛋糕
-RECIPE_TIER_8,Cat Celebration Cake,Pastel de celebración gatuna,猫咪庆典蛋糕
-RECIPE_TIER_9,Magical Cat Birthday Cake,Pastel mágico de cumpleaños gatuno,魔法猫咪生日蛋糕
+CREATION_WHEAT,Wheat,Trigo,小麦
+CREATION_FLOUR,Flour,Harina,面粉
+CREATION_CAKE_MIX,Cake Mix,Mezcla para pastel,蛋糕预拌粉
+CREATION_CAKE_BATTER,Cake Batter,Masa de pastel,蛋糕糊
+CREATION_SPONGE_CAKE,Sponge Cake,Bizcocho,海绵蛋糕
+CREATION_FROSTED_CAKE,Frosted Cake,Pastel con glaseado,糖霜蛋糕
+CREATION_LAYER_CAKE,Layer Cake,Pastel de capas,夹层蛋糕
+CREATION_DECORATED_CAKE,Decorated Cake,Pastel decorado,装饰蛋糕
+CREATION_FANCY_CAKE,Fancy Cake,Pastel elegante,华丽蛋糕

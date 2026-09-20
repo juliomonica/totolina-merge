@@ -1,22 +1,13 @@
 extends Control
 
 const MAIN_MENU_SCENE_PATH := "res://scenes/menu/main_menu.tscn"
-const PIECE_VISUAL_SCRIPT := preload("res://scripts/prototype/piece_visual.gd")
+const KITCHEN_CONTENT := preload("res://config/worlds/kitchen/kitchen_content.tres")
 const DISCOVERY_SAVE_PATH := "user://recipe_discoveries.cfg"
 const DISCOVERY_SAVE_SECTION := "recipes"
-const DISCOVERY_SAVE_KEY := "discovered_tiers"
+const DISCOVERY_SAVE_FORMAT_KEY := "format_version"
+const DISCOVERY_SAVE_CONTENT_KEY := "content_id"
+const DISCOVERY_SAVE_IDS_KEY := "discovered_creation_ids"
 const CONTENT_MARGIN := 24.0
-const TIER_NAME_KEYS := [
-	"RECIPE_TIER_1",
-	"RECIPE_TIER_2",
-	"RECIPE_TIER_3",
-	"RECIPE_TIER_4",
-	"RECIPE_TIER_5",
-	"RECIPE_TIER_6",
-	"RECIPE_TIER_7",
-	"RECIPE_TIER_8",
-	"RECIPE_TIER_9",
-]
 
 @export var locked_silhouette_material: ShaderMaterial
 
@@ -25,7 +16,7 @@ const TIER_NAME_KEYS := [
 @onready var recipe_grid: GridContainer = $SafeArea/CollectionColumn/RecipeScroll/RecipeGrid
 @onready var back_button: Button = $SafeArea/CollectionColumn/Back
 
-var discovered_creation_tiers: Array[int] = []
+var discovered_creation_ids: Array[StringName] = []
 var _discovery_save_path := DISCOVERY_SAVE_PATH
 var _scroll_touch_index := -1
 var _scroll_touch_y := 0.0
@@ -71,7 +62,7 @@ func _collection_can_scroll() -> bool:
 
 
 func _load_recipe_discoveries() -> void:
-	discovered_creation_tiers.clear()
+	discovered_creation_ids.clear()
 	var save_file := ConfigFile.new()
 	var load_error := save_file.load(_discovery_save_path)
 	if load_error == ERR_FILE_NOT_FOUND:
@@ -80,40 +71,55 @@ func _load_recipe_discoveries() -> void:
 		push_warning("Could not load recipe discoveries: error %d" % load_error)
 		return
 
-	var stored_tiers: Variant = save_file.get_value(
+	var stored_format_version := int(save_file.get_value(
 		DISCOVERY_SAVE_SECTION,
-		DISCOVERY_SAVE_KEY,
-		[]
-	)
-	if not (stored_tiers is Array or stored_tiers is PackedInt32Array):
+		DISCOVERY_SAVE_FORMAT_KEY,
+		0
+	))
+	var stored_content_id := StringName(str(save_file.get_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_CONTENT_KEY,
+		""
+	)))
+	if (
+		stored_format_version != KITCHEN_CONTENT.content_version
+		or stored_content_id != KITCHEN_CONTENT.content_id
+	):
 		return
-	for stored_tier in stored_tiers:
-		var tier := int(stored_tier)
+	var stored_ids: Variant = save_file.get_value(
+		DISCOVERY_SAVE_SECTION,
+		DISCOVERY_SAVE_IDS_KEY,
+		PackedStringArray()
+	)
+	if not (stored_ids is Array or stored_ids is PackedStringArray):
+		return
+	for stored_id_value in stored_ids:
+		var stored_id := StringName(str(stored_id_value))
 		if (
-			tier >= 1
-			and tier <= TIER_NAME_KEYS.size()
-			and not discovered_creation_tiers.has(tier)
+			KITCHEN_CONTENT.creation_for_id(stored_id) != null
+			and not discovered_creation_ids.has(stored_id)
 		):
-			discovered_creation_tiers.append(tier)
-	discovered_creation_tiers.sort()
+			discovered_creation_ids.append(stored_id)
 
 
 func _populate_collection() -> void:
 	for child in recipe_grid.get_children():
 		child.queue_free()
-	for tier in range(1, TIER_NAME_KEYS.size() + 1):
-		recipe_grid.add_child(_create_recipe_card(tier))
+	for definition in KITCHEN_CONTENT.collection_creations():
+		recipe_grid.add_child(_create_recipe_card(definition))
 
 
-func _create_recipe_card(tier: int) -> PanelContainer:
-	var discovered := discovered_creation_tiers.has(tier)
+func _create_recipe_card(
+	definition: CreationDefinition
+) -> PanelContainer:
+	var discovered := discovered_creation_ids.has(definition.id)
 	var card := PanelContainer.new()
-	card.name = "Tier%d" % tier
+	card.name = "Creation_%s" % definition.id
 	card.custom_minimum_size = Vector2(210.0, 174.0)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.clip_contents = true
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.set_meta("tier", tier)
+	card.set_meta("creation_id", definition.id)
 	card.set_meta("discovered", discovered)
 	card.add_theme_stylebox_override("panel", _card_style(discovered))
 
@@ -140,7 +146,7 @@ func _create_recipe_card(tier: int) -> PanelContainer:
 	artwork.name = "Artwork"
 	artwork.custom_minimum_size = Vector2(104.0, 104.0)
 	artwork.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	artwork.texture = PIECE_VISUAL_SCRIPT.ingredient_texture_for_tier(tier)
+	artwork.texture = definition.texture
 	artwork.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	artwork.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	if not discovered:
@@ -151,7 +157,7 @@ func _create_recipe_card(tier: int) -> PanelContainer:
 	recipe_name.name = "RecipeName"
 	recipe_name.custom_minimum_size = Vector2(0.0, 50.0)
 	recipe_name.text = (
-		tr(TIER_NAME_KEYS[tier - 1])
+		tr(String(definition.display_name_key))
 		if discovered
 		else tr("COLLECTION_UNKNOWN")
 	)

@@ -1,0 +1,129 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/debug/merge_effect_lab.gd" id="1_lab"]
+
+[sub_resource type="Theme" id="Theme_lab"]
+default_font_size = 20
+
+[node name="MergeEffectLab" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_lab")
+script = ExtResource("1_lab")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.065, 0.075, 0.095, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 28
+
+[node name="Column" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Eyebrow" type="Label" parent="Margin/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 16
+text = "KITCHEN  /  DEVELOPMENT ONLY"
+
+[node name="Title" type="Label" parent="Margin/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Merge effect lab"
+
+[node name="Selectors" type="HBoxContainer" parent="Margin/Column"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Effect" type="OptionButton" parent="Margin/Column/Selectors"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Select an effect; switching returns to idle."
+
+[node name="Background" type="OptionButton" parent="Margin/Column/Selectors"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Preview" type="Control" parent="Margin/Column"]
+custom_minimum_size = Vector2(0, 320)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="MergePoint" type="Node2D" parent="Margin/Column/Preview"]
+
+[node name="Status" type="Label" parent="Margin/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Idle"
+
+[node name="Transport" type="HBoxContainer" parent="Margin/Column"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Play" type="Button" parent="Margin/Column/Transport"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Play / Replay"
+
+[node name="Stop" type="Button" parent="Margin/Column/Transport"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Stop / Reset"
+
+[node name="SpeedRow" type="HBoxContainer" parent="Margin/Column"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SpeedLabel" type="Label" parent="Margin/Column/SpeedRow"]
+custom_minimum_size = Vector2(132, 0)
+layout_mode = 2
+text = "Speed  1.00×"
+
+[node name="Speed" type="HSlider" parent="Margin/Column/SpeedRow"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 0.25
+max_value = 2.0
+step = 0.05
+value = 1.0
+
+[node name="Loop" type="CheckButton" parent="Margin/Column/SpeedRow"]
+layout_mode = 2
+text = "Loop"
+
+[node name="Scrub" type="HSlider" parent="Margin/Column"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+tooltip_text = "Drag to pause and inspect any point in the timeline. Replay resumes from the beginning."
+max_value = 0.56
+step = 0.001
+
+[node name="Hint" type="Label" parent="Margin/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.7, 0.76, 1)
+theme_override_font_sizes/font_size = 17
+text = "Scrub to inspect • Cross marks the merge point\nTune duration, blend and size in the Inspector."

@@ -172,7 +172,7 @@ theme_override_constants/margin_bottom = 6
 
 [node name="Row" type="HBoxContainer" parent="DebugUI/HUDPanel/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 8
 
 [node name="Next" type="VBoxContainer" parent="DebugUI/HUDPanel/Margin/Row"]
 custom_minimum_size = Vector2(72, 0)
@@ -181,7 +181,7 @@ theme_override_constants/separation = 2
 
 [node name="Title" type="Label" parent="DebugUI/HUDPanel/Margin/Row/Next"]
 layout_mode = 2
-text = "NEXT"
+text = "DROP_CURRENT"
 horizontal_alignment = 1
 
 [node name="PreviewCenter" type="CenterContainer" parent="DebugUI/HUDPanel/Margin/Row/Next"]
@@ -204,21 +204,52 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Pulse" type="Label" parent="DebugUI/HUDPanel/Margin/Row"]
+[node name="Information" type="VBoxContainer" parent="DebugUI/HUDPanel/Margin/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="Stats" type="HBoxContainer" parent="DebugUI/HUDPanel/Margin/Row/Information"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Pulse" type="Label" parent="DebugUI/HUDPanel/Margin/Row/Information/Stats"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 16
 text = "Pulse: 0%"
-horizontal_alignment = 2
+horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Score" type="Label" parent="DebugUI/HUDPanel/Margin/Row"]
+[node name="Score" type="Label" parent="DebugUI/HUDPanel/Margin/Row/Information/Stats"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 16
 text = "Score: 0"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Upcoming" type="HBoxContainer" parent="DebugUI/HUDPanel/Margin/Row/Information"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="DebugUI/HUDPanel/Margin/Row/Information/Upcoming"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+text = "DROP_NEXT"
+
+[node name="Ingredient" type="TextureRect" parent="DebugUI/HUDPanel/Margin/Row/Information/Upcoming"]
+custom_minimum_size = Vector2(38, 38)
+layout_mode = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
 
 [node name="RecipeProgressPanel" type="PanelContainer" parent="DebugUI"]
 anchors_preset = 12
@@ -246,7 +277,7 @@ theme_override_constants/margin_bottom = 4
 [node name="Row" type="HBoxContainer" parent="DebugUI/RecipeProgressPanel/Margin"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 3
+theme_override_constants/separation = 2
 
 [node name="ControlsPanel" type="PanelContainer" parent="DebugUI"]
 anchors_preset = 12

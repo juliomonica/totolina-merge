@@ -20,7 +20,10 @@ This document describes both the game that exists now and the product direction 
 | **POSSIBLE FUTURE** | An expansion idea, not a requirement for current flows or prototypes. |
 | **OUT OF SCOPE** | Explicitly absent from the current product direction. Do not introduce it through UI concepts. |
 
-The current project is the authority when this document conflicts with older design examples. In particular, the creation ladder in this document reflects the implemented nine-tier Kitchen ladder.
+The current project is the authority when this document conflicts with
+older design examples. The Kitchen now uses nine semantic creations,
+eight physical same-item recipes, and nine progression ranks in one
+linear board ladder.
 
 ---
 
@@ -47,7 +50,7 @@ Every drop can become part of something more delightful. The player helps an exp
 The experience should move through a gentle emotional rhythm:
 
 1. **Welcome and warmth** — Tolina and the environment make the player feel invited.
-2. **Curiosity** — the next piece, locked recipes, Tolina’s ambient behaviors, and visual tier evolution create anticipation.
+2. **Curiosity** — the next piece, locked creations, Tolina’s ambient behaviors, and visual recipe evolution create anticipation.
 3. **Satisfaction** — matching pieces, chain reactions, score increases, and creation reveals feel rewarding.
 4. **Tension without hostility** — the rising pile and danger zone create pressure, but the presentation remains playful rather than punitive.
 5. **Pride** — the result experience celebrates the player’s highest creation, score, discoveries, and major accomplishments.
@@ -58,7 +61,7 @@ The experience should move through a gentle emotional rhythm:
 
 - A physics-merging loop framed as helping a named, expressive character rather than manipulating abstract objects.
 - A visible recipe-discovery ladder that turns merges into collectible creation moments.
-- A strong transformation arc from a Strawberry to the Magical Cat Birthday Cake.
+- A strong transformation arc from Wheat, Flour, and Cake Mix to the Fancy Cake.
 - A limited directional **Push** that gives players a rescue and pile-shaping decision without removing physics.
 - A warm, storybook magical Kitchen with an ornate bowl that makes the playfield part of the fantasy.
 - A result presentation that showcases what was created rather than emphasizing failure alone.
@@ -93,8 +96,8 @@ No child-directed product classification, age rating target, or demographic segm
 ### Player motivations
 
 - Discover the next creation and reveal its artwork/name.
-- Complete the nine-recipe Kitchen collection.
-- Reach a higher tier than in the previous run.
+- Complete the nine-creation Kitchen collection.
+- Reach a higher progression rank than in the previous run.
 - Improve score and make efficient merge chains.
 - Keep the bowl safe under increasing spatial pressure.
 - See Tolina react positively to successful creations.
@@ -128,12 +131,12 @@ The game has no timer; a run ends when the pile remains in danger through the gr
 
 ### Repeating moment-to-moment loop
 
-1. Read the **Next** creation preview and current pile.
+1. Read the **DROP** (current piece), **NEXT** (upcoming piece) and current pile.
 2. Tap a horizontal location over the bowl.
 3. Tolina presents a throwing reaction and the creation drops.
 4. Physics determines its fall, rotation, collisions, and resting position.
-5. Two touching creations of the same tier merge into the next tier.
-6. Receive score, Push charge, visual merge feedback, and possibly a first-discovery reveal.
+5. Two identical board pieces merge into the next creation through physical contact; Fancy Cake is final. Three merges receive visual-only baking flavor.
+6. Receive score, +12 Push charge and discovery feedback once per physical merge.
 7. Tolina may react more strongly to meaningful accomplishments.
 8. Reassess the pile, danger state, and next preview.
 9. Use Push when fully charged if reshaping or rescue is valuable.
@@ -145,11 +148,11 @@ Choose where to drop the next creation into the bowl.
 
 ### Short-term goal
 
-Create safe same-tier contacts while preserving space for future drops and avoiding a dangerous pile near the top of the bowl.
+Create matching-piece contacts while preserving space and avoiding a dangerous pile near the top of the bowl. Every non-final identical pair follows the same next-creation rule.
 
 ### Long-term goal
 
-- Within a run: reach higher creation tiers, maximize score, and create the T9 Magical Cat Birthday Cake.
+- Within a run: reach higher progression ranks, maximize score, and create the Fancy Cake.
 - Across runs: discover all nine Kitchen creations in the persistent Recipe Collection.
 - Across sessions: see Tolina react to accomplishments and experience a small variety of Living Home behaviors.
 
@@ -157,7 +160,7 @@ Create safe same-tier contacts while preserving space for future drops and avoid
 
 - The next merge is always visually and mechanically close.
 - Locked recipe slots create clear curiosity gaps.
-- Higher tiers become larger and more spectacular.
+- Higher-rank creations become larger and more elaborate.
 - A failed run preserves discoveries and provides a clear personal target for replay.
 - Score, highest creation, pile variation, and Push decisions support self-improvement after the collection is known.
 - Tolina’s personality adds a second layer of curiosity without requiring pet-management mechanics.
@@ -172,38 +175,89 @@ Create safe same-tier contacts while preserving space for future drops and avoid
 | --- | --- | --- |
 | Horizontal drop placement | A tap/click chooses the horizontal spawn point; the piece is clamped inside the chamber. | The valid drop region must be visually obvious without requiring a cursor guide. UI must not steal intended bowl taps. |
 | Physics simulation | Creations fall, rotate, collide, stack, and settle immediately. | Artwork must remain readable at varied rotations and in dense overlaps. Visuals must not imply a different collision boundary. |
-| Same-tier merging | Two touching pieces of the same tier merge into one next-tier piece. T9 does not merge. | Tier identity must be recognizable by silhouette and art, not color alone. |
+| Recipe-driven creation | Nine board stages; eight identical-input contact recipes, one result per 0.45-second cooldown. Safe placement and neighbour waking remain. | One rule throughout: same + same = next, with Fancy Cake final. |
 | Paced chain reactions | Merge resolution is paced by a 0.45-second global cooldown; physics continues. | Feedback should help players perceive each step without making the sequence feel stalled. |
-| Score | A merge awards `result tier² × 2`; score resets each run. | Score feedback should communicate progress without dominating discovery and survival. |
-| Recipe discovery | The first creation of a tier permanently unlocks its recipe locally. | Discovery feedback must feel special and must not repeat for already unlocked tiers. |
+| Score | A merge awards `result progression rank² × 2`; score resets each run. | Score feedback should communicate progress without dominating discovery and survival. |
+| Recipe discovery | The first appearance of a semantic creation permanently unlocks it locally. | Discovery feedback must feel special and must not repeat for already unlocked creations. |
 | Danger and grace | A supported/settled piece above the visible threshold starts danger. Continuous danger for 3 seconds ends the run; recovery cancels it. | Danger communication must distinguish a temporary warning from a completed game over. |
 | Directional Push | Every merge adds 12 charge. At 100%, the player can Push left or right; charge returns to 0. | Disabled, charging, ready, pressed, and consumed states must be visually distinct. |
 | Hold-to-restart | Restart requires a one-second hold. Releasing early cancels. Active feedback appears above the finger area. | The button stays visually clean while idle; hold progress must be legible during touch. |
 
-### Creation ladder — implemented
+### Kitchen recipe graph — implemented
 
-| Tier | English name | Current visual role | Merge behavior |
-| ---: | --- | --- | --- |
-| T1 | Strawberry | Small starting ingredient | Two create T2 |
-| T2 | Strawberry Milkshake | First prepared creation | Two create T3 |
-| T3 | Cookie | Familiar dessert | Two create T4 |
-| T4 | Cupcake | More elaborate dessert | Two create T5 |
-| T5 | Cake Slice | Clear cake milestone | Two create T6 |
-| T6 | Birthday Cake | First final-cake tier | Two create T7 |
-| T7 | Magical Cake | Magical escalation | Two create T8 |
-| T8 | Cat Celebration Cake | Large endgame creation | Two create T9 |
-| T9 | Magical Cat Birthday Cake | Maximum creation | Does not merge |
+The Kitchen board uses one rule: **two identical pieces merge into the next
+creation**, except Fancy Cake, which is final. There are nine semantic board
+creations and eight physical same-item recipes; there are no mixed or automatic
+board recipes.
 
-Normal drops are limited to T1–T3 with a deterministic weighted sequence: 50% T1, 35% T2, and 15% T3. Higher tiers must be created through merging.
+The native `CreationDefinition`, `MergeRecipe` and
+`WorldContentConfiguration` resources in
+`res://config/worlds/kitchen/kitchen_content.tres` remain the source of truth.
+
+| Size / collection order / rank | ID | Creation | Preserved growth % | Effective radius ratio |
+| ---: | --- | --- | ---: | ---: |
+| 1 | `wheat` | Wheat | 0 | 0.046000000 |
+| 2 | `flour` | Flour | 15 | 0.052900000 |
+| 3 | `cake_mix` | Cake Mix | 15 | 0.060835000 |
+| 4 | `cake_batter` | Cake Batter | 15 | 0.069960250 |
+| 5 | `sponge_cake` | Sponge Cake | 15 | 0.080454287 |
+| 6 | `frosted_cake` | Frosted Cake | 15 | 0.092522431 |
+| 7 | `layer_cake` | Layer Cake | 20 | 0.111026917 |
+| 8 | `decorated_cake` | Decorated Cake | 25 | 0.138783646 |
+| 9 | `fancy_cake` | Fancy Cake | 30 | 0.180418740 |
+
+Each adjacent pair of rows defines one recipe: two of the earlier creation
+produce one of the next. Results award rank² × 2: 8, 18, 32, 50, 72, 98, 128,
+162 points, and +12 Push. One physical result resolves per 0.45-second cooldown.
+Actual contacts, pending-source protection, safe result placement, inherited
+motion, controlled expansion and guarded neighbour waking remain.
+
+Normal drops unlock per run: **Wheat 100** initially; after merge-creating Flour,
+**Wheat 75 / Flour 25**; after merge-creating Cake Mix,
+**Wheat 60 / Flour 30 / Cake Mix 10**. Later creations never normally spawn.
+These configurable stages teach the opening through actual matching merges.
+Unlocks happen when a merge result is created, without a settling delay.
+Permanent collection progress never unlocks a fresh run's pool; Restart,
+Play Again and new runs return to Wheat-only.
+The controlled DROP and buffered NEXT do not change on unlock. Only future
+selections use the new weights through the existing seeded RNG, with no rerolls,
+adaptive spawn bias or crafted-result queue. No new teaching UI is required.
+
+The nine collection slots always remain in `collection_order`; discovery only
+changes real artwork versus the locked/mystery state. The existing semantic
+save format/version remains. Both save consumers filter IDs against current
+content, retaining surviving discoveries and ignoring removed identities;
+the next ordinary save writes valid IDs and preserves unrelated settings.
+
+Egg, Milk and Cream exist only as merge-flavor artwork, never as board bodies,
+colliders, spawnables, recipes or discovery slots. Three recipes have optional
+approved `effect_animation` names in their `MergeRecipe`:
+
+- Flour ×2 → Cake Mix: egg bubble, then egg crack.
+- Cake Mix ×2 → Cake Batter: milk bubble, then milk pour.
+- Sponge Cake ×2 → Frosted Cake: cream bubble, then cream swirl.
+
+Each effect uses the approved shared AnimationPlayer timeline: Egg 0.56s,
+Milk 0.66s, Cream 0.64s, with 65ms crossfades. The lab and production use the same
+pose/pivot implementation. The physical result remains visible and moves normally;
+animation never delays a result/reward, moves physics nodes or makes a fake
+creation. Ordinary merges retain normal merge magic. Completion only removes
+the visual overlay; Restart/scene teardown stops/frees it safely.
+
+All surviving `size_growth_percent` values were intentionally preserved, as
+were base radius 0.046 and visual calibration 2.18. Removing intermediate size
+steps changes effective radii cumulatively; this migration does not compensate.
+See GAMEPLAY_CONFIGURATION.md before tuning.
 
 ### Supporting mechanics
 
-- Visual next-piece preview using the actual tier artwork.
+- DROP preview for the current creation; NEXT for the buffered board ingredient.
+- Short visual-only Egg/Milk/Cream flavor on three same-item merges.
 - Tolina pose changes: idle, throw, and happy.
 - Brief merge-magic effect.
 - Brief **NEW CREATION!** feedback for first discoveries.
-- Brief **MAX MERGE!** feedback when T9 is created.
-- In-game nine-slot discovery progress strip.
+- Brief **MAX MERGE!** feedback when Fancy Cake is created.
+- In-game nine-slot neutral discovery progress strip.
 - Result overlay showing the run’s highest creation and an applicable new recipe.
 - Persistent offline Recipe Collection.
 
@@ -227,12 +281,12 @@ There is no terminal “win” state in the current game. Success is layered:
 
 - Complete a useful merge.
 - Discover a new recipe.
-- Reach a new personal highest tier.
-- Create T9, the maximum creation.
+- Reach a new personal highest progression rank.
+- Create Fancy Cake, the final Kitchen creation.
 - Improve the run score.
-- Complete all nine Kitchen recipes.
+- Discover all nine Kitchen creations.
 
-T9 creation is a major milestone, but the run continues and multiple T9 pieces may exist.
+Fancy Cake creation is a major milestone, but the run continues and multiple Fancy Cake pieces may exist.
 
 ---
 
@@ -241,9 +295,9 @@ T9 creation is a major milestone, but the run continues and multiple T9 pieces m
 | State | What the player sees/knows | UX need |
 | --- | --- | --- |
 | First launch | Main Menu; Recipe Collection may be entirely locked. No account or setup flow. | The value of **Start** and **Recipes** must be immediately clear. Brand, Tolina, and Kitchen should establish context in seconds. |
-| New player | Enters gameplay with no dedicated tutorial. T1–T3 may unlock as they first appear. | Core drop action, merge rule, danger, Push charge, and hold Restart currently rely heavily on inference. A lightweight onboarding concept is recommended for testing. |
+| New player | Enters gameplay with no dedicated tutorial. Wheat, Flour, and Cake Mix may unlock as they first appear. | Core drop action, recipe rules, danger, Push charge, and hold Restart currently rely heavily on inference. A lightweight onboarding concept is recommended for testing. |
 | Active gameplay | Next preview, score, Push percentage, bowl, recipe strip, and controls are visible. | Maintain a strong visual hierarchy: pile first, next/danger second, progress and score third. |
-| Merge resolution | Two pieces transform; score and charge increase; magic/Tolina feedback plays. | Preserve spatial continuity and make the resulting tier legible. |
+| Merge resolution | A valid recipe pair transforms; score and charge increase; magic/Tolina feedback plays. | Preserve spatial continuity and make the resulting creation legible. |
 | First discovery | **NEW CREATION!**, happy Tolina, magic, and progress-strip reveal. | Celebrate without pausing or obscuring the next required action. |
 | Push charging | Push buttons unavailable until 100%. | Make progress and unavailable state understandable without looking broken. |
 | Push ready | Charge shows 100%; left/right Push become actionable. | Readiness should be obvious in peripheral vision. |
@@ -252,7 +306,7 @@ T9 creation is a major milestone, but the run continues and multiple T9 pieces m
 | Game over | Dimmed gameplay and a dedicated result showcase with Tolina, highest artwork/name, optional new recipe, and Play Again. | Emphasize achievement first, then replay. Clearly explain what persisted. |
 | Returning player | Main Menu and Recipe Collection reflect locally saved discoveries. | The collection should provide continuity without requiring a profile or account. |
 | Living Home — planned 1.0 | Tolina appears in the Home performing one of several authored ambient behaviors. Existing recipe progress may influence available behaviors. | Create variety and emotional connection without implying hunger, friendship meters, schedules, or persistent simulation. |
-| Collection complete | All nine recipes show artwork and names. | Explore a one-time celebration and/or special Tolina response. Do not add another progression system solely to extend the collection. |
+| Collection complete | All nine creations show artwork and names. | Explore a one-time celebration and/or special Tolina response. Do not add another progression system solely to extend the collection. |
 
 ---
 
@@ -272,8 +326,8 @@ Cozy Cat Creations currently has one endless-style Kitchen session rather than a
 
 ### Active gameplay state
 
-- The player repeatedly drops T1–T3 pieces.
-- Merges generate higher tiers, points, and Push charge.
+- The player repeatedly drops Wheat, Flour, and Cake Mix pieces.
+- Merges generate deeper recipe creations, points, and Push charge.
 - The pile becomes denser and harder to manage through natural spatial accumulation.
 - First discoveries update the persistent collection and in-game strip.
 
@@ -282,7 +336,7 @@ Cozy Cat Creations currently has one endless-style Kitchen session rather than a
 There is no level-based difficulty curve. Pressure emerges from:
 
 - Decreasing free space as the pile grows.
-- Increasing physical size of higher tiers, especially T8 and T9.
+- Increasing physical size at higher progression ranks, especially Decorated Cake and Fancy Cake.
 - The need to preserve match opportunities in an irregular pile.
 - The danger threshold and three-second recovery window.
 - Limited Push availability, earned only through merging.
@@ -309,14 +363,17 @@ The drop distribution, gravity, threshold, grace duration, and merge rules do no
 
 | System | Persistence | Current scope |
 | --- | --- | --- |
-| Recipe discovery | Persistent offline | One unlock per T1–T9 creation tier. |
-| Recipe Collection | Persistent offline presentation | Discovered recipes show artwork and localized names; unknown recipes show locked silhouettes and an unknown label. |
-| In-run creation ladder | Per run | T1 through T9, with T9 as the maximum non-merging tier. |
+| Recipe discovery | Persistent offline | One semantic-ID unlock per nine Kitchen creations. |
+| Recipe Collection | Persistent offline presentation | Discovered creations show artwork and localized names; unknown creations show locked silhouettes and an unknown label. |
+| In-run recipe graph | Per run | Ten unordered recipes across nine progression ranks, with Fancy Cake as the final creation. |
 | In-run highest creation | Per run | Used in the result showcase. |
 | Score | Per run | Resets on replay/restart; no best-score persistence. |
 | Push charge | Per run | Earned through merges, consumed by Push, reset on replay/restart. |
 
-The save format is intentionally lightweight and local. A fresh player has no forced unlocks; even T1 remains locked until actually created in gameplay.
+The save format is intentionally lightweight and local. A fresh player
+has no forced unlocks; Wheat, Flour, and Cake Mix remain locked until each
+actually appears in gameplay. Versioned semantic IDs prevent the retired
+integer-tier save from unlocking unrelated new creations.
 
 ### Characters
 
@@ -338,7 +395,7 @@ Cosmetic presentation themes are separate from gameplay worlds. A theme may chan
 
 ### Achievements
 
-No achievement system exists or is confirmed. Discovery milestones and T9 creation already supply achievement-like moments without a separate system.
+No achievement system exists or is confirmed. Discovery milestones and Fancy Cake creation already supply achievement-like moments without a separate system.
 
 ### Progression design guardrails
 
@@ -355,9 +412,9 @@ No achievement system exists or is confirmed. Discovery milestones and T9 creati
 
 | Reward | Timing | Feedback |
 | --- | --- | --- |
-| Successful merge | Immediate | New tier artwork, merge magic, Tolina happy pose, points, and +12 Push charge. |
-| First recipe discovery | Immediate, once per tier | **NEW CREATION!**, creation reveal in the progress strip, saved collection unlock, happy Tolina. |
-| Maximum creation | On creating T9 | **MAX MERGE!** for approximately one second. |
+| Successful merge | Immediate | Result artwork, merge magic, Tolina happy pose, rank-based points, and +12 Push charge. |
+| First recipe discovery | Immediate, once per semantic creation | **NEW CREATION!**, creation reveal in the progress strip, saved collection unlock, happy Tolina. |
+| Maximum creation | On creating Fancy Cake | **MAX MERGE!** for approximately one second. |
 | Push readiness | At 100% charge | Push controls become available. |
 | Danger recovery | When the pile becomes safe | Warning clears and play continues. |
 | End-of-run showcase | At game over | Highest creation artwork and localized name; applicable new recipe; Tolina reaction; Play Again. |
@@ -368,7 +425,7 @@ No achievement system exists or is confirmed. Discovery milestones and T9 creati
 - Celebrate transformation, discovery, and craftsmanship—not only score.
 - Keep active-play celebrations brief and non-blocking.
 - Preserve the physical location and identity of the result so the player understands what happened.
-- Reserve the strongest hierarchy for first discoveries, T9, and collection completion.
+- Reserve the strongest hierarchy for first discoveries, Fancy Cake, and collection completion.
 - Avoid stacking multiple banners so heavily that they obscure the next drop or danger state.
 - Tolina should react more strongly to meaningful accomplishments than to ordinary merges.
 
@@ -376,7 +433,7 @@ No achievement system exists or is confirmed. Discovery milestones and T9 creati
 
 - Nine-slot curiosity gap.
 - Persistent recipe reveals.
-- Score and highest-tier self-improvement.
+- Score and highest-rank self-improvement.
 - Variable physics outcomes from player placement.
 - Tolina’s reactions and the desire to create the final magical cake.
 
@@ -400,9 +457,9 @@ No daily reward, streak, quest, battle pass, time gate, energy, rotating event, 
 | Screen | Status | Purpose | User goal | Main components | Important interactions | Required information |
 | --- | --- | --- | --- | --- | --- | --- |
 | Main Menu / Kitchen Entrance | IMPLEMENTED | Establish identity and provide entry routes. | Start playing or view recipes. | Kitchen background, Lunitora Games, Cozy Cat Creations title, Kitchen subtitle, Tolina, magical bowl, Start, Recipes. | Tap Start; tap Recipes. | Game identity, current world, two clear destinations. |
-| Gameplay | IMPLEMENTED | Host the full drop/merge survival session. | Create higher tiers, discover recipes, score, and avoid overflow. | Tolina, Next preview, Score, Push %, danger line/label, bowl and pieces, recipe progress strip, left/right Push, hold Restart. | Tap drop position; activate Push left/right when ready; hold Restart for one second. | Next piece, score, Push charge/readiness, danger state, collection progress. |
+| Gameplay | IMPLEMENTED | Host the full drop/merge survival session. | Resolve recipes, discover creations, score, and avoid overflow. | Tolina, Next preview, Score, Push %, danger line/label, bowl and pieces, creation progress strip, left/right Push, hold Restart. | Tap drop position; activate Push left/right when ready; hold Restart for one second. | Next piece, score, Push charge/readiness, danger state, collection progress. |
 | Game Over / Result Overlay | IMPLEMENTED | Turn failure into a creation showcase and replay decision. | Review achievement and begin a fresh run. | Dim layer, Game Over, Tolina reaction, highest creation image/name, optional new recipe, Play Again. | Tap Play Again. | Highest creation and any newly discovered recipe. Current overlay does not include run score. |
-| Recipe Collection | IMPLEMENTED | Show persistent Kitchen discoveries. | Review unlocked recipes and understand what remains unknown. | Title, vertically scrollable two-column card grid, nine cards, fixed Back button. | Touch-drag or mouse-wheel scroll; tap Back. | Discovered art/name; locked silhouette and localized Unknown state. |
+| Recipe Collection | IMPLEMENTED | Show persistent Kitchen discoveries. | Review unlocked creations and understand what remains unknown. | Title, vertically scrollable two-column card grid, nine cards, fixed Back button. | Touch-drag or mouse-wheel scroll; tap Back. | Discovered art/name; locked silhouette and localized Unknown state. |
 
 ### Screens to explore or evolve for production
 
@@ -412,7 +469,7 @@ No daily reward, streak, quest, battle pass, time gate, energy, rotating event, 
 | First-run teaching overlay | RECOMMENDED FOR TESTING | The game currently has no explicit explanation of drop, merge, danger, Push, or hold Restart. | Use progressive, dismissible instruction in context; do not build a tutorial campaign. |
 | Pause / system-interruption treatment | RECOMMENDED | Mobile interruptions and an intentional route out of an active run are not currently designed. | Requires product decision about whether pausing is allowed and whether exiting abandons a run. |
 | Settings | RECOMMENDED BEFORE PRODUCTION | A production mobile game needs final audio/accessibility/language/legal treatment. | Do not include fake toggles before the supporting systems exist. |
-| Collection-complete moment | RECOMMENDED FOR EXPLORATION | The nine-recipe goal currently ends without a dedicated acknowledgment. | Celebration only unless future progression is separately approved. |
+| Collection-complete moment | RECOMMENDED FOR EXPLORATION | The nine-creation goal currently ends without a dedicated acknowledgment. | Celebration only unless future progression is separately approved. |
 | Theme selection | CANDIDATE | Cosmetic themes may require a simple way to preview/select owned themes. | Do not design a full Store/economy system until the theme catalog and monetization implementation are approved. |
 
 ### Screens not required in the current product
@@ -482,7 +539,7 @@ The Home must remain a controlled presentation screen, not an explorable pet-sim
 2. Tolina performs an authored ambient behavior chosen from available behaviors.
 3. Optionally review saved Recipe Collection.
 4. Start a new run with collection progress retained.
-5. Pursue a missing tier, higher creation, or better score.
+5. Pursue a missing creation, higher rank, or better score.
 
 #### Danger-recovery journey
 
@@ -511,21 +568,23 @@ The Home must remain a controlled presentation screen, not an explorable pet-sim
 | Secondary button | Lower-priority navigation such as Recipes or Back. | Visually subordinate but fully legible and accessible. | Default, pressed, focused, disabled if used. |
 | Directional Push button | Applies Push left or right when charge is full. | Does nothing while unavailable; activates once per full charge; must communicate direction. | Charging/disabled, ready, pressed, consumed, blocked by Game Over. |
 | Hold Restart control | Prevents accidental run reset. | Quick tap does nothing; hold shows instruction/progress above the finger; early release cancels; completion resets run. | Idle clean label, holding/progress, cancelled, completed. |
-| Next-piece preview | Allows placement planning. | Updates immediately after each spawn; uses the same tier artwork and fitting as gameplay. | T1, T2, T3. |
+| Next-piece preview | Allows placement planning. | Updates immediately after each spawn from the same weighted Kitchen content data used by gameplay. | Wheat, Flour, Cake Mix. |
 | Score HUD | Shows current run score. | Updates after every merge; resets on replay/restart. | Zero, updating, large-number layout. |
 | Push charge indicator | Shows progress toward 100%. | Adds 12 per merge, clamps at 100%, resets on Push/restart. | 0–99%, ready at 100%, consumed. |
 | Danger threshold line | Shows the exact gameplay threshold. | Fixed to chamber coordinates and device-independent relative to the bowl/chamber. | Normal line, danger-active emphasis if designed. |
 | Danger warning label | Communicates active recoverable risk. | Appears only while danger is active; disappears on recovery; must remain legible over varied artwork. | Hidden, active, Game Over superseded. |
 | Tolina presentation — current | Gives emotional context and action acknowledgment. | Current implementation uses idle, throw, and happy pose swaps. | Idle, throw, happy. |
 | Tolina animation playback | CONFIRMED 1.0 DIRECTION | Plays authored ambient and reaction animations using native Godot `AnimatedSprite2D` / `SpriteFrames`. | Idle/looping, one-shot reaction, celebration, interruption/transition behavior, reduced-motion response if required. |
-| Creation body visual | Represents a physical tier. | Rotates and moves with physics; art is replaceable independently from collision. | T1–T9, merge-pending only if visually required. |
+| Creation body visual | Represents one semantic creation inside a circular bubble. | Rotates and moves with physics; art is replaceable independently from the explicit circular collision. | Nine creation identities; normal or physically merge-pending. |
+| Current / upcoming drop | Preserves player placement and planning. | DROP retains the controlled piece. NEXT shows buffered board ingredient. | Current and upcoming. |
+| Optional merge flavor | Adds baking character without changing the matching rule. | Approved Egg on Flour ×2 (0.56s), Milk on Cake Mix ×2 (0.66s), Cream on Sponge ×2 (0.64s). Shared lab/production timelines; physical result/rewards are immediate. | Arrival, blended action poses, fade, cleaned up. |
 | Merge magic effect | Brief visual confirmation at merge position. | Appears briefly; no physical effect. | Hidden, playing. |
 | Discovery notification | Announces a first-time unlock. | Brief, non-modal, localized, does not pause play. | Hidden, New Creation. |
-| Maximum-tier notification | Announces T9 creation. | Brief, non-modal, does not pause play. | Hidden, Max Merge. |
-| Recipe progress slot | Shows persistent discovery progress during gameplay. | Reveals art when unlocked and briefly highlights on discovery. | Locked silhouette/?, discovered, newly discovered highlight. |
+| Final-creation notification | Announces Fancy Cake creation. | Brief, non-modal, does not pause play. | Hidden, Max Merge. |
+| Creation progress slot | Shows persistent discovery progress during gameplay without implying a linear merge chain. | Reveals art when unlocked and briefly highlights on discovery. | Locked silhouette/?, discovered, newly discovered highlight. |
 | Recipe collection card | Displays one persistent recipe entry. | Discovered shows art/name; locked hides identity and shows Unknown. | Locked, discovered; selected state not currently needed. |
-| Scroll container | Makes all nine recipe cards reachable. | Supports touch drag and mouse wheel while Back remains fixed. | Top, middle, bottom; drag interaction. |
-| Result overlay/panel | Summarizes the run and blocks underlying gameplay interaction. | Appears after Game Over and remains until Play Again or future approved navigation. | Highest creation variants T1–T9; with or without a new recipe. |
+| Scroll container | Makes all nine creation cards reachable. | Supports touch drag and mouse wheel while Back remains fixed. | Top, middle, bottom; drag interaction. |
+| Result overlay/panel | Summarizes the run and blocks underlying gameplay interaction. | Appears after Game Over and remains until Play Again or future approved navigation. | Highest actual creation identity; with or without a new recipe. |
 | Safe-area container | Keeps important UI clear of notches, Dynamic Island, home indicator, and edges. | Recalculates from platform-safe bounds. | Narrow/tall phone, wider phone, tablet-like aspect. |
 
 ### Component-system guidance
@@ -597,15 +656,15 @@ Avoid dressing Tolina in systems-heavy identity signals such as equipment rarity
 - A warm, lived-in magical Kitchen with shelves, jars, plants, ingredients, wood, and softly textured walls.
 - The magical bowl is the dominant play object: glossy, pearlescent, pink/lavender, glowing, with gold and cat-paw details.
 - The danger zone sits visibly above the bowl rim to communicate overflow.
-- Decorative background detail must not compete with tier recognition, danger, or controls.
+- Decorative background detail must not compete with creation recognition, danger, or controls.
 - The Living Home should be a beautiful controlled portrait composition rather than an explorable environment.
 
 ### Creation style
 
-- T1 begins as a clear, familiar ingredient.
-- Each higher tier should become visually more elaborate, magical, and celebratory.
-- T6–T9 form the final-cake hierarchy and must read as a clear escalation.
-- Silhouettes, detail density, and perceived size should communicate tier even when colors overlap.
+- Wheat is the opening drop; Flour and Cake Mix become normal spawnables only after being merge-created in the current run (ranks 1–3).
+- Derived creations should become visually more elaborate and celebratory as recipe depth increases.
+- The common glass-like bubble is the physical silhouette; the ingredient inside is decorative.
+- Bubble size and progression rank should remain understandable even when internal ingredient colors overlap.
 - Artwork remains centered, uncropped, transparent, and readable while rotated.
 
 ### Animation and feedback style
@@ -669,23 +728,24 @@ Large frame sets, export resolution, frame rate, texture memory, and application
 | Tolina | `idle`, `happy`, `throw` transparent PNGs | Brand anchor and immediate emotional feedback. | Current three poses. Future production animation will extend or replace static-only presentation. | Critical |
 | Kitchen background | One 1024×1536 portrait illustration | Establish World 01 and support Kitchen screens. | Responsive crops for supported portrait ratios may be documented without editing the source. | Critical |
 | Magical bowl | One 1312×1199 transparent illustration | Visually contains the physics chamber and communicates overflow/floor. | Responsive fitting rules; no alternate bowl currently required. | Critical |
-| Creation artwork | Nine transparent PNGs for T1–T9 | Gameplay bodies, Next preview, progress strip, collection cards, and result showcase. | Full tier set; consistent visual fitting by context. | Critical |
+| Creation artwork | Nine 512×512 transparent bubble PNGs | Gameplay bodies, Next preview, progress strip, collection cards, and result showcase. | Full semantic creation set; common bubble-aligned fitting by context. | Critical |
+| Merge flavor | Thirteen approved PNGs under effects/merges | Egg/Milk/Cream presentation only; never board pieces | Three bubbles and ordered crack/pour/swirl poses; original aspect/transparency | High |
 | Merge magic | One transparent PNG | Brief merge and discovery feedback. | Current single effect; animation variants optional only if later approved. | High |
 | CJK-capable font | Noto Sans CJK Simplified Chinese | Ensures English, Spanish, and Simplified Chinese glyph support. | Weights are limited; hierarchy may rely on size, outline, shadow, and color. | Critical |
 
 ### Creation asset mapping
 
-| Tier | File role | Used in |
+| Creation | File role | Used in |
 | ---: | --- | --- |
-| T1 Strawberry | `strawberry.png` | Physics piece, Next, progress strip, collection, result |
-| T2 Strawberry Milkshake | `milkshake.png` | Physics piece, Next, progress strip, collection, result |
-| T3 Cookie | `cookie.png` | Physics piece, Next, progress strip, collection, result |
-| T4 Cupcake | `cupcake.png` | Physics piece, progress strip, collection, result |
-| T5 Cake Slice | `cake_slice.png` | Physics piece, progress strip, collection, result |
-| T6 Birthday Cake | `birthday_cake.png` | Physics piece, progress strip, collection, result |
-| T7 Magical Cake | `magical_cake.png` | Physics piece, progress strip, collection, result |
-| T8 Cat Celebration Cake | `cat_celebration_cake.png` | Physics piece, progress strip, collection, result |
-| T9 Magical Cat Birthday Cake | `magical_cat_birthday_cake.png` | Physics piece, progress strip, collection, result |
+| Wheat | `wheat.png` | Physics piece, Next, progress strip, collection, result |
+| Flour | `flour.png` | Physics piece, Next, progress strip, collection, result |
+| Cake Mix | `cake_mix.png` | Physics piece, Next, progress strip, collection, result |
+| Cake Batter | `cake_batter.png` | Physics piece, progress strip, collection, result |
+| Sponge Cake | `sponge_cake.png` | Physics piece, progress strip, collection, result |
+| Frosted Cake | `frosted_cake.png` | Physics piece, progress strip, collection, result |
+| Layer Cake | `layer_cake.png` | Physics piece, progress strip, collection, result |
+| Decorated Cake | `decorated_cake.png` | Physics piece, progress strip, collection, result |
+| Fancy Cake | `fancy_cake.png` | Physics piece, progress strip, collection, result |
 
 ### UI and production assets/design specifications still needed
 
@@ -694,7 +754,7 @@ Large frame sets, export resolution, frame rate, texture memory, and application
 | UI style sheet | Standardize panel, border, corner, shadow, spacing, and text rules. | Surface levels, normal/reward/warning treatments. | Critical |
 | Button system | Unify Main Menu, Back, Play Again, Push, Restart, future Home/Settings actions. | Primary, secondary, gameplay, disabled, pressed, hold progress. | Critical |
 | Recipe card specification | Keep collection and progress strip visually related. | Locked, discovered, newly unlocked. | High |
-| Warning/reward banners | Make Danger, New Creation, Max Merge, and Push feedback coherent. | Warning, discovery, maximum tier, brief action confirmation. | High |
+| Warning/reward banners | Make Danger, New Creation, Max Merge, and Push feedback coherent. | Warning, discovery, final creation, brief action confirmation. | High |
 | Lock/unknown symbol | Reinforce hidden recipes without revealing identity. | Compact strip and full collection-card forms. | High |
 | Tolina production animation set | Replace/extend static pose presentation with expressive authored animation. | Spine editable master plus exported transparent frame sequences or sprite sheets for approved animations. | Critical for Living Home |
 | App icon and store identity set | Represent Cozy Cat Creations outside gameplay. | Platform icon, adaptive-safe composition, store key art. | Future production need |
@@ -707,7 +767,7 @@ Large frame sets, export resolution, frame rate, texture memory, and application
 - Do not bake collision guides or UI labels into creation artwork.
 - Supply localization-independent art whenever possible.
 - Test assets against both warm background areas and bright bowl glow.
-- Keep late-tier detail readable after mobile downscaling.
+- Keep higher-rank detail readable after mobile downscaling.
 - Preserve editable Spine source separately from exported runtime assets.
 - Godot gameplay/runtime code must not depend on `.spine` files.
 - Exported Tolina animations must use semantic animation names such as `idle`, `sleep`, `happy`, `dance`, and `play_with_prop`.
@@ -761,7 +821,7 @@ Large frame sets, export resolution, frame rate, texture memory, and application
 - Use localized string keys; do not bake words into art.
 - Allow Spanish labels to expand substantially beyond English.
 - Allow Chinese line breaking without relying on spaces.
-- Highest-creation names must wrap across multiple lines, especially the T9 name.
+- Highest-creation names must wrap across multiple lines for expanded Spanish and Chinese labels.
 - Use the existing CJK-capable font or verify full glyph coverage before proposing another.
 - Avoid uppercase-only hierarchy as the only solution because it does not transfer equally across scripts.
 
@@ -789,7 +849,8 @@ Only constraints that affect design and handoff are included here.
 
 ### Gameplay visual separation
 
-- Creation artwork is separate from the physics body and collision circle.
+- Creation artwork is separate from the physics body and explicit collision circle.
+- The common 512×512 bubble canvas does not determine physics size. The world base radius and each CreationDefinition's `size_order` / cumulative `size_growth_percent` drive collision and matching artwork size. `progression_rank` remains separate for gameplay/scoring; it does not determine physical size. Mass and the 2.18 artwork-fitting calibration remain unchanged.
 - Replacing or resizing a sprite must not change collision radius, mass, merge rules, or resting behavior.
 - Creation art rotates with its physics body.
 - Transparent padding and off-center art can make objects appear to float or escape even when physics is correct; asset bounds are a handoff concern.
@@ -813,7 +874,7 @@ Only constraints that affect design and handoff are included here.
 
 ### Save and data limitations
 
-- Persistent data currently contains recipe discoveries only.
+- Persistent data currently contains versioned semantic creation discoveries only.
 - Score, highest creation, Push charge, pieces, and danger state reset with a new run.
 - Future Living Home behavior history may require a very small local persistence extension.
 - Theme ownership, if IAP is implemented, should rely on platform store entitlements rather than a proprietary player account.
@@ -874,7 +935,7 @@ Advertising must never interrupt:
 - a merge chain
 - danger recovery
 - a first-discovery celebration
-- a T9 celebration
+- a Fancy Cake celebration
 
 Game Over is a possible interstitial opportunity, but advertising after every run is not approved. Frequency and placement must be validated against retention and replay behavior.
 
@@ -955,7 +1016,7 @@ Additional themes should primarily be content production rather than new gamepla
 - **Lunitora Games** is the studio/brand.
 - **Tolina** is the main character.
 - **Kitchen** is the only gameplay world required for version 1.0.
-- The Kitchen contains the implemented nine-tier creation ladder and persistent Recipe Collection.
+- The Kitchen contains nine semantic creations, eight same-item recipes, nine progression ranks, and a persistent Recipe Collection.
 - Living Tolina Home is a confirmed version 1.0 product direction.
 - Tolina accomplishment reactions are a confirmed version 1.0 product direction.
 - Cosmetic theme support is a confirmed commercial/product direction, although the number of launch themes is not yet fixed.
@@ -982,7 +1043,7 @@ Each would need its own fantasy, creation ladder, environment, visual container,
 #### Collections and content
 
 - Additional world-specific recipe/creation collections.
-- Limited new creation ladders or variants, provided tier recognition remains clear.
+- Limited new creation graphs or variants, provided identity and recipe compatibility remain clear.
 
 #### Feedback and presentation
 
@@ -1019,7 +1080,7 @@ These are possibilities, not promises. Baseline prototypes must not make them ap
 
 | Risk | Why it matters | Design response to explore |
 | --- | --- | --- |
-| No first-run teaching | A new player may not infer same-tier merging, the danger grace period, Push charging, or hold Restart. | Test minimal progressive cues shown only when each mechanic becomes relevant. |
+| Merge / preview readability | Players may confuse DROP with NEXT or miss a short flavor effect, danger, Push or hold Restart. | Test the universal matching rule and visual-only flavor; keep the current piece and upcoming preview distinct. |
 | Push purpose is not self-evident | Percentage and directional buttons show availability but not necessarily the rescue/strategy value. | Prototype concise first-ready guidance and stronger ready-state affordance without permanent clutter. |
 | Danger mental model may be ambiguous | A falling piece passing the line does not necessarily count; supported/settled pieces do. | Ensure visual language communicates sustained overflow, not momentary crossing. Consider a recoverable-state cue without exposing technical rules. |
 | Restart is intentionally clean while idle | A quick tap doing nothing can seem broken to a first-time user. | During press, reveal instruction/progress immediately above the finger; test whether onset is fast enough. |
@@ -1032,9 +1093,9 @@ These are possibilities, not promises. Baseline prototypes must not make them ap
 
 | Risk | Why it matters | Design response to explore |
 | --- | --- | --- |
-| Bowl art vs. physics mismatch | A beautiful bowl can imply walls/floor in different places from actual collisions, making pieces look floating or outside. | Annotate chamber anchors and validate art at every target ratio with large T8/T9 pieces. |
+| Bowl art vs. physics mismatch | A beautiful bowl can imply walls/floor in different places from actual collisions, making pieces look floating or outside. | Annotate chamber anchors and validate art at every target ratio with Decorated and Fancy Cake. |
 | Crowded portrait hierarchy | Tolina, HUD, danger, bowl, progress strip, and controls compete for limited vertical space. | Use responsive constraints and importance hierarchy, not proportional shrinking of everything. |
-| Late-tier visual complexity | T8/T9 are large, ornate, and can obscure the pile or become visually noisy. | Preserve strong silhouette, controlled effects, and high contrast against the bowl interior. |
+| Higher-rank visual complexity | Decorated Cake and Fancy Cake are large and can obscure the pile or become visually noisy. | Preserve strong bubble silhouettes, controlled effects, and high contrast against the bowl interior. |
 | Nine-slot progress strip | Slots can become too small to distinguish art or lock state. | Prioritize shape/art and state over recipe text; verify at 390 px width. |
 | Warm-on-warm contrast | Golden UI or ingredients can disappear against the Kitchen. | Use plum surfaces, outlines, rim lighting, and contrast checks. |
 | Text expansion and CJK layout | English-centric one-line designs can fail in Spanish or Chinese. | Design flexible widths, wrapping, and script-appropriate hierarchy from the first prototype. |
@@ -1045,7 +1106,7 @@ These are possibilities, not promises. Baseline prototypes must not make them ap
 
 | Risk | Why it matters | Design response to explore |
 | --- | --- | --- |
-| T8/T9 size spike | Endgame pressure may feel abrupt or unfair even when mechanically intended. | Playtest perceived fairness; improve preview and pile readability before changing balance. |
+| Rank-8/9 size spike | Decorated and Fancy Cake pressure may feel abrupt or unfair even when mechanically intended. | Playtest perceived fairness; improve preview and pile readability before changing balance. |
 | Deterministic restart sequence | Repeated early runs may feel predictable if players notice the same opening. | Treat as a balancing/product question; do not alter RNG through UX work. |
 | Chain pacing vs. responsiveness | The merge cooldown improves readability but can make touching matches appear temporarily ignored. | Feedback should show that resolution is continuing without implying an invalid match. |
 | Visual-only celebration overload | New Creation, Max Merge, Push feedback, Tolina, score, and magic can coincide. | Establish priority and queuing/overlap rules in the motion specification. |
@@ -1060,7 +1121,7 @@ These are possibilities, not promises. Baseline prototypes must not make them ap
 
 ### Retention risks
 
-- The persistent collection has only nine items; after completion, replay depends on score mastery, physics enjoyment, and Tolina attachment.
+- The persistent collection has nine items; after completion, replay depends on score mastery, physics enjoyment, and Tolina attachment.
 - There is no persistent best score or additional gameplay world in version 1.0 by default.
 - Living Tolina can improve emotional retention, but too few ambient behaviors could become repetitive.
 - Adding progression solely to fix retention could dilute the simple cozy promise. Validate whether the core loop sustains replay before layering systems.
@@ -1069,7 +1130,7 @@ These are possibilities, not promises. Baseline prototypes must not make them ap
 
 - Designing world maps, currencies, achievements, multiple characters, or live events before product approval would prematurely define architecture and expectations.
 - A highly animated visual prototype may imply physics changes or performance cost not compatible with the current implementation.
-- Treating old example recipes as current would create asset, localization, and discovery inconsistencies.
+- Treating the retired pre-release linear ladder as current would create asset, localization, save, and discovery inconsistencies.
 - Broad internal renaming or a generic UI framework is not required to deliver current screen designs.
 - Cosmetic themes must not silently become new gameplay worlds.
 
@@ -1114,7 +1175,7 @@ The Game Design Workspace should produce artifacts that are directly actionable 
 - Tolina ambient-behavior placement and safe movement bounds.
 - Tolina reaction intensity map: ordinary event, meaningful accomplishment, major accomplishment.
 - Default-theme specification identifying which visual surfaces a future cosmetic theme may replace.
-- Creation fitting examples for T1, T3, T6, T8, and T9 in every UI context.
+- Creation fitting examples for each shared progression rank, especially Decorated and Fancy Cake, in every UI context.
 - Gameplay hierarchy test using a dense, colorful late-game pile—not only an empty bowl.
 - Safe-area overlays and chamber/bowl/danger anchor annotations.
 - English, expanded Spanish, and Simplified Chinese stress-test screens.
@@ -1161,7 +1222,7 @@ For Tolina animations:
 - The visible danger line represents the actual gameplay threshold.
 - Pieces remain identifiable while rotated, overlapped, and scaled down.
 - All essential controls are outside unsafe screen areas.
-- All nine recipes are reachable and readable in the collection.
+- All nine creations are reachable and readable in the collection.
 - Locked recipes do not reveal names or full-color artwork.
 - Push, danger, discovery, restart, and result states are distinguishable without audio.
 - Spanish and Simplified Chinese layouts are intentional, not afterthoughts.
@@ -1177,7 +1238,7 @@ For Tolina animations:
 1. What is the minimum first-run teaching needed for drop, merge, danger, Push, and hold Restart?
 2. What is the exact pause / return-to-Home behavior during an active run?
 3. Should persistent best score be added, or should persistent progression remain recipe-focused?
-4. What exact one-time experience should occur when all nine Kitchen recipes are discovered?
+4. What exact one-time experience should occur when all nine Kitchen creations are discovered?
 5. How many Living Tolina ambient behaviors are required for version 1.0 to avoid obvious repetition?
 6. Which recipe/accomplishment milestones should unlock or trigger specific Tolina reactions?
 7. What should the final default Living Home environment look like?
