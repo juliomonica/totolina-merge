@@ -1,21 +1,21 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://ti0dnolkh503"]
 
-[ext_resource type="Script" path="res://scripts/presentation/totolina_operator_presentation.gd" id="1_25c2c"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/ears/cat_totolina_ear_left.png" id="2_5xli5"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/ears/cat_totolina_ear_right.png" id="3_x0sa5"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/body/cat_totolina_body.png" id="4_jtadv"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/arms/cat_totolina_arm_idle.png" id="5_s6ieh"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/arms/cat_totolina_arm_press_01.png" id="6_rjg6t"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/arms/cat_totolina_arm_press_02.png" id="7_hi17x"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/arms/cat_totolina_arm_press_03.png" id="8_5epnm"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_01.png" id="9_cf3x4"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_02.png" id="10_fyfui"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_03.png" id="11_233gb"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_excited.png" id="12_tlrfn"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_surprised.png" id="13_eibfe"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/mouths/cat_totolina_mouth_idle.png" id="14_a8yjh"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/mouths/cat_totolina_mouth_excited.png" id="15_qnoi4"]
-[ext_resource type="Texture2D" path="res://assets/characters/totolina/mouths/cat_totolina_mouth_surprised.png" id="16_hs7tb"]
+[ext_resource type="Script" uid="uid://b487hj7iikkyu" path="res://scripts/presentation/totolina_operator_presentation.gd" id="1_25c2c"]
+[ext_resource type="Texture2D" uid="uid://c80e81u5ta5mb" path="res://assets/characters/totolina/ears/cat_totolina_ear_left.png" id="2_5xli5"]
+[ext_resource type="Texture2D" uid="uid://d04xq7gx3ld05" path="res://assets/characters/totolina/ears/cat_totolina_ear_right.png" id="3_x0sa5"]
+[ext_resource type="Texture2D" uid="uid://hxn4gaoltt0g" path="res://assets/characters/totolina/body/cat_totolina_body.png" id="4_jtadv"]
+[ext_resource type="Texture2D" uid="uid://d0j4bi4mg4ttj" path="res://assets/characters/totolina/arms/cat_totolina_arm_idle.png" id="5_s6ieh"]
+[ext_resource type="Texture2D" uid="uid://cdvjoenssuvkj" path="res://assets/characters/totolina/arms/cat_totolina_arm_press_01.png" id="6_rjg6t"]
+[ext_resource type="Texture2D" uid="uid://dpi1cc6byc5pa" path="res://assets/characters/totolina/arms/cat_totolina_arm_press_02.png" id="7_hi17x"]
+[ext_resource type="Texture2D" uid="uid://6ub7mhdodeib" path="res://assets/characters/totolina/arms/cat_totolina_arm_press_03.png" id="8_5epnm"]
+[ext_resource type="Texture2D" uid="uid://4o4mgnbfgb2t" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_01.png" id="9_cf3x4"]
+[ext_resource type="Texture2D" uid="uid://bvr16po2h8xr3" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_02.png" id="10_fyfui"]
+[ext_resource type="Texture2D" uid="uid://dwmnjk5lf6pjx" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_03.png" id="11_233gb"]
+[ext_resource type="Texture2D" uid="uid://dsfxv6s821wlq" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_excited.png" id="12_tlrfn"]
+[ext_resource type="Texture2D" uid="uid://bml2r1jrd6amv" path="res://assets/characters/totolina/eyes/cat_totolina_eyes_surprised.png" id="13_eibfe"]
+[ext_resource type="Texture2D" uid="uid://6q2l6aqkwm2n" path="res://assets/characters/totolina/mouths/cat_totolina_mouth_idle.png" id="14_a8yjh"]
+[ext_resource type="Texture2D" uid="uid://caf5g0tnudiml" path="res://assets/characters/totolina/mouths/cat_totolina_mouth_excited.png" id="15_qnoi4"]
+[ext_resource type="Texture2D" uid="uid://c4m4aut7c2deo" path="res://assets/characters/totolina/mouths/cat_totolina_mouth_surprised.png" id="16_hs7tb"]
 
 [sub_resource type="Animation" id="Animation_hjmko"]
 length = 0.24
@@ -37,77 +37,73 @@ _data = {
 &"blink": SubResource("Animation_hjmko")
 }
 
-[node name="Totolina" type="Node2D"]
+[node name="Totolina" type="Node2D" unique_id=1764926212]
 script = ExtResource("1_25c2c")
 
-[node name="Visual" type="Node2D" parent="."]
+[node name="Visual" type="Node2D" parent="." unique_id=292089342]
 
-[node name="cat_totolina_ear_left" type="Sprite2D" parent="Visual"]
+[node name="cat_totolina_ear_left" type="Sprite2D" parent="Visual" unique_id=348639789]
 texture_filter = 2
-position = Vector2(240, 176)
+position = Vector2(271, 145.99998)
 scale = Vector2(1.05, 1.05)
 texture = ExtResource("2_5xli5")
 centered = false
 offset = Vector2(-130, -155)
 
-[node name="cat_totolina_ear_right" type="Sprite2D" parent="Visual"]
+[node name="cat_totolina_ear_right" type="Sprite2D" parent="Visual" unique_id=1875874077]
 texture_filter = 2
-position = Vector2(552, 176)
+position = Vector2(548, 148)
 scale = Vector2(1.05, 1.05)
 texture = ExtResource("3_x0sa5")
 centered = false
 offset = Vector2(-62, -155)
 
-[node name="cat_totolina_body" type="Sprite2D" parent="Visual"]
+[node name="cat_totolina_body" type="Sprite2D" parent="Visual" unique_id=103819199]
 texture_filter = 2
 texture = ExtResource("4_jtadv")
 centered = false
 
-[node name="Arms" type="Node2D" parent="Visual"]
+[node name="Arms" type="Node2D" parent="Visual" unique_id=672638964]
 position = Vector2(650, 410)
 
-[node name="cat_totolina_arm_idle" type="Sprite2D" parent="Visual/Arms"]
-z_index = 2
+[node name="cat_totolina_arm_idle" type="Sprite2D" parent="Visual/Arms" unique_id=177091675]
+z_index = 3
 texture_filter = 2
-position = Vector2(-48, -12)
-rotation = -0.35
+position = Vector2(-28, 1)
 scale = Vector2(1.1, 1.1)
 texture = ExtResource("5_s6ieh")
 centered = false
 offset = Vector2(-110, -60)
 
-[node name="cat_totolina_arm_press_01" type="Sprite2D" parent="Visual/Arms"]
+[node name="cat_totolina_arm_press_01" type="Sprite2D" parent="Visual/Arms" unique_id=1271801487]
 modulate = Color(1, 1, 1, 0)
 z_index = 2
 texture_filter = 2
-position = Vector2(0, 0)
 rotation = -0.65
 scale = Vector2(1.1, 1.1)
 texture = ExtResource("6_rjg6t")
 centered = false
 offset = Vector2(-130, -30)
 
-[node name="cat_totolina_arm_press_02" type="Sprite2D" parent="Visual/Arms"]
+[node name="cat_totolina_arm_press_02" type="Sprite2D" parent="Visual/Arms" unique_id=499493605]
 modulate = Color(1, 1, 1, 0)
 z_index = 2
 texture_filter = 2
-position = Vector2(0, 0)
 scale = Vector2(1.1, 1.1)
 texture = ExtResource("7_hi17x")
 centered = false
 offset = Vector2(-130, -30)
 
-[node name="cat_totolina_arm_press_03" type="Sprite2D" parent="Visual/Arms"]
+[node name="cat_totolina_arm_press_03" type="Sprite2D" parent="Visual/Arms" unique_id=1742772112]
 modulate = Color(1, 1, 1, 0)
 z_index = 2
 texture_filter = 2
-position = Vector2(0, 0)
 scale = Vector2(1.1, 1.1)
 texture = ExtResource("8_5epnm")
 centered = false
 offset = Vector2(-130, -20)
 
-[node name="ShoulderOverlap" type="Sprite2D" parent="Visual"]
+[node name="ShoulderOverlap" type="Sprite2D" parent="Visual" unique_id=1878805922]
 z_index = 3
 texture_filter = 2
 position = Vector2(530, 325)
@@ -116,52 +112,52 @@ centered = false
 region_enabled = true
 region_rect = Rect2(530, 325, 170, 95)
 
-[node name="Eyes" type="Node2D" parent="Visual"]
+[node name="Eyes" type="Node2D" parent="Visual" unique_id=306076973]
 position = Vector2(401, 173)
 scale = Vector2(1.1, 1.1)
 
-[node name="cat_totolina_eyes_blink_01" type="Sprite2D" parent="Visual/Eyes"]
+[node name="cat_totolina_eyes_blink_01" type="Sprite2D" parent="Visual/Eyes" unique_id=940694941]
 texture_filter = 2
 texture = ExtResource("9_cf3x4")
 centered = false
 offset = Vector2(-164, -64)
 
-[node name="cat_totolina_eyes_blink_02" type="Sprite2D" parent="Visual/Eyes"]
+[node name="cat_totolina_eyes_blink_02" type="Sprite2D" parent="Visual/Eyes" unique_id=2042800280]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("10_fyfui")
 centered = false
 offset = Vector2(-164, -64)
 
-[node name="cat_totolina_eyes_blink_03" type="Sprite2D" parent="Visual/Eyes"]
+[node name="cat_totolina_eyes_blink_03" type="Sprite2D" parent="Visual/Eyes" unique_id=287666206]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("11_233gb")
 centered = false
 offset = Vector2(-164, -64)
 
-[node name="cat_totolina_eyes_excited" type="Sprite2D" parent="Visual/Eyes"]
+[node name="cat_totolina_eyes_excited" type="Sprite2D" parent="Visual/Eyes" unique_id=1047746804]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("12_tlrfn")
 centered = false
 offset = Vector2(-164, -64)
 
-[node name="cat_totolina_eyes_surprised" type="Sprite2D" parent="Visual/Eyes"]
+[node name="cat_totolina_eyes_surprised" type="Sprite2D" parent="Visual/Eyes" unique_id=222651447]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("13_eibfe")
 centered = false
 offset = Vector2(-164, -64)
 
-[node name="cat_totolina_mouth_idle" type="Sprite2D" parent="Visual"]
+[node name="cat_totolina_mouth_idle" type="Sprite2D" parent="Visual" unique_id=1860481918]
 texture_filter = 2
-position = Vector2(401, 249)
+position = Vector2(405, 255)
 texture = ExtResource("14_a8yjh")
 centered = false
 offset = Vector2(-64, 0)
 
-[node name="cat_totolina_mouth_excited" type="Sprite2D" parent="Visual"]
+[node name="cat_totolina_mouth_excited" type="Sprite2D" parent="Visual" unique_id=607260558]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 position = Vector2(401, 249)
@@ -169,13 +165,13 @@ texture = ExtResource("15_qnoi4")
 centered = false
 offset = Vector2(-64, 0)
 
-[node name="cat_totolina_mouth_surprised" type="Sprite2D" parent="Visual"]
+[node name="cat_totolina_mouth_surprised" type="Sprite2D" parent="Visual" unique_id=1548204594]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
-position = Vector2(401, 249)
+position = Vector2(401, 251)
 texture = ExtResource("16_hs7tb")
 centered = false
 offset = Vector2(-64, 0)
 
-[node name="IdlePlayer" type="AnimationPlayer" parent="."]
+[node name="IdlePlayer" type="AnimationPlayer" parent="." unique_id=305012121]
 libraries/ = SubResource("AnimationLibrary_ayl1p")
