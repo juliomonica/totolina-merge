@@ -287,7 +287,7 @@ tracks/0/path = NodePath("TopMachine/Totolina:arm_pose")
 tracks/0/interp = 1
 tracks/0/loop_wrap = false
 tracks/0/keys = {
-"times": PackedFloat32Array(0, 0.075, 0.135, 0.2, 0.235, 0.305, 0.37, 0.44),
+"times": PackedFloat32Array(0, 0.1, 0.135, 0.2, 0.235, 0.305, 0.37, 0.44),
 "transitions": PackedFloat32Array(-2, -2, -2, -2, -2, -2, -2, -2),
 "update": 0,
 "values": [0.0, 1.0, 2.0, 3.0, 3.0, 2.0, 1.0, 0.0]
@@ -438,20 +438,21 @@ region_enabled = true
 region_rect = Rect2(560, 0, 340, 230)
 
 [node name="Totolina" parent="TopMachine" unique_id=451155426 instance=ExtResource("Cat")]
-position = Vector2(6, 58.4)
-scale = Vector2(0.17, 0.17)
+z_index = -4
+position = Vector2(9, 78)
+scale = Vector2(0.15, 0.15)
 
 [node name="Current" type="Sprite2D" parent="TopMachine" unique_id=507619358]
 z_index = 1
 texture_filter = 2
-position = Vector2(240, 180)
+position = Vector2(259, 180)
 scale = Vector2(0.11, 0.11)
 texture = ExtResource("PreviewCurrent")
 
 [node name="Next" type="Sprite2D" parent="TopMachine" unique_id=75038496]
 z_index = 1
 texture_filter = 2
-position = Vector2(240, 95)
+position = Vector2(259, 95)
 scale = Vector2(0.105, 0.105)
 texture = ExtResource("PreviewNext")
 
@@ -459,49 +460,51 @@ texture = ExtResource("PreviewNext")
 modulate = Color(1, 1, 1, 0)
 z_index = 1
 texture_filter = 2
-position = Vector2(240, 95)
+position = Vector2(259, 95)
 scale = Vector2(0.105, 0.105)
 texture = ExtResource("PreviewNext")
 
 [node name="FeederGlass" type="Sprite2D" parent="TopMachine" unique_id=136262569]
 z_index = 2
 texture_filter = 2
-position = Vector2(240, 121)
+position = Vector2(259, 121)
 scale = Vector2(0.32, 0.32)
 texture = ExtResource("21_3y083")
 
 [node name="SampleScore" type="Node2D" parent="TopMachine" unique_id=1133169275]
-position = Vector2(320, 95)
+position = Vector2(339, 95)
 
 [node name="Screen" type="Sprite2D" parent="TopMachine/SampleScore" unique_id=1019824394]
 texture_filter = 2
+position = Vector2(-8, 0)
 scale = Vector2(0.35, 0.35)
 texture = ExtResource("22_l7ghe")
 centered = false
 
 [node name="Token" type="Sprite2D" parent="TopMachine/SampleScore" unique_id=798394942]
 texture_filter = 2
-position = Vector2(36.654053, 50.5)
+position = Vector2(28.654053, 50.5)
 scale = Vector2(0.096304685, 0.09179686)
 texture = ExtResource("23_loctm")
 
 [node name="Colon" type="Sprite2D" parent="TopMachine/SampleScore" unique_id=1513698784]
 texture_filter = 2
-position = Vector2(63, 51)
+position = Vector2(55, 51)
 scale = Vector2(0.16, 0.16)
 texture = ExtResource("24_12wrv")
 
 [node name="ScoreLabel" type="Label" parent="TopMachine/SampleScore" unique_id=400081952]
-offset_left = 76.0
+offset_left = 68.0
 offset_top = 31.0
-offset_right = 165.0
-offset_bottom = 68.0
+offset_right = 157.0
+offset_bottom = 70.0
 theme_override_colors/font_color = Color(1, 0.7019608, 0.79607844, 1)
 theme_override_font_sizes/font_size = 28
 clip_text = true
+metadata/_edit_use_anchors_ = true
 
 [node name="Shutter" type="Node2D" parent="TopMachine" unique_id=1966849543]
-position = Vector2(190, 211.5)
+position = Vector2(209.00002, 201.49998)
 scale = Vector2(0.09765625, 0.09765625)
 
 [node name="FixedGoldHousing" type="Sprite2D" parent="TopMachine/Shutter" unique_id=322152902]
@@ -553,7 +556,7 @@ uv = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895
 [node name="Nozzle" type="Sprite2D" parent="TopMachine" unique_id=1309967206]
 z_as_relative = false
 texture_filter = 2
-position = Vector2(250, 264)
+position = Vector2(256, 264)
 scale = Vector2(0.15, 0.15)
 texture = ExtResource("31_mtdlj")
 
@@ -568,9 +571,9 @@ text = "DROP_NEXT"
 horizontal_alignment = 1
 
 [node name="CurrentLabel" type="Label" parent="TopMachine" unique_id=367785885]
-offset_left = 196.0
+offset_left = 202.0
 offset_top = 244.0
-offset_right = 284.0
+offset_right = 290.0
 offset_bottom = 262.0
 theme_override_colors/font_color = Color(0.847, 0.914, 0.898, 1)
 theme_override_font_sizes/font_size = 10
