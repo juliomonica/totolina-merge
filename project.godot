@@ -13,7 +13,7 @@ config_version=5
 config/name="Totolina's Mystery Journey"
 run/main_scene="res://scenes/menu/main_menu.tscn"
 config/use_custom_user_dir=true
-config/custom_user_dir_name="Godot/app_userdata/Game01"
+config/custom_user_dir_name="TotolinasMysteryJourney"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 
