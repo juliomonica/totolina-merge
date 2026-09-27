@@ -102,6 +102,7 @@ func _deliver_until(target: StringName) -> void:
 		var controlled: StringName = sandbox._current_creation_id
 		var buffered: StringName = sandbox._raw_next_creation_id
 		sandbox._drop_piece(_x(0.5))
+		sandbox._advance_machine_drop(0.63)
 		seen.append(controlled)
 		_check(_live(controlled).size() == 1 and sandbox._current_creation_id == buffered,
 			"player drops selected piece and receives unchanged buffered NEXT")
@@ -128,6 +129,7 @@ func _test_continuous_run() -> void:
 	# Buffer two Wheats using real selections before testing the next unlock.
 	while sandbox._current_creation_id != &"wheat" or sandbox._raw_next_creation_id != &"wheat":
 		sandbox._drop_piece(_x(0.5))
+		sandbox._advance_machine_drop(0.63)
 		for piece in sandbox.pieces.get_children():
 			piece.queue_free()
 		await process_frame

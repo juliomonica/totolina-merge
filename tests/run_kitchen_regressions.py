@@ -46,7 +46,7 @@ def checked_run(command, log_path, timeout=600, expected_marker=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", default=os.environ.get("GODOT_BIN", "godot"))
-    parser.add_argument("--suite", choices=["all", "integration", "sponge", "touch", "spawn", "collection", "debug-spawn", "animation-lab", "merge-flavor"], default="all")
+    parser.add_argument("--suite", choices=["all", "integration", "sponge", "touch", "spawn", "collection", "debug-spawn", "animation-lab", "merge-flavor", "machine", "controls"], default="all")
     parser.add_argument("--graphical", action="store_true", help="Also run actual portrait merge captures")
     parser.add_argument("--timeout", type=int, default=600, help="Maximum seconds per Godot process")
     args = parser.parse_args()
@@ -77,6 +77,11 @@ def main():
         suites = [("merge_effect_lab_validation", "MERGE EFFECT LAB:", [])]
     if args.suite == "merge-flavor":
         suites = [("merge_flavor_validation", "MERGE FLAVOR:", [])]
+    if args.suite == "machine":
+        suites = [("machine_gameplay_validation", "MACHINE GAMEPLAY:", []),
+                  ("machine_interaction_lab_validation", "MACHINE INTERACTION LAB:", [])]
+    if args.suite == "controls":
+        suites = [("kitchen_controls_validation", "KITCHEN CONTROLS:", [])]
     if args.suite == "sponge":
         suites[0][2].append("--sponge-only")
     if args.suite == "all":
@@ -89,12 +94,32 @@ def main():
             ("kitchen_recipe_validation", "LOCKED KITCHEN RECIPES:", []),
             ("collection_lifecycle_validation", "COLLECTION LIFECYCLE:", []),
             ("world_sizing_validation", "WORLD SIZING:", []),
+            ("machine_gameplay_validation", "MACHINE GAMEPLAY:", []),
+            ("machine_interaction_lab_validation", "MACHINE INTERACTION LAB:", []),
+            ("kitchen_controls_validation", "KITCHEN CONTROLS:", []),
         ]
     for name, marker, flags in suites:
         checked_run(base + ["--script", f"res://tests/{name}.gd", "--",
                     f"--test-output-dir={artifacts}"] + flags,
                     artifacts / f"{name}.log", args.timeout, marker)
     if args.graphical:
+        if args.suite in ("all", "controls"):
+            checked_run([engine, "--path", str(project), "--script",
+                         "res://tests/kitchen_controls_validation.gd", "--",
+                         f"--test-output-dir={artifacts}"],
+                        artifacts / "graphical_kitchen_controls.log", args.timeout, "KITCHEN CONTROLS:")
+        if args.suite == "controls":
+            print(f"ALL REQUESTED REGRESSIONS PASSED. Logs/captures: {artifacts}", flush=True)
+            return
+        if args.suite in ("all", "machine"):
+            for name, marker in [("machine_gameplay_validation", "MACHINE GAMEPLAY:"),
+                                 ("machine_interaction_lab_validation", "MACHINE INTERACTION LAB:")]:
+                checked_run([engine, "--path", str(project), "--script", f"res://tests/{name}.gd", "--",
+                             f"--test-output-dir={artifacts}", f"--lab-output={artifacts / 'machine-lab'}"],
+                            artifacts / f"graphical_{name}.log", args.timeout, marker)
+        if args.suite == "machine":
+            print(f"ALL REQUESTED REGRESSIONS PASSED. Logs/captures: {artifacts}", flush=True)
+            return
         if args.suite in ("all", "merge-flavor"):
             checked_run([engine, "--path", str(project), "--script",
                          "res://tests/merge_flavor_validation.gd", "--",

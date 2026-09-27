@@ -27,10 +27,10 @@ func _empty_board() -> void:
 func _test_single_spawns() -> void:
 	await _reset()
 	var panel = sandbox._debug_spawn_panel
-	_check(OS.is_debug_build() and panel != null and not panel.body.visible, "debug panel exists and starts collapsed")
+	_check(OS.has_feature("editor") and panel != null and not panel.body.visible, "editor panel exists and starts collapsed")
 	var ids: Array = []
-	for index in range(panel.selector.item_count):
-		ids.append(panel.selector.get_item_metadata(index))
+	for choice in panel.choices:
+		ids.append(choice.get_meta("creation_id"))
 	_check(ids == BOARD, "selector uses exactly nine canonical content IDs")
 	for id in BOARD:
 		var before := _snapshot()
@@ -132,6 +132,9 @@ func _touch(index: int, pressed: bool, point: Vector2) -> void:
 
 
 func _test_ui_input() -> void:
+	# Match mobile embedded popups. Headless still has an artificial 64px window;
+	# selection therefore needs the graphical suite's real portrait window.
+	root.gui_embed_subwindows = true
 	await _reset()
 	var panel = sandbox._debug_spawn_panel
 	var point: Vector2 = panel.toggle.get_global_rect().get_center()
@@ -139,7 +142,7 @@ func _test_ui_input() -> void:
 	_mouse(false, point)
 	await process_frame
 	_check(panel.body.visible and sandbox.pieces.get_child_count() == 0, "opening debug panel does not drop gameplay piece")
-	panel.selector.select(4) # Sponge; selection alone must not affect gameplay.
+	panel.select_creation(4) # Sponge; selection alone must not affect gameplay.
 	var before := _snapshot()
 	point = panel.spawn_one.get_global_rect().get_center()
 	_mouse(true, point)
@@ -157,16 +160,33 @@ func _test_ui_input() -> void:
 	_mouse(true, point)
 	_mouse(false, point)
 	_check(sandbox.pieces.get_child_count() == 0 and _snapshot() == before, "opening selector never advances current/NEXT")
-	panel.selector.get_popup().hide()
+	panel.picker.hide()
+	await process_frame
+	await process_frame
+	# Native indexed touch, with touch-to-mouse emulation deliberately disabled.
+	_touch(5, true, point)
+	_touch(5, false, point)
+	await process_frame
+	_check(panel.picker.visible, "touch opens the native creation picker")
+	await process_frame
+	if DisplayServer.get_name() != "headless":
+		_picker_touch(panel, 1)
+		_check(panel.selected_index == 1 and not panel.picker.visible and _snapshot() == before,
+			"touch selects Flour and closes picker without a gameplay DROP")
+	else:
+		print("NOT EXECUTED headless: popup selection (synthetic screen clamps it to 8px); covered by graphical suite")
+	panel.select_creation(4)
 	# A gameplay owner remains the owner when another finger uses developer UI.
-	_touch(8, true, sandbox._chamber_rect.get_center())
+	var chamber_point := Vector2(sandbox._chamber_rect.get_center().x, sandbox._chamber_rect.end.y - 50.0)
+	_touch(8, true, chamber_point)
+	sandbox._advance_machine_drop(0.63)
 	before = _snapshot()
 	point = panel.spawn_one.get_global_rect().get_center()
 	_touch(9, true, point)
 	_touch(9, false, point)
 	_check(sandbox._active_drop_touch_index == 8 and sandbox.pieces.get_child_count() == 2
 		and _snapshot() == before, "debug UI does not steal active gameplay touch or advance normal queue")
-	_touch(8, false, sandbox._chamber_rect.get_center())
+	_touch(8, false, chamber_point)
 	await _empty_board()
 	before = _snapshot()
 	point = panel.spawn_pair.get_global_rect().get_center()
@@ -189,7 +209,20 @@ func _test_ui_input() -> void:
 		and _snapshot() == before, "blank panel padding consumes mouse/touch without gameplay ownership")
 
 
+func _picker_touch(panel, index: int) -> void:
+	for pressed in [true, false]:
+		var event := InputEventScreenTouch.new()
+		event.index = 5
+		event.pressed = pressed
+		event.position = panel.choices[index].get_global_rect().get_center()
+		panel.picker.push_input(event, true)
+
+
 func _test_release_guard() -> void:
+	var script = load("res://scripts/prototype/debug_spawn_panel.gd")
+	for features in [[true, false, true], [false, false, false], [false, true, true], [true, true, true]]:
+		_check(script.enabled_for_features(features[0], features[1]) == features[2],
+			"editor/dev_tools feature matrix: %s; debug/release alone grant nothing" % str(features))
 	sandbox.queue_free()
 	await process_frame
 	sandbox = SANDBOX.instantiate()
@@ -227,9 +260,23 @@ func _portraits_debug() -> void:
 		sandbox._debug_spawn_panel.toggle.button_pressed = true
 		await process_frame
 		_check(sandbox.get_viewport_rect().encloses(sandbox._debug_spawn_panel.get_global_rect()), "expanded developer panel fits portrait %s" % size)
+		var panel = sandbox._debug_spawn_panel
+		for index in range(9):
+			panel.selector.pressed.emit()
+			await process_frame
+			await process_frame
+			_check(panel.picker.get_visible_rect().encloses(panel.choices[index].get_global_rect())
+				and panel.choices[index].size.y >= 44, "picker choice has a visible 44px touch target: %d" % index)
+			if index == 8:
+				await _capture("debug_picker_%sx%s" % [size.x, size.y])
+			var before := _snapshot()
+			_picker_touch(panel, index)
+			_check(panel.selected_index == index and not panel.picker.visible and _snapshot() == before,
+				"portrait touch selection works without extra drops: %d" % index)
+			await process_frame
 		for id in [&"wheat", &"sponge_cake", &"decorated_cake", &"fancy_cake"]:
 			await _empty_board()
-			sandbox._debug_spawn_panel.selector.select(BOARD.find(id))
+			sandbox._debug_spawn_panel.select_creation(BOARD.find(id))
 			var spawned: Array = sandbox._debug_spawn_creations(id, 1)
 			_check(spawned.size() == 1, "portrait debug spawn: " + String(id))
 			if spawned.size() == 1:

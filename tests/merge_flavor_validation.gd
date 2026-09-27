@@ -23,6 +23,9 @@ func _begin_custom(input: StringName) -> Dictionary:
 		"physical contact creates " + String(recipe.result))
 	_check(_flavors().size() == 1 and sandbox.presentation.merge_effects.get_child_count() == 1,
 		"one approved effect; no old/static effect underneath")
+	_check(sandbox.machine_presentation.machine.action == &"excited"
+		or sandbox.machine_presentation._reaction_pending,
+		"successful physical merge requests approved excited reaction without delaying rewards")
 	if _flavors().is_empty():
 		return {}
 	var effect: MergeFlavorEffect = _flavors()[0]
@@ -178,7 +181,7 @@ func _production_portraits() -> void:
 			var before := _baseline(result)
 			var sources: Array = sandbox._debug_spawn_creations(input, 2)
 			for source in sources:
-				source.position.y += sandbox._chamber_rect.size.y * 0.57
+				source.position.y = sandbox._chamber_rect.position.y + source.radius + sandbox._chamber_rect.size.y * 0.57
 			_check(await _wait_for(func(): return sandbox.result_spawns.get(result, 0) > before.spawns),
 				"phone capture uses real physical merge")
 			if _flavors().is_empty():

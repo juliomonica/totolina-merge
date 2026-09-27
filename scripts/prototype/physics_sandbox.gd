@@ -3,6 +3,8 @@ extends Node2D
 const PIECE_SCENE := preload("res://scenes/prototype/piece.tscn")
 const GAMEPLAY_CONFIG := preload("res://scripts/config/gameplay_configuration.gd")
 const KITCHEN_CONTENT := preload("res://config/worlds/kitchen/kitchen_content.tres")
+const MACHINE_PRESENTATION := preload("res://scripts/presentation/kitchen_machine_presentation.gd")
+const MACHINE_TIMELINE := preload("res://scripts/presentation/machine_drop_presentation.gd")
 const INITIAL_SEED := 12345
 const MAX_PULSE_CHARGE := 100
 const PULSE_CHARGE_PER_MERGE := 12
@@ -44,13 +46,14 @@ const RESTART_HOLD_SECONDS := 1.0
 @onready var upcoming_preview: TextureRect = $DebugUI/HUDPanel/Margin/Row/Information/Upcoming/Ingredient
 @onready var recipe_progress_panel: PanelContainer = $DebugUI/RecipeProgressPanel
 @onready var recipe_progress_row: HBoxContainer = $DebugUI/RecipeProgressPanel/Margin/Row
-@onready var controls_panel: PanelContainer = $DebugUI/ControlsPanel
-@onready var pulse_left_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseLeft
-@onready var restart_button: Button = $DebugUI/ControlsPanel/Margin/Row/Restart
-@onready var pulse_right_button: Button = $DebugUI/ControlsPanel/Margin/Row/PulseRight
-@onready var restart_hold_feedback: PanelContainer = $DebugUI/RestartHoldFeedback
-@onready var restart_hold_instruction: Label = $DebugUI/RestartHoldFeedback/Margin/Content/Instruction
-@onready var restart_hold_progress: ProgressBar = $DebugUI/RestartHoldFeedback/Margin/Content/HoldProgress
+@onready var gameplay_controls: Control = $DebugUI/GameplayControls
+@onready var controls_panel: Control = $DebugUI/GameplayControls/SafeBounds/BottomControls
+@onready var pulse_left_button: Button = $DebugUI/GameplayControls/SafeBounds/BottomControls/PushLeft
+@onready var restart_button: Button = $DebugUI/GameplayControls/SafeBounds/BottomControls/Restart
+@onready var pulse_right_button: Button = $DebugUI/GameplayControls/SafeBounds/BottomControls/PushRight
+@onready var restart_hold_progress: TextureProgressBar = $DebugUI/GameplayControls/SafeBounds/BottomControls/Restart/HoldProgress
+@onready var exit_run_button: Button = $DebugUI/GameplayControls/SafeBounds/ExitRun
+@onready var exit_run_modal: Control = $DebugUI/GameplayControls/ExitRunModal
 @onready var pulse_feedback_label: Label = $DebugUI/PulseFeedback
 @onready var max_merge_feedback_label: Label = $DebugUI/MaxMergeFeedback
 @onready var new_creation_feedback_label: Label = $DebugUI/NewCreationFeedback
@@ -91,10 +94,17 @@ var _discovery_save_path := DISCOVERY_SAVE_PATH
 var _recipe_progress_slots: Array[PanelContainer] = []
 var _restart_hold_active := false
 var _restart_hold_elapsed := 0.0
-# Ownership lasts until this finger ends, even though the drop commits on press.
+# Ownership lasts until this finger ends; press accepts one timed machine cycle.
 var _active_drop_touch_index := -1
 var _held_drop_touch_indices: Dictionary = {}
 var _debug_spawn_panel: Control
+var machine_presentation: Node2D
+var _drop_cycle_active := false
+var _drop_cycle_elapsed := 0.0
+var _drop_released := false
+var _drop_target_x := 0.0
+var _drop_creation_id: StringName
+var _exit_run_paused := false
 
 var danger_active := false
 var danger_timer := 0.0
@@ -115,14 +125,25 @@ func _ready() -> void:
 	_rng.seed = INITIAL_SEED
 	_current_creation_id = _roll_spawn_creation_id()
 	_raw_next_creation_id = _roll_spawn_creation_id()
+	machine_presentation = $KitchenMachine
+	# Retain legacy resources/nodes for the separate, later cleanup audit.
+	$KitchenBowl.hide()
+	tolina_visual.hide()
+	hud_panel.hide()
+	$BackgroundCanvas/KitchenBackground.texture = load(MACHINE_TIMELINE.ENV + "background.png")
+	pieces.z_index = 1
 	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
 	_build_recipe_progress_strip()
+	machine_presentation.decorate_collection(recipe_progress_panel, recipe_progress_row)
 	_reset_restart_hold_feedback()
 	restart_button.button_down.connect(_begin_restart_hold)
 	restart_button.button_up.connect(_cancel_restart_hold)
 	play_again_button.pressed.connect(_restart_sandbox)
 	pulse_left_button.pressed.connect(_activate_pulse.bind(Vector2.LEFT))
 	pulse_right_button.pressed.connect(_activate_pulse.bind(Vector2.RIGHT))
+	exit_run_button.pressed.connect(_open_exit_run)
+	exit_run_modal.get_node("SafeBounds/Panel/Resume").pressed.connect(_resume_run)
+	exit_run_modal.get_node("SafeBounds/Panel/Confirm").pressed.connect(_confirm_exit_run)
 	get_viewport().size_changed.connect(_layout_chamber)
 	_layout_chamber()
 	_create_debug_spawn_panel()
@@ -131,6 +152,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _exit_run_paused:
+		return
 	if _restart_hold_active:
 		_restart_hold_elapsed = minf(
 			RESTART_HOLD_SECONDS,
@@ -154,8 +177,9 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if game_over:
+	if game_over or _exit_run_paused:
 		return
+	_advance_machine_drop(delta)
 
 	if _merge_cooldown_remaining > 0.0:
 		_merge_cooldown_remaining = maxf(0.0, _merge_cooldown_remaining - delta)
@@ -177,6 +201,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _exit_run_paused:
+		return
 	if event is InputEventScreenTouch:
 		# Observe endings BEFORE GUI routing: a finger may finish over a button.
 		# Do not consume here; Controls keep their ordinary touch behavior.
@@ -199,6 +225,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _exit_run_paused:
+		return
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.device == InputEvent.DEVICE_ID_EMULATION:
@@ -206,7 +234,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if touch.pressed and not touch.canceled:
 			if not _held_drop_touch_indices.has(touch.index):
 				_held_drop_touch_indices[touch.index] = true
-				if _active_drop_touch_index == -1 and not game_over and _chamber_rect.has_area():
+				if _active_drop_touch_index == -1 and not game_over and not _drop_cycle_active and _is_drop_area(touch.position):
 					_active_drop_touch_index = touch.index
 					_drop_piece(touch.position.x)
 			get_viewport().set_input_as_handled()
@@ -218,7 +246,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var click := event as InputEventMouseButton
 		if click.device == InputEvent.DEVICE_ID_EMULATION:
 			return # Ignore touchscreen mouse copies only here, AFTER normal GUI input.
-		if click.button_index == MOUSE_BUTTON_LEFT and click.pressed and _active_drop_touch_index == -1:
+		if click.button_index == MOUSE_BUTTON_LEFT and click.pressed and _active_drop_touch_index == -1 and _is_drop_area(click.position):
 			_drop_piece(click.position.x)
 			get_viewport().set_input_as_handled()
 
@@ -228,9 +256,18 @@ func _clear_drop_touch_state() -> void:
 	_held_drop_touch_indices.clear()
 
 
+func _is_drop_area(point: Vector2) -> bool:
+	return _chamber_rect.has_point(point) and point.y >= machine_presentation.release_position(point.x).y
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
 		_clear_drop_touch_state()
+		if is_node_ready():
+			_cancel_restart_hold()
+			gameplay_controls.clear_press_states()
+		if not _exit_run_paused:
+			_cancel_machine_drop()
 
 
 func _draw() -> void:
@@ -242,9 +279,10 @@ func _draw() -> void:
 		if danger_active
 		else GAMEPLAY_CONFIG.DANGER_LINE_INACTIVE_COLOR
 	)
-	draw_line(
-		Vector2(_chamber_rect.position.x, _danger_threshold_y),
-		Vector2(_chamber_rect.end.x, _danger_threshold_y),
+	machine_presentation.show_danger_line(
+		_chamber_rect.position.x,
+		_chamber_rect.end.x,
+		_danger_threshold_y,
 		danger_line_color,
 		GAMEPLAY_CONFIG.DANGER_LINE_WIDTH
 	)
@@ -284,15 +322,14 @@ func _apply_presentation_configuration() -> void:
 		"shadow_outline_size",
 		GAMEPLAY_CONFIG.DANGER_TEXT_SHADOW_OUTLINE_SIZE
 	)
-	restart_button.custom_minimum_size.x = (
-		GAMEPLAY_CONFIG.RESTART_BUTTON_MINIMUM_WIDTH_PIXELS
-	)
 
 
 func _layout_chamber() -> void:
 	var viewport_size := get_viewport_rect().size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
+	if _drop_cycle_active:
+		_cancel_machine_drop() # Do not deliver to an old viewport's latched target.
 
 	var chamber_height := (
 		viewport_size.y * GAMEPLAY_CONFIG.CHAMBER_HEIGHT_VIEWPORT_RATIO
@@ -412,47 +449,23 @@ func _layout_safe_ui(viewport_size: Vector2) -> void:
 	hud_panel.offset_bottom = (
 		hud_panel.offset_top + GAMEPLAY_CONFIG.HUD_HEIGHT_PIXELS
 	)
-	controls_panel.offset_left = (
-		safe_insets.x + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
-	)
-	controls_panel.offset_top = -(
-		safe_insets.w
-		+ GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
-		+ GAMEPLAY_CONFIG.CONTROLS_HEIGHT_PIXELS
-	)
-	controls_panel.offset_right = -(
-		safe_insets.z + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
-	)
-	controls_panel.offset_bottom = -(
-		safe_insets.w + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
-	)
+	gameplay_controls.set_safe_insets(safe_insets)
 	recipe_progress_panel.offset_left = (
 		safe_insets.x + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
 	)
 	recipe_progress_panel.offset_top = (
-		controls_panel.offset_top
+		controls_panel.get_global_rect().position.y - viewport_size.y
 		- GAMEPLAY_CONFIG.RECIPE_PROGRESS_CONTROLS_GAP_PIXELS
-		- GAMEPLAY_CONFIG.RECIPE_PROGRESS_HEIGHT_PIXELS
+		- MACHINE_PRESENTATION.collection_height(viewport_size.x)
 	)
 	recipe_progress_panel.offset_right = -(
 		safe_insets.z + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS
 	)
 	recipe_progress_panel.offset_bottom = (
-		controls_panel.offset_top
+		controls_panel.get_global_rect().position.y - viewport_size.y
 		- GAMEPLAY_CONFIG.RECIPE_PROGRESS_CONTROLS_GAP_PIXELS
 	)
-	var restart_feedback_size: Vector2 = (
-		GAMEPLAY_CONFIG.RESTART_HOLD_FEEDBACK_SIZE_PIXELS
-	)
-	restart_hold_feedback.offset_left = -restart_feedback_size.x * 0.5
-	restart_hold_feedback.offset_right = restart_feedback_size.x * 0.5
-	restart_hold_feedback.offset_bottom = (
-		recipe_progress_panel.offset_top
-		- GAMEPLAY_CONFIG.RESTART_HOLD_FEEDBACK_GAP_PIXELS
-	)
-	restart_hold_feedback.offset_top = (
-		restart_hold_feedback.offset_bottom - restart_feedback_size.y
-	)
+	gameplay_controls.place_hold_progress(recipe_progress_panel)
 	result_safe_margin.add_theme_constant_override(
 		"margin_left",
 		ceili(safe_insets.x + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS)
@@ -469,12 +482,16 @@ func _layout_safe_ui(viewport_size: Vector2) -> void:
 		"margin_bottom",
 		ceili(safe_insets.w + GAMEPLAY_CONFIG.UI_EDGE_MARGIN_PIXELS)
 	)
+	machine_presentation.layout(_chamber_rect, floor.position.y, _wall_thickness,
+		Rect2(Vector2(safe_insets.x + 8.0, safe_insets.y + 8.0),
+			viewport_size - Vector2(safe_insets.x + safe_insets.z + 16.0, safe_insets.y + safe_insets.w + 16.0)), viewport_size,
+		gameplay_controls.layout_footer_background(viewport_size))
 	_layout_debug_spawn_panel()
 
 
 func _debug_tools_enabled() -> bool:
-	# Native compile-time build type, never a saved setting or player toggle.
-	return OS.is_debug_build()
+	# Explicit feature tags, never a generic debug build or saved player setting.
+	return preload("res://scripts/prototype/debug_spawn_panel.gd").tools_enabled()
 
 
 func _create_debug_spawn_panel() -> void:
@@ -491,7 +508,10 @@ func _create_debug_spawn_panel() -> void:
 
 func _layout_debug_spawn_panel() -> void:
 	if is_instance_valid(_debug_spawn_panel):
-		_debug_spawn_panel.place(hud_panel.get_global_rect())
+		var header_end := maxf(_danger_threshold_y + 8.0,
+			machine_presentation.release_position(0).y + 30.0)
+		_debug_spawn_panel.place(Rect2(Vector2.ZERO,
+			Vector2(recipe_progress_panel.get_global_rect().end.x, header_end)))
 
 
 func _debug_spawn_creations(creation_id: StringName, count: int) -> Array[PrototypePiece]:
@@ -503,9 +523,14 @@ func _debug_spawn_creations(creation_id: StringName, count: int) -> Array[Protot
 		return []
 	var radius := _chamber_rect.size.x * KITCHEN_CONTENT.effective_radius_ratio(definition)
 	var inset := _wall_thickness * 0.5
-	var bounds := Rect2(Vector2(left_wall.position.x + inset, _chamber_rect.position.y + inset),
+	# Developer pieces should be visible below the new machinery too. Very large
+	# pairs may need the original upper chamber space; never resize the physics.
+	var visible_top := minf(machine_presentation.release_position(0).y,
+		floor.position.y - radius * 2.0 * count - inset * 2.0)
+	var spawn_top := maxf(_chamber_rect.position.y, visible_top)
+	var bounds := Rect2(Vector2(left_wall.position.x + inset, spawn_top + inset),
 		Vector2(right_wall.position.x - left_wall.position.x - 2.0 * inset,
-			floor.position.y - _chamber_rect.position.y - 2.0 * inset))
+			floor.position.y - spawn_top - 2.0 * inset))
 	var active := pieces.get_children().filter(func(piece): return piece is PrototypePiece)
 	var positions: Array[Vector2] = _debug_spawn_panel.spawn_positions(bounds, radius, count, active)
 	_debug_spawn_panel.show_space_warning(positions.size() != count)
@@ -519,6 +544,7 @@ func _debug_spawn_creations(creation_id: StringName, count: int) -> Array[Protot
 func _debug_clear_board() -> void:
 	if not _debug_tools_enabled():
 		return
+	_cancel_machine_drop() # Clear Board must not leave a scheduled real drop behind.
 	_clear_recipe_resolution()
 	for piece in pieces.get_children():
 		if piece is PrototypePiece:
@@ -559,6 +585,8 @@ func _update_next_preview() -> void:
 	next_preview.custom_minimum_size = Vector2(preview_diameter, preview_diameter)
 	var upcoming := KITCHEN_CONTENT.creation_for_id(_raw_next_creation_id)
 	upcoming_preview.texture = upcoming.texture if upcoming != null else null
+	if is_instance_valid(machine_presentation) and upcoming != null:
+		machine_presentation.sync_items(definition.texture, upcoming.texture)
 	next_preview_ingredient.texture = definition.texture
 	next_preview_ingredient.visible = true
 	_next_preview_style.bg_color = Color.TRANSPARENT
@@ -605,23 +633,13 @@ func _build_recipe_progress_strip() -> void:
 		artwork.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		visual_layer.add_child(artwork)
 
-		var unknown_marker := Label.new()
+		var unknown_marker := TextureRect.new()
 		unknown_marker.name = "Unknown"
 		unknown_marker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		unknown_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		unknown_marker.text = "?"
-		unknown_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unknown_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		unknown_marker.add_theme_color_override("font_color", Color("d7cadb"))
-		unknown_marker.add_theme_color_override(
-			"font_outline_color",
-			Color("2a172e")
-		)
-		unknown_marker.add_theme_constant_override("outline_size", 3)
-		unknown_marker.add_theme_font_size_override(
-			"font_size",
-			GAMEPLAY_CONFIG.RECIPE_PROGRESS_UNKNOWN_FONT_SIZE
-		)
+		unknown_marker.texture = MACHINE_PRESENTATION.MYSTERY
+		unknown_marker.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		unknown_marker.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		visual_layer.add_child(unknown_marker)
 	_update_recipe_progress()
 
@@ -635,7 +653,7 @@ func _update_recipe_progress(
 		var discovered := discovered_creation_ids.has(definition.id)
 		var slot := _recipe_progress_slots[index]
 		var artwork := slot.find_child("Artwork", true, false) as TextureRect
-		var unknown_marker := slot.find_child("Unknown", true, false) as Label
+		var unknown_marker := slot.find_child("Unknown", true, false) as TextureRect
 		slot.set_meta("discovered", discovered)
 		slot.tooltip_text = (
 			tr(String(definition.display_name_key))
@@ -645,6 +663,7 @@ func _update_recipe_progress(
 		artwork.material = (
 			null if discovered else recipe_locked_silhouette_material
 		)
+		artwork.visible = discovered
 		unknown_marker.visible = not discovered
 		slot.add_theme_stylebox_override(
 			"panel",
@@ -656,25 +675,16 @@ func _update_recipe_progress(
 			tween.tween_property(slot, "modulate", Color.WHITE, 0.45)
 
 
-func _recipe_progress_slot_style(discovered: bool) -> StyleBoxFlat:
+func _recipe_progress_slot_style(_discovered: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = (
-		Color(0.31, 0.10, 0.32, 0.96)
-		if discovered
-		else Color(0.10, 0.07, 0.13, 0.94)
-	)
-	style.border_color = (
-		Color(1.0, 0.82, 0.40, 0.9)
-		if discovered
-		else Color(0.42, 0.35, 0.46, 0.8)
-	)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(8)
+	# The approved bubble/mystery textures carry their own outline. No small
+	# legacy card behind them; discovery/highlight behavior remains unchanged.
+	style.bg_color = Color.TRANSPARENT
 	return style
 
 
 func _drop_piece(viewport_x: float) -> void:
-	if game_over or _chamber_rect.size == Vector2.ZERO:
+	if game_over or _exit_run_paused or _drop_cycle_active or _chamber_rect.size == Vector2.ZERO:
 		return
 
 	var definition: CreationDefinition = KITCHEN_CONTENT.creation_for_id(
@@ -699,18 +709,48 @@ func _drop_piece(viewport_x: float) -> void:
 		- wall_clearance
 		- GAMEPLAY_CONFIG.SPAWN_HORIZONTAL_INSET_PIXELS
 	)
-	var drop_x := clampf(viewport_x, inner_left + radius, inner_right - radius)
-	var drop_y := (
-		_chamber_rect.position.y
-		+ _chamber_rect.size.y * GAMEPLAY_CONFIG.SPAWN_HEIGHT_CHAMBER_RATIO
-		+ radius
-		+ wall_clearance
-	)
+	# Keep both the nozzle and the actual body inside the existing drop bounds.
+	var inset := maxf(radius, 38.4 * machine_presentation.machine.scale.x)
+	_drop_target_x = clampf(viewport_x, inner_left + inset, inner_right - inset)
+	_drop_creation_id = definition.id
+	_drop_cycle_active = true
+	_drop_cycle_elapsed = 0.0
+	_drop_released = false
+	machine_presentation.begin_drop(_drop_target_x)
 
-	presentation.show_throw()
-	var spawned_piece := _spawn_piece(definition, Vector2(drop_x, drop_y))
+
+func _advance_machine_drop(delta: float) -> void:
+	if not _drop_cycle_active:
+		machine_presentation.advance(delta)
+		return
+	# Split long ticks at the contact moment so the feeder receives newly selected
+	# artwork before advancing its incoming-preview track. No animation callback
+	# owns this transaction, and it runs once even if cosmetics have been stopped.
+	var remaining := delta
+	if not _drop_released:
+		var before_contact := minf(remaining, maxf(0.0, MACHINE_TIMELINE.CONTACT_SECONDS - _drop_cycle_elapsed))
+		machine_presentation.advance(before_contact)
+		_drop_cycle_elapsed += before_contact
+		remaining -= before_contact
+		if _drop_cycle_elapsed + 0.000001 >= MACHINE_TIMELINE.CONTACT_SECONDS:
+			_drop_released = true
+			_commit_machine_drop()
+	machine_presentation.advance(remaining)
+	_drop_cycle_elapsed += remaining
+	if _drop_cycle_elapsed >= MACHINE_TIMELINE.LENGTHS[0]:
+		_drop_cycle_active = false
+		machine_presentation.finish_drop()
+		_update_next_preview()
+
+
+func _commit_machine_drop() -> void:
+	var definition := KITCHEN_CONTENT.creation_for_id(_drop_creation_id)
+	var spawned_piece := _spawn_piece(definition, machine_presentation.release_position(_drop_target_x))
+	if spawned_piece == null:
+		return
 	_current_creation_id = _raw_next_creation_id
 	_raw_next_creation_id = _roll_spawn_creation_id()
+	machine_presentation.machine.set_incoming(KITCHEN_CONTENT.creation_for_id(_raw_next_creation_id).texture)
 	_update_debug_ui()
 	_request_recipe_evaluation()
 	_register_creation(
@@ -719,6 +759,17 @@ func _drop_piece(viewport_x: float) -> void:
 		spawned_piece.radius,
 		false
 	)
+
+
+func _cancel_machine_drop() -> void:
+	_drop_cycle_active = false
+	_drop_cycle_elapsed = 0.0
+	_drop_released = false
+	_drop_creation_id = &""
+	if is_instance_valid(machine_presentation):
+		machine_presentation.reset(not game_over)
+		if is_node_ready():
+			_update_next_preview()
 
 
 func _spawn_piece(
@@ -798,7 +849,7 @@ func _queue_merge_pair(
 
 
 func _try_resolve_next_merge() -> void:
-	if game_over or _recipe_evaluation_pending or _merge_resolution_pending or _merge_cooldown_remaining > 0.0:
+	if game_over or _exit_run_paused or _recipe_evaluation_pending or _merge_resolution_pending or _merge_cooldown_remaining > 0.0:
 		return
 
 	while not _queued_merge_pairs.is_empty():
@@ -887,6 +938,8 @@ func _resolve_merge(
 ) -> void:
 	if game_over or generation != _merge_generation:
 		return
+	if _exit_run_paused:
+		return # Keep the latched pair; Resume reevaluates it once, without rewards now.
 	if _recipe_evaluation_pending:
 		_evaluate_recipes()
 		return
@@ -935,6 +988,7 @@ func _resolve_merge(
 		safe_result_position,
 		minf(result_radius * 3.0, _chamber_rect.size.x * 0.45)
 	)
+	machine_presentation.show_merge_reaction()
 	_merge_cooldown_remaining = MERGE_RESOLUTION_COOLDOWN_SECONDS
 	_merge_resolution_pending = false
 	_award_creation(result_definition, safe_result_position, result_radius)
@@ -1122,7 +1176,7 @@ func _request_recipe_evaluation() -> void:
 
 
 func _evaluate_recipes() -> void:
-	if not _recipe_evaluation_pending or game_over or not is_inside_tree():
+	if not _recipe_evaluation_pending or game_over or _exit_run_paused or not is_inside_tree():
 		return
 	_recipe_evaluation_pending = false
 	# Batch contacts outside the physics callback; preserve pending contact pairs
@@ -1198,6 +1252,10 @@ func _clear_recipe_resolution() -> void:
 
 
 func _exit_tree() -> void:
+	if _exit_run_paused:
+		_exit_run_paused = false
+		get_tree().paused = false
+	_cancel_machine_drop()
 	_clear_drop_touch_state()
 	_clear_recipe_resolution()
 
@@ -1411,7 +1469,9 @@ func _has_dangerous_piece() -> bool:
 func _enter_game_over() -> void:
 	_clear_drop_touch_state()
 	_reset_restart_hold_feedback()
+	gameplay_controls.clear_press_states()
 	game_over = true
+	_cancel_machine_drop()
 	_clear_recipe_resolution()
 	danger_active = true
 	danger_timer = GAMEPLAY_CONFIG.DANGER_GRACE_SECONDS
@@ -1425,7 +1485,7 @@ func _enter_game_over() -> void:
 
 
 func _activate_pulse(direction: Vector2) -> void:
-	if game_over or pulse_charge < MAX_PULSE_CHARGE:
+	if game_over or _exit_run_paused or pulse_charge < MAX_PULSE_CHARGE:
 		return
 	var horizontal_direction := signf(direction.x)
 	if is_zero_approx(horizontal_direction):
@@ -1475,13 +1535,12 @@ func _activate_pulse(direction: Vector2) -> void:
 
 
 func _begin_restart_hold() -> void:
-	if game_over:
+	if game_over or _exit_run_paused:
 		return
 	_restart_hold_active = true
 	_restart_hold_elapsed = 0.0
 	restart_hold_progress.value = 0.0
-	restart_hold_instruction.text = tr("GAME_RESTART_HOLD")
-	restart_hold_feedback.visible = true
+	restart_hold_progress.visible = true
 
 
 func _cancel_restart_hold() -> void:
@@ -1494,13 +1553,16 @@ func _reset_restart_hold_feedback() -> void:
 	_restart_hold_active = false
 	_restart_hold_elapsed = 0.0
 	restart_hold_progress.value = 0.0
-	restart_hold_feedback.visible = false
-	restart_button.text = tr("GAME_RESTART")
+	restart_hold_progress.visible = false
 
 
 func _restart_sandbox() -> void:
+	if _exit_run_paused:
+		return
+	_cancel_machine_drop()
 	_clear_drop_touch_state()
 	_reset_restart_hold_feedback()
+	gameplay_controls.clear_press_states()
 	_clear_recipe_resolution()
 	for piece in pieces.get_children():
 		piece.queue_free()
@@ -1534,6 +1596,7 @@ func _restart_sandbox() -> void:
 	_rng.seed = INITIAL_SEED
 	_current_creation_id = _roll_spawn_creation_id()
 	_raw_next_creation_id = _roll_spawn_creation_id()
+	machine_presentation.reset()
 	_update_recipe_progress()
 	_request_recipe_evaluation()
 	queue_redraw()
@@ -1544,7 +1607,43 @@ func _update_debug_ui() -> void:
 	_update_next_preview()
 	score_label.text = "Score: %d" % score
 	pulse_label.text = "Pulse: %d%%" % pulse_charge
+	machine_presentation.update_hud(score, pulse_charge)
 	danger_label.visible = danger_active
 	var pulse_available := pulse_charge >= MAX_PULSE_CHARGE and not game_over
 	pulse_left_button.disabled = not pulse_available
 	pulse_right_button.disabled = not pulse_available
+	restart_button.disabled = game_over
+	exit_run_button.disabled = game_over
+
+
+func _open_exit_run() -> void:
+	if _exit_run_paused or game_over:
+		return
+	_cancel_restart_hold()
+	_clear_drop_touch_state()
+	gameplay_controls.clear_press_states()
+	_exit_run_paused = true
+	exit_run_modal.show()
+	get_tree().paused = true
+
+
+func _resume_run() -> void:
+	if not _exit_run_paused:
+		return
+	gameplay_controls.clear_press_states()
+	exit_run_modal.hide()
+	_exit_run_paused = false
+	get_tree().paused = false
+	# Deferred calls also run in a paused SceneTree. Retain their inputs and
+	# resume arbitration here instead of letting them consume/reward behind UI.
+	if _recipe_evaluation_pending or _merge_resolution_pending:
+		_recipe_evaluation_pending = true
+		_evaluate_recipes.call_deferred()
+
+
+func _confirm_exit_run() -> void:
+	if not _exit_run_paused:
+		return
+	# Scene teardown releases contacts and accepted drops; it also releases our
+	# pause. No reset/save deletion and no application quit.
+	get_tree().change_scene_to_file("res://scenes/menu/main_menu.tscn")

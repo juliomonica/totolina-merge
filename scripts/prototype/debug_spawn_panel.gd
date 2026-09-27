@@ -6,7 +6,10 @@ signal clear_requested
 signal layout_requested
 
 var content: WorldContentConfiguration
-var selector: OptionButton
+var selector: Button
+var picker: PopupPanel
+var choices: Array[Button] = []
+var selected_index := 0
 var spawn_one: Button
 var spawn_pair: Button
 var clear_board: Button
@@ -15,8 +18,16 @@ var body: VBoxContainer
 var status: Label
 
 
+static func enabled_for_features(editor: bool, dev_tools: bool) -> bool:
+	return editor or dev_tools
+
+
+static func tools_enabled() -> bool:
+	return enabled_for_features(OS.has_feature("editor"), OS.has_feature("dev_tools"))
+
+
 func _ready() -> void:
-	if not OS.is_debug_build():
+	if not tools_enabled():
 		hide()
 		queue_free()
 		return
@@ -39,19 +50,41 @@ func _ready() -> void:
 	toggle = Button.new()
 	toggle.text = "Debug spawn +"
 	toggle.toggle_mode = true
-	toggle.custom_minimum_size.y = 36
+	toggle.custom_minimum_size.y = 44
 	column.add_child(toggle)
 	body = VBoxContainer.new()
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.visible = false
 	column.add_child(body)
-	selector = OptionButton.new()
-	selector.custom_minimum_size.y = 40
-	selector.fit_to_longest_item = false
-	for definition in content.collection_creations():
-		selector.add_item(tr(String(definition.display_name_key)))
-		selector.set_item_metadata(selector.item_count - 1, definition.id)
+	# PopupMenu (OptionButton) expects mouse events. This project deliberately
+	# disables touch-to-mouse emulation: use native touch-aware Buttons instead.
+	selector = Button.new()
+	selector.custom_minimum_size.y = 44
+	selector.clip_text = true
 	body.add_child(selector)
+	picker = PopupPanel.new()
+	picker.name = "CreationPicker"
+	var picker_style := style.duplicate() as StyleBoxFlat
+	picker_style.bg_color.a = 1.0 # Keep names readable over the active chamber/HUD.
+	picker.add_theme_stylebox_override("panel", picker_style)
+	add_child(picker)
+	var scroll := preload("res://scripts/presentation/touch_scroll_container.gd").new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	picker.add_child(scroll)
+	var options := VBoxContainer.new()
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	options.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scroll.add_child(options)
+	for definition in content.collection_creations():
+		var choice := _button(tr(String(definition.display_name_key)), options)
+		choice.set_meta("creation_id", definition.id)
+		choice.pressed.connect(select_creation.bind(choices.size()))
+		choices.append(choice)
+	select_creation(0)
+	selector.pressed.connect(func():
+		var available := get_viewport_rect().size - Vector2(32, 64)
+		picker.popup_centered(Vector2i(minf(328, available.x), minf(460, available.y)))
+	)
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(row)
@@ -77,15 +110,21 @@ func _ready() -> void:
 func _button(text: String, parent: Control) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size.y = 40
+	button.custom_minimum_size.y = 44
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(button)
 	return button
 
 
+func select_creation(index: int) -> void:
+	selected_index = index
+	selector.text = choices[index].text + " ▾"
+	picker.hide()
+
+
 func _request_spawn(count: int) -> void:
-	if OS.is_debug_build() and selector.selected >= 0:
-		spawn_requested.emit(StringName(selector.get_item_metadata(selector.selected)), count)
+	if tools_enabled() and selected_index >= 0:
+		spawn_requested.emit(choices[selected_index].get_meta("creation_id"), count)
 
 
 func place(hud_rect: Rect2) -> void:

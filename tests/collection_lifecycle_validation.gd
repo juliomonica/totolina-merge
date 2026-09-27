@@ -14,10 +14,11 @@ func _check_strip(ids: Array) -> void:
 		var id: StringName = DISPLAY_IDS[index]
 		var discovered: bool = ids.has(id)
 		var artwork: TextureRect = slot.find_child("Artwork", true, false)
-		var unknown: Label = slot.find_child("Unknown", true, false)
+		var unknown: TextureRect = slot.find_child("Unknown", true, false)
 		_check(slot.is_visible_in_tree() and slot.get_meta("creation_id") == id and slot.get_meta("discovered") == discovered
 			and artwork.texture == CONTENT.creation_for_id(id).texture
 			and artwork.material == (null if discovered else sandbox.recipe_locked_silhouette_material)
+			and artwork.visible == discovered and unknown.texture == sandbox.MACHINE_PRESENTATION.MYSTERY
 			and unknown.visible != discovered,
 			"canonical slot %d / discovery state: %s" % [index + 1, id])
 
@@ -67,6 +68,7 @@ func _test_collection_order() -> void:
 			root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_IGNORE
 			root.content_scale_size = size
 			await create_timer(0.1).timeout
+			sandbox.machine_presentation.collection_scroll.scroll_horizontal = 0
 			for ids in [[&"cake_mix"], [&"wheat", &"cake_batter"], DISPLAY_IDS]:
 				sandbox.discovered_creation_ids.assign(ids)
 				sandbox._update_recipe_progress()
@@ -78,8 +80,17 @@ func _test_collection_order() -> void:
 					and panel.end.y <= sandbox.controls_panel.get_global_rect().position.y,
 					"whole strip fits viewport above fixed controls: %s" % size)
 				for slot in sandbox._recipe_progress_slots:
-					_check(panel.encloses(slot.get_global_rect()) and slot.size.x >= 24.0,
-						"portrait slot stays visible inside strip, at least 24px wide: %s" % size)
+					var expected_diameter: float = 512.0 * sandbox.machine_presentation.collection_icon_scale * size.x / 500.0
+					_check(absf(slot.size.x - expected_diameter) <= 1.0 and slot.size.x >= 50.0,
+						"approved large icon size is not reduced to fit all nine: %s" % size)
+				var clip: Control = sandbox.machine_presentation.collection_viewport
+				_check(clip.clip_contents and panel.encloses(clip.get_global_rect())
+					and sandbox.recipe_progress_row.get_global_rect().end.x > panel.end.x,
+					"canonical track intentionally extends beyond the masked viewport")
+				_check(clip.get_node("CollectionMasks").z_index > sandbox.recipe_progress_row.z_index
+					and is_equal_approx(clip.get_node("CollectionMasks/RightMask").position.x, clip.size.x + 4.0),
+					"approved masks remain above icons at both viewport edges")
+			await _test_carousel_input("%sx%s" % [size.x, size.y])
 		sandbox.discovered_creation_ids.assign([&"wheat", &"flour", &"cake_batter"])
 	sandbox._restart_sandbox()
 	await process_frame
@@ -89,6 +100,79 @@ func _test_collection_order() -> void:
 	await process_frame
 	_check(not sandbox.game_over and sandbox.score == 0, "Play Again resets run")
 	_check_strip([&"wheat", &"flour", &"cake_batter"])
+
+
+func _test_carousel_input(label: String) -> void:
+	var view = sandbox.machine_presentation
+	var scroll: ScrollContainer = view.collection_scroll
+	var rect: Rect2 = scroll.get_global_rect()
+	var before := [sandbox._piece_sequence, sandbox._rng.state, sandbox._current_creation_id]
+	_check(scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER
+		and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED
+		and not scroll.get_h_scroll_bar().visible, "horizontal-only native carousel, no visible scrollbar")
+	scroll.scroll_horizontal = 0
+	await process_frame
+	var point := rect.get_center() + Vector2(rect.size.x * 0.35, 0)
+	var touch := InputEventScreenTouch.new()
+	touch.index = 27
+	touch.position = point
+	touch.pressed = true
+	root.push_input(touch, true)
+	for index in range(8):
+		var drag := InputEventScreenDrag.new()
+		drag.index = 27
+		drag.relative = Vector2(-24, 2)
+		point += drag.relative
+		drag.position = point
+		root.push_input(drag, true)
+		await process_frame
+	touch.position = point
+	touch.pressed = false
+	root.push_input(touch, true)
+	_check(scroll.scroll_horizontal > 60 and scroll.scroll_vertical == 0, "indexed touch browses horizontally, never vertically: " + label)
+	await _capture("carousel_" + label + "_drag")
+	# Wheel over the MASK itself must still reach the underlying ScrollContainer.
+	scroll.scroll_horizontal = 0
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	wheel.position = Vector2(rect.position.x + 2, rect.get_center().y)
+	root.push_input(wheel, true)
+	_check(scroll.scroll_horizontal > 0, "fixed mask does not intercept mouse wheel")
+	var pan := InputEventPanGesture.new()
+	pan.position = rect.get_center()
+	pan.delta = Vector2(4, 0)
+	var previous := scroll.scroll_horizontal
+	root.push_input(pan, true)
+	_check(scroll.scroll_horizontal > previous, "native trackpad pan browses carousel")
+	scroll.scroll_horizontal = 100000
+	await process_frame
+	var last: Control = sandbox._recipe_progress_slots[-1]
+	_check(rect.encloses(last.get_global_rect()), "final Fancy Cake bubble fully reachable inside viewport")
+	await _capture("carousel_" + label + "_last")
+	# Start a drag ON the left mask, and move back toward the first slot.
+	point = Vector2(rect.position.x + 2, rect.get_center().y)
+	touch.position = point
+	touch.pressed = true
+	root.push_input(touch, true)
+	previous = scroll.scroll_horizontal
+	for index in range(6):
+		var drag := InputEventScreenDrag.new()
+		drag.index = 27
+		drag.relative = Vector2(24, 0)
+		point += drag.relative
+		drag.position = point
+		root.push_input(drag, true)
+	touch.position = point
+	touch.pressed = false
+	root.push_input(touch, true)
+	_check(scroll.scroll_horizontal < previous, "mask edge also passes indexed touch drag")
+	_check([sandbox._piece_sequence, sandbox._rng.state, sandbox._current_creation_id] == before
+		and sandbox._active_drop_touch_index == -1 and not sandbox._drop_cycle_active,
+		"all carousel input leaves gameplay drops, queue and RNG untouched")
+	scroll.scroll_horizontal = 0
+	await process_frame
+	_check(rect.encloses(sandbox._recipe_progress_slots[0].get_global_rect()), "first Wheat bubble fully reachable")
 
 
 func _check_wheat_only_run() -> void:
@@ -147,6 +231,7 @@ func _test_legacy_filter() -> void:
 func _run() -> void:
 	await _test_legacy_filter()
 	await _test_collection_order()
+	await _test_carousel_input("native")
 	await _test_discovery_spawn_independence()
 	await _test_navigation()
 	print("COLLECTION LIFECYCLE: %d checks, %d failures" % [checks, failures])

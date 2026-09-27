@@ -185,11 +185,12 @@ func _test_runtime_sizing() -> void:
 	await _reset()
 	sandbox._current_creation_id = &"fancy_cake"
 	sandbox._drop_piece(-10000)
+	sandbox._advance_machine_drop(0.20)
 	var dropped: PrototypePiece = _live(&"fancy_cake")[0]
 	_check(dropped.position.x - dropped.radius >= sandbox.left_wall.position.x + sandbox._wall_thickness * 0.5 - 0.001,
 		"drop clamp uses effective large radius")
-	_check(is_equal_approx(dropped.position.y, sandbox._chamber_rect.position.y + dropped.radius
-		+ sandbox._wall_thickness * CONFIG.SPAWN_WALL_CLEARANCE_MULTIPLIER), "spawn height uses same effective radius")
+	_check(is_equal_approx(dropped.position.y, sandbox.machine_presentation.release_position(dropped.position.x).y),
+		"real body releases at the visible nozzle; collider sizing is unchanged")
 
 
 func _render_representatives() -> void:

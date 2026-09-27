@@ -13,6 +13,8 @@ Focused gameplay touch validation: use `--suite touch --graphical`.
 Focused progressive spawn validation: use `--suite spawn --graphical`.
 Focused nine-slot discovery validation: use `--suite collection --graphical`.
 Focused developer-spawn validation: use `--suite debug-spawn --graphical`.
+Focused production machine + approved machine lab: use `--suite machine --graphical`.
+Focused Kitchen gameplay controls: use `--suite controls --graphical`.
 The runner copies the current working tree into a temporary directory and isolates
 all discovery saves and imports. It reports the artifact directory and retains logs.
 It fails on parser/resource/runtime errors even when the engine returns exit 0.
@@ -41,7 +43,7 @@ It fails on parser/resource/runtime errors even when the engine returns exit 0.
   restart/Play Again do not write or erase that saved discovery state.
 - Current cumulative sizing, generic validation, unchanged 2.18 concentric art.
 - Main Menu, gameplay, Recipe Collection, localization, danger/grace and Push.
-- Gameplay input: one press-committed drop owned by the first valid finger index;
+- Gameplay input: one press-accepted machine cycle owned by the first valid finger index;
   1/2/4 fingers, repeated begins/drags, cancellation, GUI-consumed releases, no
   already-held secondary promotion, and restart/Play Again/scene-exit cleanup.
 - Desktop clicks, synthetic duplicate input, actual engine mouse/touch emulation
@@ -49,7 +51,8 @@ It fails on parser/resource/runtime errors even when the engine returns exit 0.
 
 Touch tests inject indexed events through Godot's viewport/GUI input routing;
 emulation tests also use `Input.parse_input_event`. They preserve the existing
-press-to-drop behavior (no post-press drag aiming) and do not represent physical
+press-to-drop behavior (0.20s shared contact release, no post-press drag aiming)
+and do not represent physical
 iPhone testing. Emulation flags are changed only within isolated test processes.
 
 `--graphical` also captures the three effects and late results with debug
@@ -58,6 +61,31 @@ collision circles, sparse collection states and sizing at 390×844, 405×720,
 
 Tests write only explicit temporary discovery files. The audit sandbox delegates
 to the production resolver and is never referenced by production scenes.
+
+## Production machine integration
+
+`machine_gameplay_validation.gd` verifies the real 0.20s release / 0.62s input
+cycle, at-most-once body creation, current/next/RNG handoff including long ticks,
+no fake falling item, depth order, live score, preview scales, press/reaction
+priority, native physics-step playback and lifecycle cancellation before/after
+release. Native scene save/reopen checks edit feeder/shutter/token/cat/eyes/arms/
+previews/nozzle properties, replay every action and confirm reset preserves the
+saved transforms. Mask Control offsets survive resizing at all three portrait
+widths. These are Inspector-equivalent serialization tests, not automated editor
+clicks. Portrait captures show idle, release, feeder, reaction and results;
+rendered depth probes cover the inner floor and front lip without covering rails.
+They also check shared front-arm/shoulder and eye/ear proportions, full-bleed
+rear/front bounds, unchanged floor/nozzle anchors, and a logical safe-inset fixture.
+Collection portrait checks now require the approved larger shared scale with
+nine fixed canonical slots on a clipped track, rather than nine shrunken icons
+all visible at once. Mask position/depth and sparse discovery remain covered;
+native touch/wheel/pan scrolling reaches both endpoints without dropping pieces.
+Existing touch tests advance the accepted machine cycle before inspecting the
+body; they still route actual indexed events through GUI/unhandled input.
+`machine_interaction_lab_validation.gd` retains the independently approved lab
+timeline/pose/render coverage. Both are in the full suite; no production test
+loads the lab as gameplay. See `docs/MACHINE_INTERACTION_LAB.md` for integration
+ownership, nozzle release-height change and temporary collection presentation.
 
 ## Developer-only spawn panel
 
@@ -68,8 +96,8 @@ rewards, interruption/teardown, edge fitting and all three portrait sizes.
 approved shared timeline output. Both are included in the full suite.
 See `docs/MERGE_EFFECT_LAB.md` for timing/source ownership.
 
-Run gameplay from the editor or a **debug** development export. Open **Debug spawn +**
-below the upper-right HUD; tap it again to collapse the panel. The selector uses
+Run gameplay from the editor or an export explicitly tagged **dev_tools**. Open **Debug spawn +**
+below the new machine header/danger line; tap it again to collapse the panel. The selector uses
 the nine current CreationDefinitions in collection order, with existing localized
 creation names. No new player-facing strings or permanent settings are involved.
 
@@ -91,15 +119,82 @@ discoveries should not affect your development profile. The permanent test runne
 isolates saves automatically. Enable Godot's Visible Collision Shapes/debug
 collision display to compare actual collider/art sizes.
 
-Release safety: PhysicsSandbox asks native `OS.is_debug_build()` before creating
-any panel and again at every spawn/clear entry point. The panel also rejects a
-non-debug engine if instantiated independently. There is no saved toggle or scene
-node to accidentally leave enabled. Scripts may be included in the export pack,
-but the UI is never instantiated and actions are inert in a release build.
+Export safety: PhysicsSandbox and the panel require `OS.has_feature("editor")`
+**or** `OS.has_feature("dev_tools")` at creation/action entry points. A normal
+debug export and a normal release export both omit UI and reject actions. A
+deliberately tagged development export enables tools even if exported in release
+mode. No saved setting enables them.
+
+Existing Android/iOS presets/signing are untouched. In **Project → Export**,
+duplicate the intended platform preset for development, select the duplicate,
+open **Features → Custom Features**, and add `dev_tools` (comma-separated if
+other features exist). Keep it OUT of production presets. Remove the tag and
+re-export for an ordinary build. Merely checking “Export With Debug” does not
+enable this panel. Actual exported-device feature checks remain a manual test.
+
+The selector is a touch-aware Button opening a native PopupPanel with nine
+44px-high creation Buttons; no global touch-to-mouse emulation is enabled.
+Tests use embedded popups (the mobile path), verify real indexed selection,
+and confirm no extra gameplay drops. Headless has a synthetic 64px screen that
+clips the popup even when embedded: actual popup selection is explicitly skipped
+there and exercised by the graphical suite at all three portrait sizes.
 
 The focused test covers all nine single spawns, the three flavor-effect pairs,
 Fancy Cake's non-merging pair, state/save isolation, clear/pending-merge cleanup,
 mouse and indexed-touch UI routing, and 12 collision-debug captures at the three
 portrait sizes. `debug_spawn_release_sandbox.gd` is a test-only override returning
-false from the build probe to exercise the disabled path; this is **not** a real
-release-export test. Validate a release build on-device before distribution.
+false from the feature probe to exercise the disabled path, alongside the
+editor/dev_tools truth table; this is **not** a real exported-binary test.
+Validate both tagged development and untagged builds on-device before distribution.
+
+Production collection tests additionally inject horizontal touch drags (including
+starting on edge masks), wheel and pan gestures at 390×844, 405×720 and 540×960.
+They check fixed canonical slots, mystery/real artwork, endpoint reachability,
+hidden scrollbar, no vertical motion, and unchanged drop/RNG state. The native
+ScrollContainer keeps desktop scrolling; a local touch adapter updates its
+scroll position because this project's Godot 4.7 input has mouse emulation off.
+There is no custom inertia or snap system. Machine tests also render a body-layer
+depth probe proving lower-floor overlap while side rails remain foreground.
+
+## Kitchen gameplay-control integration
+
+Run the dedicated controls gate in the same isolated-copy workflow:
+
+```sh
+python3 -B tests/run_kitchen_regressions.py --godot /Applications/Godot.app/Contents/MacOS/Godot --suite controls
+python3 -B tests/run_kitchen_regressions.py --godot /Applications/Godot.app/Contents/MacOS/Godot --suite controls --graphical
+```
+
+`kitchen_controls_validation.gd` exercises the scene-authored Push, radial
+Restart and Exit Run controls through Godot mouse/indexed-touch routing:
+
+- Push normal/pressed textures, valid release exactly once, directional impulse,
+  cancellation outside the target and multi-finger ownership without extra drops.
+- The unchanged one-second Restart hold, continuous clockwise TextureProgressBar,
+  early-release cancellation/reset, complete hold once and real process-clock
+  completion. The radial textures replace the horizontal progress presentation.
+- Exit Run pauses gameplay and blocks background drops, Push, Restart and
+  collection input. Resume preserves score, RNG, pieces and accepted machine
+  transactions; deferred merge pairs remain paused and continue once on resume.
+- Confirm returns to Main Menu through existing scene navigation, unpauses the
+  tree and does not terminate the application.
+- Portrait layout and safe-inset fixtures at 390×844, 405×720 and 540×960, with
+  idle/hold/modal captures when graphical rendering is enabled.
+- Footer join captures and contrasting-backdrop pixel probes verify frame/background
+  edge contact and coverage to the screen bottom, including simulated safe insets.
+  Footer sprites retain uniform scale; Exit retains its 52px target above Totolina.
+
+The focused suite is included in the full regression gate. Keep the separate
+touch, collection, machine and merge-effect lab gates: control integration must
+not change their gameplay/timing behavior. Graphical captures are desktop checks,
+not physical iPhone/Android testing. Test on-device finger coverage, safe areas,
+scrolling and press cancellation before release. Supplied controls/modal art
+contains baked English lettering, including **EXIT TO MENU** for the Main Menu
+action. Tooltips do not translate those image pixels; the extra destination
+caption is intentionally absent.
+See `docs/PRESENTATION_TUNING_GUIDE.md` for the editable scene/node paths.
+
+The machine graphical gate also renders real resting bubbles at both wall/floor
+corners. An opaque-pixel comparison with/without foreground artwork detects
+overwide masks, while the existing body-layer probes verify that vertical rails
+still occlude correctly. The physical floor and artwork calibration stay fixed.

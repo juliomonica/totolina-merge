@@ -138,6 +138,7 @@ func _test_reset_and_rng() -> void:
 	sandbox._restart_sandbox()
 	var next: StringName = sandbox._raw_next_creation_id
 	sandbox._drop_piece(_x(0.5))
+	sandbox._advance_machine_drop(0.63)
 	_check(sandbox._current_creation_id == next
 		and sandbox.next_preview_ingredient.texture == CONTENT.creation_for_id(next).texture, "drop advances buffered preview")
 	_check(not sandbox.get_script().get_script_method_list().any(func(m): return m.name == "_complete_auto_craft"), "no automatic execution path")
@@ -154,7 +155,11 @@ func _test_danger_push() -> void:
 	var piece := _spawn(&"wheat", 0.5)
 	sandbox.pulse_charge = 100
 	sandbox._activate_pulse(Vector2.RIGHT)
-	await create_timer(0.1).timeout
+	# Observe integrated physics, not an idle timer that can include the long
+	# scene-instantiation frame on a cold/headless renderer.
+	for index in range(4):
+		await physics_frame
+	await process_frame
 	_check(sandbox.pulse_charge == 0 and piece.linear_velocity.x > 0, "Push still applies horizontal impulse and consumes charge")
 	piece.freeze = true
 	piece.position.y = sandbox._danger_threshold_y - piece.radius - 1

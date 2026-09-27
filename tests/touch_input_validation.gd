@@ -38,6 +38,7 @@ func _reproduce() -> void:
 	await _reset()
 	for index in [7, 3, 9, 2]:
 		_touch(index, true, _point())
+	sandbox._advance_machine_drop(0.63)
 	print("MULTITOUCH REPRODUCTION: four presses produced %d drops" % sandbox._piece_sequence)
 	_check(sandbox._piece_sequence == 1, "four simultaneous fingers produce only one drop")
 
@@ -48,6 +49,7 @@ func _test_touch_ownership() -> void:
 		var position := _point()
 		for index in range(7, 7 + count):
 			_touch(index, true, position + Vector2((index - 7) * 20, 0))
+		sandbox._advance_machine_drop(0.63)
 		_check(sandbox._piece_sequence == 1 and sandbox._active_drop_touch_index == 7,
 			"%d fingers: first valid nonzero index owns exactly one press-committed drop" % count)
 		var piece: PrototypePiece = sandbox.pieces.get_child(0)
@@ -72,6 +74,7 @@ func _test_touch_ownership() -> void:
 			"already-held secondary cannot be handed ownership")
 		_touch(11, false, position)
 		_touch(11, true, position)
+		sandbox._advance_machine_drop(0.63)
 		_check(sandbox._piece_sequence == 2 and sandbox._active_drop_touch_index == 11,
 			"release and NEW press starts the next drop")
 		_touch(11, false, position, true)
@@ -87,6 +90,7 @@ func _test_mouse_and_emulation() -> void:
 	_touch(4, true, position)
 	_mouse(true, position, InputEvent.DEVICE_ID_EMULATION)
 	_mouse(false, position, InputEvent.DEVICE_ID_EMULATION)
+	sandbox._advance_machine_drop(0.63)
 	_check(sandbox._piece_sequence == 1 and sandbox._active_drop_touch_index == 4,
 		"emulated mouse copies before/after real touch cannot double-drop or cancel")
 	_touch(4, false, position)
@@ -96,6 +100,7 @@ func _test_mouse_and_emulation() -> void:
 	_mouse(false, position)
 	_touch(0, true, position, false, InputEvent.DEVICE_ID_EMULATION)
 	_touch(0, false, position, false, InputEvent.DEVICE_ID_EMULATION)
+	sandbox._advance_machine_drop(0.63)
 	_check(sandbox._piece_sequence == 2 and sandbox._active_drop_touch_index == -1,
 		"physical mouse remains one click/one drop; synthetic touch copy ignored")
 	_mouse(true, position, 0, MOUSE_BUTTON_RIGHT)
@@ -104,6 +109,32 @@ func _test_mouse_and_emulation() -> void:
 	_touch(0, true, position)
 	_touch(0, false, position, false, InputEvent.DEVICE_ID_EMULATION)
 	_check(sandbox._active_drop_touch_index == 0, "synthetic touch release cannot cancel a real finger with the same index")
+
+
+func _test_machine_cycle_ownership() -> void:
+	await _reset()
+	var point := _point()
+	_touch(1, true, point)
+	_touch(1, false, point)
+	_touch(2, true, point) # First finger released, but machine has not released yet.
+	_check(sandbox._piece_sequence == 0 and sandbox._active_drop_touch_index == -1,
+		"press accepted, no immediate body; second finger cannot claim a busy machine")
+	sandbox._advance_machine_drop(0.20)
+	_touch(3, true, point)
+	_mouse(true, point)
+	_check(sandbox._piece_sequence == 1, "touch/mouse during return cannot enqueue another drop")
+	sandbox._advance_machine_drop(0.43)
+	_drag(2, point)
+	_touch(2, true, point)
+	_touch(3, true, point)
+	_check(sandbox._piece_sequence == 1 and not sandbox._drop_cycle_active,
+		"already-held secondary fingers are not promoted when machine returns to idle")
+	_touch(2, false, point)
+	_touch(2, true, point)
+	_check(sandbox._drop_cycle_active and sandbox._active_drop_touch_index == 2,
+		"release and fresh press can start the next machine cycle")
+	sandbox._advance_machine_drop(0.63)
+	_check(sandbox._piece_sequence == 2, "one accepted cycle equals exactly one additional body")
 
 
 func _test_engine_emulation() -> void:
@@ -119,18 +150,20 @@ func _test_engine_emulation() -> void:
 	for index in range(4):
 		var event := InputEventScreenTouch.new()
 		event.window_id = root.get_window_id()
-		event.position = _point()
+		# parse_input_event expects window pixels, unlike push_input(..., true).
+		event.position = root.get_final_transform() * _point()
 		event.index = index
 		event.pressed = true
 		Input.parse_input_event(event)
 	Input.flush_buffered_events()
 	await process_frame
+	sandbox._advance_machine_drop(0.63)
 	_check(sandbox._piece_sequence == 1 and sandbox._active_drop_touch_index == 0,
 		"actual engine mouse-from-touch emulation: four fingers still one drop")
 	for index in range(4):
 		var event := InputEventScreenTouch.new()
 		event.window_id = root.get_window_id()
-		event.position = _point()
+		event.position = root.get_final_transform() * _point()
 		event.index = index
 		Input.parse_input_event(event)
 	Input.flush_buffered_events()
@@ -144,12 +177,13 @@ func _test_engine_emulation() -> void:
 		var event := InputEventMouseButton.new()
 		event.window_id = root.get_window_id()
 		event.button_index = MOUSE_BUTTON_LEFT
-		event.position = _point()
+		event.position = root.get_final_transform() * _point()
 		event.global_position = event.position
 		event.pressed = pressed
 		Input.parse_input_event(event)
 	Input.flush_buffered_events()
 	await process_frame
+	sandbox._advance_machine_drop(0.63)
 	_check(sandbox._piece_sequence == 1 and sandbox._active_drop_touch_index == -1,
 		"actual engine touch-from-mouse emulation: one physical click still one drop")
 	Input.emulate_mouse_from_touch = previous_mouse
@@ -162,19 +196,21 @@ func _test_gui_and_cleanup() -> void:
 	var position := _point()
 	# Make an existing HUD Control explicitly consume its touch events in this
 	# fixture, proving cleanup is not dependent on reaching unhandled input.
-	sandbox.hud_panel.gui_input.connect(func(event: InputEvent):
+	sandbox.controls_panel.gui_input.connect(func(event: InputEvent):
 		if event is InputEventScreenTouch:
-			sandbox.hud_panel.accept_event()
+			sandbox.controls_panel.accept_event()
 	)
-	var hud_position: Vector2 = sandbox.hud_panel.get_global_rect().get_center()
+	var hud_position: Vector2 = sandbox.controls_panel.get_global_rect().position + Vector2(2, 2)
 	_touch(1, true, hud_position)
 	_check(sandbox._active_drop_touch_index == -1 and sandbox._piece_sequence == 0,
 		"GUI-handled touch never claims gameplay ownership")
 	_touch(1, false, hud_position)
 	_touch(5, true, position)
+	sandbox._advance_machine_drop(0.63)
 	_touch(5, false, hud_position)
 	_check(sandbox._active_drop_touch_index == -1, "primary release over consuming HUD still clears ownership")
 	_touch(6, true, position)
+	sandbox._advance_machine_drop(0.63)
 	sandbox.pulse_charge = 100
 	sandbox._update_debug_ui()
 	var push_position: Vector2 = sandbox.pulse_right_button.get_global_rect().get_center()
@@ -196,6 +232,7 @@ func _test_gui_and_cleanup() -> void:
 	_drag(6, position)
 	_check(sandbox._piece_sequence == before, "held finger cannot re-drop after restart via drag")
 	_touch(20, true, position)
+	sandbox._advance_machine_drop(0.63)
 	_check(sandbox._piece_sequence == before + 1, "new press works after restart")
 	sandbox._enter_game_over()
 	_check(sandbox._active_drop_touch_index == -1, "game over clears ownership")
@@ -225,6 +262,7 @@ func _run() -> void:
 	else:
 		await _test_touch_ownership()
 		await _test_mouse_and_emulation()
+		await _test_machine_cycle_ownership()
 		await _test_engine_emulation()
 		await _test_gui_and_cleanup()
 		await _reset()

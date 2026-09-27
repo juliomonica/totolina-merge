@@ -1,0 +1,515 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/kitchen_gameplay_controls.gd" id="controls"]
+[ext_resource type="Script" path="res://scripts/presentation/kitchen_control_button.gd" id="button"]
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="font"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/bottom_controls_background.png" id="back"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_left_base.png" id="left"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_left_base_pressed.png" id="left_down"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_left_label.png" id="left_label"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_left_label_pressed.png" id="left_label_down"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_right_base.png" id="right"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_right_base_pressed.png" id="right_down"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_right_label.png" id="right_label"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/push_right_label_pressed.png" id="right_label_down"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/restart_base.png" id="restart"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/restart_base_pressed.png" id="restart_down"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/restart_label.png" id="restart_label"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/push/restart_label_pressed.png" id="restart_label_down"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/restart/restart_hold_empty.png" id="ring_empty"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/restart/restart_hold_full.png" id="ring_full"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/exit/exit_to_menu_base.png" id="exit"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/controls/exit/exit_to_menu_base_pressed.png" id="exit_down"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/modals/exit_run/exit_run_panel.png" id="panel"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/modals/exit_run/exit_run_totolina.png" id="cat"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/modals/exit_run/exit_run_resume_button.png" id="resume"]
+[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ui/modals/exit_run/exit_run_confirm_button.png" id="confirm"]
+
+[sub_resource type="StyleBoxEmpty" id="empty"]
+
+[sub_resource type="Theme" id="theme"]
+default_font = ExtResource("font")
+default_font_size = 15
+
+[sub_resource type="AtlasTexture" id="left_fit"]
+atlas = ExtResource("left")
+region = Rect2(86, 25, 178, 99)
+
+[sub_resource type="AtlasTexture" id="left_down_fit"]
+atlas = ExtResource("left_down")
+region = Rect2(86, 25, 178, 99)
+
+[sub_resource type="AtlasTexture" id="right_fit"]
+atlas = ExtResource("right")
+region = Rect2(86, 25, 178, 99)
+
+[sub_resource type="AtlasTexture" id="right_down_fit"]
+atlas = ExtResource("right_down")
+region = Rect2(86, 25, 178, 99)
+
+[sub_resource type="AtlasTexture" id="left_label_fit"]
+atlas = ExtResource("left_label")
+region = Rect2(30, 19, 138, 31)
+
+[sub_resource type="AtlasTexture" id="left_label_down_fit"]
+atlas = ExtResource("left_label_down")
+region = Rect2(30, 19, 138, 31)
+
+[sub_resource type="AtlasTexture" id="right_label_fit"]
+atlas = ExtResource("right_label")
+region = Rect2(30, 19, 138, 31)
+
+[sub_resource type="AtlasTexture" id="right_label_down_fit"]
+atlas = ExtResource("right_label_down")
+region = Rect2(55, 34, 138, 31)
+
+[sub_resource type="AtlasTexture" id="restart_fit"]
+atlas = ExtResource("restart")
+region = Rect2(27, 26, 296, 97)
+
+[sub_resource type="AtlasTexture" id="restart_down_fit"]
+atlas = ExtResource("restart_down")
+region = Rect2(27, 26, 296, 97)
+
+[sub_resource type="AtlasTexture" id="restart_label_fit"]
+atlas = ExtResource("restart_label")
+region = Rect2(23, 29, 203, 40)
+
+[sub_resource type="AtlasTexture" id="restart_label_down_fit"]
+atlas = ExtResource("restart_label_down")
+region = Rect2(23, 29, 203, 40)
+
+[node name="GameplayControls" type="Control"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = SubResource("theme")
+script = ExtResource("controls")
+
+[node name="SafeBounds" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+
+[node name="BottomControls" type="Control" parent="SafeBounds"]
+layout_mode = 1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -68.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 0
+
+[node name="Background" type="Control" parent="SafeBounds/BottomControls"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+clip_contents = true
+
+[node name="Backing" type="ColorRect" parent="SafeBounds/BottomControls/Background"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.0314, 0.0902, 0.1569, 1)
+
+[node name="Artwork" type="Sprite2D" parent="SafeBounds/BottomControls/Background"]
+texture = ExtResource("back")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 8, 1080, 183)
+
+[node name="PushLeft" type="Button" parent="SafeBounds/BottomControls"]
+layout_mode = 1
+anchor_left = 0.055
+anchor_right = 0.265
+anchor_bottom = 1.0
+mouse_filter = 0
+focus_mode = 0
+tooltip_text = "GAME_PUSH_LEFT"
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+script = ExtResource("button")
+normal_art = SubResource("left_fit")
+pressed_art = SubResource("left_down_fit")
+normal_label = SubResource("left_label_fit")
+pressed_label = SubResource("left_label_down_fit")
+localized_label_key = &"GAME_PUSH_LEFT_LABEL"
+
+[node name="Base" type="TextureRect" parent="SafeBounds/BottomControls/PushLeft"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = SubResource("left_fit")
+
+[node name="LabelArt" type="TextureRect" parent="SafeBounds/BottomControls/PushLeft"]
+layout_mode = 1
+anchor_left = 0.16
+anchor_top = 0.5
+anchor_right = 0.84
+anchor_bottom = 0.5
+offset_top = -14.0
+offset_bottom = 10.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = SubResource("left_label_fit")
+
+[node name="LocalizedLabel" type="Label" parent="SafeBounds/BottomControls/PushLeft"]
+visible = false
+layout_mode = 1
+anchor_left = 0.04
+anchor_top = 0.08
+anchor_right = 0.96
+anchor_bottom = 0.92
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.94, 0.70, 1)
+theme_override_colors/font_outline_color = Color(0.02, 0.10, 0.14, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Restart" type="Button" parent="SafeBounds/BottomControls"]
+layout_mode = 1
+anchor_left = 0.3218
+anchor_right = 0.6782
+anchor_bottom = 1.0
+mouse_filter = 0
+focus_mode = 0
+tooltip_text = "GAME_RESTART"
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+script = ExtResource("button")
+normal_art = SubResource("restart_fit")
+pressed_art = SubResource("restart_down_fit")
+normal_label = SubResource("restart_label_fit")
+pressed_label = SubResource("restart_label_down_fit")
+localized_label_key = &"GAME_RESTART"
+
+[node name="Base" type="TextureRect" parent="SafeBounds/BottomControls/Restart"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = SubResource("restart_fit")
+
+[node name="LabelArt" type="TextureRect" parent="SafeBounds/BottomControls/Restart"]
+layout_mode = 1
+anchor_left = 0.10
+anchor_top = 0.5
+anchor_right = 0.90
+anchor_bottom = 0.5
+offset_top = -14.0
+offset_bottom = 10.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = SubResource("restart_label_fit")
+
+[node name="LocalizedLabel" type="Label" parent="SafeBounds/BottomControls/Restart"]
+visible = false
+layout_mode = 1
+anchor_left = 0.04
+anchor_top = 0.08
+anchor_right = 0.96
+anchor_bottom = 0.92
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.94, 0.70, 1)
+theme_override_colors/font_outline_color = Color(0.02, 0.10, 0.14, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PushRight" type="Button" parent="SafeBounds/BottomControls"]
+layout_mode = 1
+anchor_left = 0.735
+anchor_right = 0.945
+anchor_bottom = 1.0
+mouse_filter = 0
+focus_mode = 0
+tooltip_text = "GAME_PUSH_RIGHT"
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+script = ExtResource("button")
+normal_art = SubResource("right_fit")
+pressed_art = SubResource("right_down_fit")
+normal_label = SubResource("right_label_fit")
+pressed_label = SubResource("right_label_down_fit")
+localized_label_key = &"GAME_PUSH_RIGHT_LABEL"
+
+[node name="Base" type="TextureRect" parent="SafeBounds/BottomControls/PushRight"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = SubResource("right_fit")
+
+[node name="LabelArt" type="TextureRect" parent="SafeBounds/BottomControls/PushRight"]
+layout_mode = 1
+anchor_left = 0.16
+anchor_top = 0.5
+anchor_right = 0.84
+anchor_bottom = 0.5
+offset_top = -14.0
+offset_bottom = 10.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = SubResource("right_label_fit")
+
+[node name="LocalizedLabel" type="Label" parent="SafeBounds/BottomControls/PushRight"]
+visible = false
+layout_mode = 1
+anchor_left = 0.04
+anchor_top = 0.08
+anchor_right = 0.96
+anchor_bottom = 0.92
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.94, 0.70, 1)
+theme_override_colors/font_outline_color = Color(0.02, 0.10, 0.14, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HoldProgress" type="TextureProgressBar" parent="SafeBounds/BottomControls/Restart"]
+visible = false
+layout_mode = 1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -32.0
+offset_top = -116.0
+offset_right = 32.0
+offset_bottom = -52.0
+mouse_filter = 2
+step = 0.0
+fill_mode = 4
+texture_under = ExtResource("ring_empty")
+texture_progress = ExtResource("ring_full")
+radial_initial_angle = -90.0
+radial_fill_degrees = 360.0
+nine_patch_stretch = true
+
+[node name="ExitRun" type="Button" parent="SafeBounds"]
+layout_mode = 1
+anchor_left = 0.16
+anchor_right = 0.16
+offset_left = -26.0
+offset_right = 26.0
+offset_bottom = 52.0
+mouse_filter = 0
+focus_mode = 0
+tooltip_text = "GAME_EXIT_RUN"
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+script = ExtResource("button")
+normal_art = ExtResource("exit")
+pressed_art = ExtResource("exit_down")
+
+[node name="Base" type="TextureRect" parent="SafeBounds/ExitRun"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = ExtResource("exit")
+
+[node name="LabelArt" type="TextureRect" parent="SafeBounds/ExitRun"]
+layout_mode = 1
+anchor_left = 0.16
+anchor_top = 0.22
+anchor_right = 0.84
+anchor_bottom = 0.72
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ExitRunModal" type="Control" parent="."]
+process_mode = 3
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="Shade" type="ColorRect" parent="ExitRunModal"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.025, 0.04, 0.07, 0.76)
+
+[node name="SafeBounds" type="Control" parent="ExitRunModal"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+
+[node name="Panel" type="Control" parent="ExitRunModal/SafeBounds"]
+layout_mode = 1
+anchor_left = 0.06
+anchor_top = 0.20
+anchor_right = 0.94
+anchor_bottom = 0.80
+mouse_filter = 0
+
+[node name="Background" type="TextureRect" parent="ExitRunModal/SafeBounds/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("panel")
+expand_mode = 1
+stretch_mode = 0
+
+[node name="Totolina" type="TextureRect" parent="ExitRunModal/SafeBounds/Panel"]
+layout_mode = 1
+anchor_left = 0.08
+anchor_top = 0.04
+anchor_right = 0.92
+anchor_bottom = 0.62
+mouse_filter = 2
+texture = ExtResource("cat")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Resume" type="Button" parent="ExitRunModal/SafeBounds/Panel"]
+layout_mode = 1
+anchor_left = 0.15
+anchor_top = 0.63
+anchor_right = 0.85
+anchor_bottom = 0.79
+mouse_filter = 0
+focus_mode = 0
+tooltip_text = "GAME_RESUME"
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+script = ExtResource("button")
+normal_art = ExtResource("resume")
+pressed_art = ExtResource("resume")
+
+[node name="Base" type="TextureRect" parent="ExitRunModal/SafeBounds/Panel/Resume"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = ExtResource("resume")
+
+[node name="LabelArt" type="TextureRect" parent="ExitRunModal/SafeBounds/Panel/Resume"]
+layout_mode = 1
+anchor_left = 0.16
+anchor_top = 0.22
+anchor_right = 0.84
+anchor_bottom = 0.72
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Confirm" type="Button" parent="ExitRunModal/SafeBounds/Panel"]
+layout_mode = 1
+anchor_left = 0.15
+anchor_top = 0.80
+anchor_right = 0.85
+anchor_bottom = 0.96
+mouse_filter = 0
+focus_mode = 0
+tooltip_text = "GAME_EXIT_TO_MENU"
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+script = ExtResource("button")
+normal_art = ExtResource("confirm")
+pressed_art = ExtResource("confirm")
+
+[node name="Base" type="TextureRect" parent="ExitRunModal/SafeBounds/Panel/Confirm"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+texture = ExtResource("confirm")
+
+[node name="LabelArt" type="TextureRect" parent="ExitRunModal/SafeBounds/Panel/Confirm"]
+layout_mode = 1
+anchor_left = 0.16
+anchor_top = 0.22
+anchor_right = 0.84
+anchor_bottom = 0.72
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5

@@ -10,6 +10,47 @@ It is a plain constants script. Gameplay and presentation scripts preload it dir
 
 Use this file to tune the gameplay chamber, danger zone, magical bowl, ingredient artwork, and existing gameplay HUD layout. Avoid duplicating these values in scenes or feature scripts.
 
+### Current production machine presentation
+
+Kitchen now uses the approved shared Totolina/machine instead of the visible old
+bowl/HUD. The old bowl/Tolina/HUD constants and assets are deliberately retained
+for a separate cleanup audit; their legacy fitting sections below do **not**
+control the new machine. Production composition lives in
+`scripts/presentation/kitchen_machine_presentation.gd`, with the unchanged shared
+pose/timeline tracks in `scenes/presentation/machine_drop_presentation.tscn`.
+Use [PRESENTATION_TUNING_GUIDE.md](PRESENTATION_TUNING_GUIDE.md) for direct
+scene/Inspector edits; ordinary layout transforms are no longer constants.
+
+| Current setting | Purpose / safe tuning |
+| --- | --- |
+| `TopMachine/Current.scale = (0.110, 0.110)` | Bottom CURRENT feeder sprite scale; visual only, independent of body radius. |
+| `TopMachine/Next.scale = (0.105, 0.105)` | Top NEXT feeder sprite scale; visual only, keep within glass compartment. |
+| Shared `CONTACT_SECONDS = 0.20`, full-drop length `0.62` | Approved interaction timing. Gameplay owns a release clock using these same values; animation callbacks do not spawn. |
+| Shared `RELEASE_Y = 269` | Nozzle-local release outlet. Gameplay now creates the actual body at the displayed outlet, not at the old chamber-top spawn height. Moving the machine moves this delivery origin; check gameplay when tuning composition. |
+
+Rear/front fill the viewport width using matching header/chamber regions of the
+existing artwork (source Y seams 425 and 1595). The
+header keeps its pre-sync safe-area transform and nozzle delivery position; its
+upper backdrop extends into the otherwise unused margin. The visual front-interior floor anchor is now
+source Y=1595 (Inspector: `floor_edge_texture_y`), at the floor/footer seam.
+No physics boundary moves. The footer uses uniformly scaled, disjoint top/bottom
+art clips instead of vertical stretching. Its bottom touches the controls group's
+global top exactly; the full-width controls background fills from that shared
+seam to the device bottom. Background padding is cropped in the scene, with an
+opaque backing below translucent artwork; buttons retain their safe insets.
+The danger line remains at the exact original chamber-relative threshold (its
+distance from the header can differ by aspect ratio).
+
+Collection uses production-root exports `collection_icon_scale = 0.13`,
+`collection_pitch = 100`, `collection_end_padding = 56`, and 67-unit viewport height, scaled by viewport width / 500.
+All nine slots retain canonical metadata/discovery state in a clipped horizontal
+ScrollContainer. Touch drags, mouse wheel and trackpad pan browse the larger
+icons under fixed noninteractive edge masks. It does not compact/reorder or
+shrink nine icons to fit. All nine slots are reachable; mystery art remains in
+each undiscovered position. Recipe Collection navigation is unchanged.
+Controls and their safe-area offsets remain unchanged. See
+`docs/MACHINE_INTERACTION_LAB.md` for complete production/review ownership.
+
 Creation size curves are world/theme data in
 `res://config/worlds/kitchen/kitchen_content.tres`, using the reusable
 `WorldContentConfiguration` resource and its `CreationDefinition` subresources.
@@ -85,7 +126,7 @@ Boundary positions use normalized chamber coordinates: `0.0` is the chamber's to
 
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
-| `SPAWN_HEIGHT_CHAMBER_RATIO` | Additional spawn height measured down from the chamber top. | `0.0` | GAMEPLAY | The piece radius and wall clearance are added automatically. |
+| `SPAWN_HEIGHT_CHAMBER_RATIO` | Retained legacy chamber-top delivery setting. | `0.0` | LEGACY | Production machine release now uses its displayed nozzle outlet; this no longer positions player drops. |
 | `SPAWN_HORIZONTAL_INSET_PIXELS` | Extra left/right inset inside the physical walls. | `0.0` | GAMEPLAY | Increase to keep drops farther from walls. |
 | `SPAWN_WALL_CLEARANCE_MULTIPLIER` | Portion of wall thickness reserved between spawn centers and wall centers. | `0.5` | GAMEPLAY | `0.5` aligns limits with the inner wall surface. |
 
@@ -146,13 +187,13 @@ playtesting. Nonfinite cumulative overflow also falls back to the base.
 Very large finite curves are not automatically balanced to fit the chamber.
 
 `effective_radius_ratio(definition) × chamber width` drives drop clamping,
-spawn height, safe merge placement and the piece's unique `CircleShape2D.radius`.
+safe merge placement and the piece's unique `CircleShape2D.radius`.
 That same pixel radius enters the existing visual fitting:
 `sprite scale = radius × visual_diameter_scale × global_visual_scale / texture_extent`.
 Keep `visual_diameter_scale = 2.18` and global visual scale `1.0` for the current
 bubble art. Physics/body/collider node transforms and centering do not change.
-The radius is not derived from the 512×512 PNG. Preview sizing uses the same
-radius with its existing UI cap; collection/result icons remain UI-fitted.
+The radius is not derived from the 512×512 PNG. The current machine feeder uses
+the two independent preview scales above; collection/result icons remain UI-fitted.
 
 Changing the curve intentionally changes physical sizes and matching artwork.
 Rerun all eight physical recipes, wall/floor containment, Push, danger
@@ -237,6 +278,9 @@ The line is drawn at `_danger_threshold_y`. The label rectangle is anchored to t
 
 ## 3. Container/Bowl Visuals
 
+Legacy/recovery presentation only after machine integration; see the current
+production machine section above. These values do not fit the machine frame.
+
 All bowl constants are visual-only. They never change `StaticBody2D` positions or collision shapes.
 
 ### Automatic chamber-matching mode
@@ -293,9 +337,9 @@ curve; leave them at the calibrated defaults when tuning world percentages.
 
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
-| `INGREDIENT_GLOBAL_VISUAL_SCALE` | Multiplies all in-bowl ingredient artwork sizes. | `1.0` | VISUAL | Preview sizing follows this value. |
+| `INGREDIENT_GLOBAL_VISUAL_SCALE` | Multiplies all in-bowl ingredient artwork sizes. | `1.0` | VISUAL | Keep 1.0; machine previews have separate fitting. |
 | `INGREDIENT_VISUAL_OFFSET_PIXELS` | Base local offset of every ingredient visual. | `Vector2.ZERO` | VISUAL | Keep this at zero for centered bubble artwork. |
-| `INGREDIENT_PREVIEW_SCALE` | Additional scale for the NEXT preview only. | `1.0` | VISUAL | Keep near `1.0` so preview and spawned artwork remain comparable. |
+| `INGREDIENT_PREVIEW_SCALE` | Retained old HUD preview fitting. | `1.0` | LEGACY VISUAL | Machine feeder uses authored Current / Next Sprite2D scales. |
 
 Standardized circular bubble artwork stays centered on its physics body.
 The presentation layer does not translate visuals independently for floor
@@ -351,21 +395,50 @@ unrelated settings.
 
 These values control existing gameplay UI only. They do not create new UI systems.
 
+Current machine layout is authored in
+`scenes/presentation/machine_drop_presentation.tscn`: feeder scale `0.32`,
+position `(240,121)`, NEXT `(240,95)`, CURRENT `(240,180)`.
+Production-root exports set collection icon scale `0.13`, pitch `100`,
+height `67` at a 500-unit design width. The collection is a horizontal native
+ScrollContainer with local indexed-touch support (mouse emulation remains off).
+It preserves all nine canonical slots and clips under noninteractive fixed
+Control-anchored Sprite2D edge masks (offsets −4 / +4). Neither discovery nor scrolling changes slot order.
+The production frame's inner lower band and central front lip render behind bodies;
+56-source-pixel lower side masks keep vertical rails in front without hiding the
+legal resting area. The physical floor and source PNGs are unchanged. Shutter
+position `(190,211.5)` tucks its housing inside the glass; animation timing is unchanged.
+
+Debug Spawn is available only for the `editor` or explicit `dev_tools` feature.
+Debug exports alone do not enable it. Export presets/signing are unchanged;
+see `tests/README.md` for a separate development preset's custom-feature setup.
+
 | Name | Purpose | Current example | Effect | Safe tuning notes |
 | --- | --- | ---: | --- | --- |
 | `UI_EDGE_MARGIN_PIXELS` | Shared safe-area inset added around gameplay HUD and result overlay. | `16.0` | VISUAL | Do not reduce without notch/Dynamic Island testing. |
 | `HUD_HEIGHT_PIXELS` | Top HUD panel height. | `88.0` | VISUAL | Check NEXT, Pulse, and Score at narrow widths. |
-| `CONTROLS_HEIGHT_PIXELS` | Bottom Push/Restart controls height. | `52.0` | VISUAL | Preserve comfortable touch targets. |
-| `RECIPE_PROGRESS_HEIGHT_PIXELS` | Recipe progress strip height. | `46.0` | VISUAL | Larger values reduce free space above controls. |
+| `RECIPE_PROGRESS_HEIGHT_PIXELS` | Retained legacy strip height. | `46.0` | LEGACY VISUAL | Machine collection now uses the shared 67-unit height described above. |
 | `RECIPE_PROGRESS_CONTROLS_GAP_PIXELS` | Gap between recipe strip and controls. | `6.0` | VISUAL | Keep enough separation for readability. |
-| `RECIPE_PROGRESS_SLOT_MINIMUM_SIZE` | Minimum size of each creation slot. | `Vector2(24, 34)` | VISUAL | All nine slots must still fit at 390-pixel width. |
-| `RECIPE_PROGRESS_ARTWORK_INSET_PIXELS` | Padding inside every progress slot. | `2.0` | VISUAL | Large values make creation artwork too small. |
-| `RECIPE_PROGRESS_UNKNOWN_FONT_SIZE` | Font size of the locked `?` marker. | `12` | VISUAL | Check English, Spanish, and Chinese layouts. |
+| `RECIPE_PROGRESS_SLOT_MINIMUM_SIZE` | Initial legacy slot minimum before machine layout. | `Vector2(24, 34)` | LEGACY VISUAL | Machine layout replaces this with the shared larger bubble diameter, independent of slot count. |
+| `RECIPE_PROGRESS_ARTWORK_INSET_PIXELS` | Initial legacy artwork inset. | `2.0` | LEGACY VISUAL | Machine layout clears it so discovered and mystery bubble canvases match. |
+| `RECIPE_PROGRESS_UNKNOWN_FONT_SIZE` | Retained old locked `?` font size. | `12` | LEGACY VISUAL | Production now uses `collection_mystery_bubble.png`. |
 | `TOLINA_SAFE_SIZE` | Tolina's gameplay HUD width and height. | `Vector2(90, 96)` | VISUAL | Preserve aspect/readability and HUD separation. |
 | `TOLINA_HUD_GAP_PIXELS` | Horizontal gap between Tolina and the HUD panel. | `10.0` | VISUAL | Verify narrow screens after increasing. |
-| `RESTART_BUTTON_MINIMUM_WIDTH_PIXELS` | Minimum width of the hold-to-restart button. | `156.0` | VISUAL | Do not reduce touch readability. |
-| `RESTART_HOLD_FEEDBACK_SIZE_PIXELS` | Width and height of the temporary hold instruction above the controls. | `Vector2(190, 48)` | VISUAL | Keep wide enough for localized text without covering the recipe strip. |
-| `RESTART_HOLD_FEEDBACK_GAP_PIXELS` | Gap between the hold feedback and recipe strip. | `8.0` | VISUAL | Increase to move feedback farther from the player's finger. |
+
+Kitchen controls now live in `scenes/presentation/kitchen_gameplay_controls.tscn`.
+Edit its Control anchors/offsets for the 52-pixel bottom group, Push/Restart,
+52×52 Exit Run button and confirmation panel. Exit is centered at 16% of the safe
+width (left/right anchors 0.16, offsets −26/+26), above Totolina's head. Its safe
+top offset stays 0 and scale stays (1,1). The background cover/frame seam is
+calculated from the bottom group's top edge, not a second viewport ratio. The
+64-pixel clockwise TextureProgressBar replaces the old horizontal hold bar;
+its vertical placement follows the collection with the root Inspector property
+`restart_progress_gap = 8.0`. Its size and horizontal placement remain authored.
+SafeBounds wrappers receive the existing device insets; physics/chamber values
+are not UI positioning controls. See `PRESENTATION_TUNING_GUIDE.md` for node paths.
+
+The hold remains one second. Exit Run pauses physics, timers, accepted machine
+drops and deferred merges; Resume continues the same run. Confirm returns to
+Main Menu, never quits the app. No save, reward or discovery rules change.
 
 ## 6. Mobile Layout
 

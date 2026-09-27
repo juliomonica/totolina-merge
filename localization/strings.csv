@@ -8,7 +8,13 @@ COLLECTION_TITLE,Recipe Collection,Colección de recetas,食谱收藏
 COLLECTION_BACK,BACK,VOLVER,返回
 COLLECTION_UNKNOWN,Unknown,Desconocida,未知
 GAME_RESTART,RESTART,REINICIAR,重新开始
-GAME_RESTART_HOLD,Hold Restart,Mantén para reiniciar,按住重新开始
+GAME_PUSH_LEFT,Push left,Empujar a la izquierda,向左推
+GAME_PUSH_RIGHT,Push right,Empujar a la derecha,向右推
+GAME_PUSH_LEFT_LABEL,◀ PUSH,◀ EMPUJAR,◀ 推
+GAME_PUSH_RIGHT_LABEL,PUSH ▶,EMPUJAR ▶,推 ▶
+GAME_EXIT_RUN,Exit Run,Salir de la partida,离开本局
+GAME_RESUME,Resume,Continuar,继续
+GAME_EXIT_TO_MENU,Return to Main Menu,Volver al menú principal,返回主菜单
 DROP_CURRENT,DROP,SOLTAR,投放
 DROP_NEXT,NEXT,SIGUIENTE,下一个
 NEW_CREATION,NEW CREATION!,¡NUEVA CREACIÓN!,新作品！
