@@ -1,127 +1,112 @@
-[gd_resource type="Resource" script_class="WorldContentConfiguration" load_steps=34 format=3]
+[gd_resource type="Resource" script_class="WorldContentConfiguration" format=3 uid="uid://v2g6oprqo5c7"]
 
-[ext_resource type="Script" path="res://scripts/content/world_content_configuration.gd" id="1_world"]
-[ext_resource type="Script" path="res://scripts/content/creation_definition.gd" id="2_creation"]
-[ext_resource type="Script" path="res://scripts/content/merge_recipe.gd" id="3_recipe"]
-[ext_resource type="Script" path="res://scripts/content/spawn_stage.gd" id="spawn_stage"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/wheat.png" id="4_wheat"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/flour.png" id="5_flour"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/cake_mix.png" id="10_cake_mix"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/cake_batter.png" id="11_cake_batter"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/sponge_cake.png" id="12_sponge_cake"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/frosted_cake.png" id="13_frosted_cake"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/layer_cake.png" id="14_layer_cake"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/decorated_cake.png" id="15_decorated_cake"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/fancy_cake.png" id="16_fancy_cake"]
-
+[ext_resource type="Script" uid="uid://5gpeh66cnl2a" path="res://scripts/content/world_content_configuration.gd" id="1_world"]
+[ext_resource type="Script" uid="uid://bnt1dasy8da4o" path="res://scripts/content/creation_definition.gd" id="2_creation"]
+[ext_resource type="Script" uid="uid://blewc7qdmwrdd" path="res://scripts/content/merge_recipe.gd" id="3_recipe"]
+[ext_resource type="Texture2D" uid="uid://duvn1hkmexd37" path="res://assets/worlds/kitchen/ingredients/wheat.png" id="4_wheat"]
+[ext_resource type="Texture2D" uid="uid://gaohrycmsk0t" path="res://assets/worlds/kitchen/ingredients/flour.png" id="5_flour"]
+[ext_resource type="Texture2D" uid="uid://bsed5ajidd5i7" path="res://assets/worlds/kitchen/ingredients/cake_mix.png" id="10_cake_mix"]
+[ext_resource type="Texture2D" uid="uid://wssvaldu8r06" path="res://assets/worlds/kitchen/ingredients/cake_batter.png" id="11_cake_batter"]
+[ext_resource type="Texture2D" uid="uid://drdmispdhq178" path="res://assets/worlds/kitchen/ingredients/sponge_cake.png" id="12_sponge_cake"]
+[ext_resource type="Texture2D" uid="uid://qa6vfetnaxpe" path="res://assets/worlds/kitchen/ingredients/frosted_cake.png" id="13_frosted_cake"]
+[ext_resource type="Texture2D" uid="uid://c8kx3t0fvccc0" path="res://assets/worlds/kitchen/ingredients/layer_cake.png" id="14_layer_cake"]
+[ext_resource type="Texture2D" uid="uid://xkof226ws2ao" path="res://assets/worlds/kitchen/ingredients/decorated_cake.png" id="15_decorated_cake"]
+[ext_resource type="Texture2D" uid="uid://bcorhunxqwdht" path="res://assets/worlds/kitchen/ingredients/fancy_cake.png" id="16_fancy_cake"]
+[ext_resource type="Script" uid="uid://deeqnadiqhloe" path="res://scripts/content/spawn_stage.gd" id="spawn_stage"]
 
 [sub_resource type="Resource" id="Creation_wheat"]
 script = ExtResource("2_creation")
 id = &"wheat"
-size_order = 1
-size_growth_percent = 0.0
 display_name_key = &"CREATION_WHEAT"
 texture = ExtResource("4_wheat")
-progression_rank = 1
-collection_order = 1
-mass = 1.0
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_flour"]
 script = ExtResource("2_creation")
 id = &"flour"
-size_order = 2
-size_growth_percent = 25.0
 display_name_key = &"CREATION_FLOUR"
 texture = ExtResource("5_flour")
 progression_rank = 2
 collection_order = 2
+size_order = 2
+size_growth_percent = 25.0
 mass = 1.3
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_cake_mix"]
 script = ExtResource("2_creation")
 id = &"cake_mix"
-size_order = 3
-size_growth_percent = 25.0
 display_name_key = &"CREATION_CAKE_MIX"
 texture = ExtResource("10_cake_mix")
 progression_rank = 3
 collection_order = 3
+size_order = 3
+size_growth_percent = 25.0
 mass = 1.69
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_cake_batter"]
 script = ExtResource("2_creation")
 id = &"cake_batter"
-size_order = 4
-size_growth_percent = 25.0
 display_name_key = &"CREATION_CAKE_BATTER"
 texture = ExtResource("11_cake_batter")
 progression_rank = 4
 collection_order = 4
+size_order = 4
+size_growth_percent = 25.0
 mass = 2.2
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_sponge_cake"]
 script = ExtResource("2_creation")
 id = &"sponge_cake"
-size_order = 5
-size_growth_percent = 25.0
 display_name_key = &"CREATION_SPONGE_CAKE"
 texture = ExtResource("12_sponge_cake")
 progression_rank = 5
 collection_order = 5
+size_order = 5
+size_growth_percent = 25.0
 mass = 2.86
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_frosted_cake"]
 script = ExtResource("2_creation")
 id = &"frosted_cake"
-size_order = 6
-size_growth_percent = 25.0
 display_name_key = &"CREATION_FROSTED_CAKE"
 texture = ExtResource("13_frosted_cake")
 progression_rank = 6
 collection_order = 6
+size_order = 6
+size_growth_percent = 25.0
 mass = 3.71
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_layer_cake"]
 script = ExtResource("2_creation")
 id = &"layer_cake"
-size_order = 7
-size_growth_percent = 30.0
 display_name_key = &"CREATION_LAYER_CAKE"
 texture = ExtResource("14_layer_cake")
 progression_rank = 7
 collection_order = 7
+size_order = 7
+size_growth_percent = 30.0
 mass = 4.83
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_decorated_cake"]
 script = ExtResource("2_creation")
 id = &"decorated_cake"
-size_order = 8
-size_growth_percent = 30.0
 display_name_key = &"CREATION_DECORATED_CAKE"
 texture = ExtResource("15_decorated_cake")
 progression_rank = 8
 collection_order = 8
+size_order = 8
+size_growth_percent = 30.0
 mass = 6.27
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Creation_fancy_cake"]
 script = ExtResource("2_creation")
 id = &"fancy_cake"
-size_order = 9
-size_growth_percent = 10.0
 display_name_key = &"CREATION_FANCY_CAKE"
 texture = ExtResource("16_fancy_cake")
 progression_rank = 9
 collection_order = 9
+size_order = 9
+size_growth_percent = 10.0
 mass = 8.16
-visual_diameter_scale = 2.18
 
 [sub_resource type="Resource" id="Recipe_wheat"]
 script = ExtResource("3_recipe")
@@ -176,24 +161,32 @@ result = &"fancy_cake"
 
 [sub_resource type="Resource" id="SpawnStage_start"]
 script = ExtResource("spawn_stage")
-weights = Dictionary[StringName, float]({&"wheat": 100.0})
+weights = Dictionary[StringName, float]({
+&"wheat": 100.0
+})
 
 [sub_resource type="Resource" id="SpawnStage_flour"]
 script = ExtResource("spawn_stage")
 unlock_creation_id = &"flour"
-weights = Dictionary[StringName, float]({&"wheat": 75.0, &"flour": 25.0})
+weights = Dictionary[StringName, float]({
+&"flour": 25.0,
+&"wheat": 75.0
+})
 
 [sub_resource type="Resource" id="SpawnStage_cake_mix"]
 script = ExtResource("spawn_stage")
 unlock_creation_id = &"cake_mix"
-weights = Dictionary[StringName, float]({&"wheat": 60.0, &"flour": 30.0, &"cake_mix": 10.0})
+weights = Dictionary[StringName, float]({
+&"cake_mix": 10.0,
+&"flour": 30.0,
+&"wheat": 60.0
+})
 
 [resource]
 script = ExtResource("1_world")
 content_id = &"kitchen_recipe_graph"
 content_version = 2
-base_radius_ratio = 0.046
-spawn_stages = Array[ExtResource("spawn_stage")]([SubResource("SpawnStage_start"), SubResource("SpawnStage_flour"), SubResource("SpawnStage_cake_mix")])
 creations = Array[ExtResource("2_creation")]([SubResource("Creation_wheat"), SubResource("Creation_flour"), SubResource("Creation_cake_mix"), SubResource("Creation_cake_batter"), SubResource("Creation_sponge_cake"), SubResource("Creation_frosted_cake"), SubResource("Creation_layer_cake"), SubResource("Creation_decorated_cake"), SubResource("Creation_fancy_cake")])
 recipes = Array[ExtResource("3_recipe")]([SubResource("Recipe_wheat"), SubResource("Recipe_flour"), SubResource("Recipe_cake_mix"), SubResource("Recipe_cake_batter"), SubResource("Recipe_sponge_cake"), SubResource("Recipe_frosted_cake"), SubResource("Recipe_layer_cake"), SubResource("Recipe_decorated_cake")])
+spawn_stages = Array[ExtResource("spawn_stage")]([SubResource("SpawnStage_start"), SubResource("SpawnStage_flour"), SubResource("SpawnStage_cake_mix")])
 final_creation_id = &"fancy_cake"

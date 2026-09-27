@@ -1,24 +1,23 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://882hnbu72abd"]
 
-[ext_resource type="Script" path="res://scripts/presentation/machine_drop_presentation.gd" id="1_3j6jm"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/button/drop_button_press_01.png" id="2_brpiu"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/button/drop_button_press_02.png" id="3_kgclx"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/button/drop_button_press_03.png" id="4_fw0mq"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/feeder/item_feeder_glass.png" id="21_3y083"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/score/score_screen_active.png" id="22_l7ghe"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/score/score_token_icon.png" id="23_loctm"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/score/score_separator_colon.png" id="24_12wrv"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/shutter/drop_shutter_01.png" id="25_m6p3u"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/shutter/drop_shutter_02.png" id="26_e67xi"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/shutter/drop_shutter_03.png" id="27_2j1ml"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/shutter/drop_shutter_04.png" id="28_4ppl5"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/shutter/drop_shutter_05.png" id="29_c336v"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/shutter/drop_shutter_06.png" id="30_tdn22"]
-[ext_resource type="Texture2D" path="res://assets/worlds/environment/machine/feeder/item_drop_nozzle.png" id="31_mtdlj"]
-
-[ext_resource type="PackedScene" path="res://scenes/presentation/totolina_operator.tscn" id="Cat"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/wheat.png" id="PreviewCurrent"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/ingredients/flour.png" id="PreviewNext"]
+[ext_resource type="Script" uid="uid://c3xkjibvmnr70" path="res://scripts/presentation/machine_drop_presentation.gd" id="1_3j6jm"]
+[ext_resource type="Texture2D" uid="uid://didilde1jrhlu" path="res://assets/worlds/environment/machine/button/drop_button_press_01.png" id="2_brpiu"]
+[ext_resource type="Texture2D" uid="uid://bdywfk32tent0" path="res://assets/worlds/environment/machine/button/drop_button_press_02.png" id="3_kgclx"]
+[ext_resource type="Texture2D" uid="uid://yqo7n5gndasx" path="res://assets/worlds/environment/machine/button/drop_button_press_03.png" id="4_fw0mq"]
+[ext_resource type="Texture2D" uid="uid://b8t37g48nlq8d" path="res://assets/worlds/environment/machine/feeder/item_feeder_glass.png" id="21_3y083"]
+[ext_resource type="Texture2D" uid="uid://cqqh6yf67rcwn" path="res://assets/worlds/environment/machine/score/score_screen_active.png" id="22_l7ghe"]
+[ext_resource type="Texture2D" uid="uid://d0ecfsqofwbi6" path="res://assets/worlds/environment/machine/score/score_token_icon.png" id="23_loctm"]
+[ext_resource type="Texture2D" uid="uid://tt3v82ke4yjf" path="res://assets/worlds/environment/machine/score/score_separator_colon.png" id="24_12wrv"]
+[ext_resource type="Texture2D" uid="uid://dipvqgc1kllwt" path="res://assets/worlds/environment/machine/shutter/drop_shutter_01.png" id="25_m6p3u"]
+[ext_resource type="Texture2D" uid="uid://co54aidagbcm" path="res://assets/worlds/environment/machine/shutter/drop_shutter_02.png" id="26_e67xi"]
+[ext_resource type="Texture2D" uid="uid://bvfsl67gk0blb" path="res://assets/worlds/environment/machine/shutter/drop_shutter_03.png" id="27_2j1ml"]
+[ext_resource type="Texture2D" uid="uid://5523gbyxny2k" path="res://assets/worlds/environment/machine/shutter/drop_shutter_04.png" id="28_4ppl5"]
+[ext_resource type="Texture2D" uid="uid://y4347wdt7fmc" path="res://assets/worlds/environment/machine/shutter/drop_shutter_05.png" id="29_c336v"]
+[ext_resource type="Texture2D" uid="uid://2wnbheqi1l3n" path="res://assets/worlds/environment/machine/shutter/drop_shutter_06.png" id="30_tdn22"]
+[ext_resource type="Texture2D" uid="uid://bjmee11563adf" path="res://assets/worlds/environment/machine/feeder/item_drop_nozzle.png" id="31_mtdlj"]
+[ext_resource type="PackedScene" uid="uid://ti0dnolkh503" path="res://scenes/presentation/totolina_operator.tscn" id="Cat"]
+[ext_resource type="Texture2D" uid="uid://duvn1hkmexd37" path="res://assets/worlds/kitchen/ingredients/wheat.png" id="PreviewCurrent"]
+[ext_resource type="Texture2D" uid="uid://gaohrycmsk0t" path="res://assets/worlds/kitchen/ingredients/flour.png" id="PreviewNext"]
 
 [sub_resource type="Animation" id="Animation_lhsyk"]
 resource_local_to_scene = true
@@ -375,18 +374,18 @@ _data = {
 &"surprised": SubResource("Animation_bbfry")
 }
 
-[node name="Machine" type="Node2D"]
+[node name="Machine" type="Node2D" unique_id=323347341]
 script = ExtResource("1_3j6jm")
 
-[node name="TopMachine" type="Node2D" parent="."]
+[node name="TopMachine" type="Node2D" parent="." unique_id=1476131488]
 z_index = 40
 
-[node name="Button" type="Node2D" parent="TopMachine"]
+[node name="Button" type="Node2D" parent="TopMachine" unique_id=472158517]
 z_index = 1
 position = Vector2(12, 166)
 scale = Vector2(0.17578125, 0.17578125)
 
-[node name="FixedChassis" type="Sprite2D" parent="TopMachine/Button"]
+[node name="FixedChassis" type="Sprite2D" parent="TopMachine/Button" unique_id=823101318]
 z_index = 2
 texture_filter = 2
 texture = ExtResource("2_brpiu")
@@ -394,7 +393,7 @@ centered = false
 region_enabled = true
 region_rect = Rect2(0, 0, 560, 384)
 
-[node name="FixedChassisRight" type="Sprite2D" parent="TopMachine/Button"]
+[node name="FixedChassisRight" type="Sprite2D" parent="TopMachine/Button" unique_id=1639491752]
 z_index = 2
 texture_filter = 2
 position = Vector2(900, 0)
@@ -403,7 +402,7 @@ centered = false
 region_enabled = true
 region_rect = Rect2(900, 0, 124, 384)
 
-[node name="FixedChassisBottom" type="Sprite2D" parent="TopMachine/Button"]
+[node name="FixedChassisBottom" type="Sprite2D" parent="TopMachine/Button" unique_id=429933632]
 z_index = 2
 texture_filter = 2
 position = Vector2(560, 230)
@@ -412,7 +411,7 @@ centered = false
 region_enabled = true
 region_rect = Rect2(560, 230, 340, 154)
 
-[node name="ButtonPose1" type="Sprite2D" parent="TopMachine/Button"]
+[node name="ButtonPose1" type="Sprite2D" parent="TopMachine/Button" unique_id=568772142]
 texture_filter = 2
 position = Vector2(560, 0)
 texture = ExtResource("2_brpiu")
@@ -420,7 +419,7 @@ centered = false
 region_enabled = true
 region_rect = Rect2(560, 0, 340, 230)
 
-[node name="ButtonPose2" type="Sprite2D" parent="TopMachine/Button"]
+[node name="ButtonPose2" type="Sprite2D" parent="TopMachine/Button" unique_id=1076407199]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 position = Vector2(560, 0)
@@ -429,7 +428,7 @@ centered = false
 region_enabled = true
 region_rect = Rect2(560, 0, 340, 230)
 
-[node name="ButtonPose3" type="Sprite2D" parent="TopMachine/Button"]
+[node name="ButtonPose3" type="Sprite2D" parent="TopMachine/Button" unique_id=801286139]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 position = Vector2(560, 0)
@@ -438,25 +437,25 @@ centered = false
 region_enabled = true
 region_rect = Rect2(560, 0, 340, 230)
 
-[node name="Totolina" parent="TopMachine" instance=ExtResource("Cat")]
+[node name="Totolina" parent="TopMachine" unique_id=451155426 instance=ExtResource("Cat")]
 position = Vector2(6, 58.4)
 scale = Vector2(0.17, 0.17)
 
-[node name="Current" type="Sprite2D" parent="TopMachine"]
+[node name="Current" type="Sprite2D" parent="TopMachine" unique_id=507619358]
 z_index = 1
 texture_filter = 2
 position = Vector2(240, 180)
 scale = Vector2(0.11, 0.11)
 texture = ExtResource("PreviewCurrent")
 
-[node name="Next" type="Sprite2D" parent="TopMachine"]
+[node name="Next" type="Sprite2D" parent="TopMachine" unique_id=75038496]
 z_index = 1
 texture_filter = 2
 position = Vector2(240, 95)
 scale = Vector2(0.105, 0.105)
 texture = ExtResource("PreviewNext")
 
-[node name="Incoming" type="Sprite2D" parent="TopMachine"]
+[node name="Incoming" type="Sprite2D" parent="TopMachine" unique_id=1030302841]
 modulate = Color(1, 1, 1, 0)
 z_index = 1
 texture_filter = 2
@@ -464,132 +463,128 @@ position = Vector2(240, 95)
 scale = Vector2(0.105, 0.105)
 texture = ExtResource("PreviewNext")
 
-[node name="FeederGlass" type="Sprite2D" parent="TopMachine"]
+[node name="FeederGlass" type="Sprite2D" parent="TopMachine" unique_id=136262569]
 z_index = 2
 texture_filter = 2
 position = Vector2(240, 121)
 scale = Vector2(0.32, 0.32)
 texture = ExtResource("21_3y083")
 
-[node name="SampleScore" type="Node2D" parent="TopMachine"]
+[node name="SampleScore" type="Node2D" parent="TopMachine" unique_id=1133169275]
 position = Vector2(320, 95)
 
-[node name="Screen" type="Sprite2D" parent="TopMachine/SampleScore"]
+[node name="Screen" type="Sprite2D" parent="TopMachine/SampleScore" unique_id=1019824394]
 texture_filter = 2
 scale = Vector2(0.35, 0.35)
 texture = ExtResource("22_l7ghe")
 centered = false
 
-[node name="Token" type="Sprite2D" parent="TopMachine/SampleScore"]
+[node name="Token" type="Sprite2D" parent="TopMachine/SampleScore" unique_id=798394942]
 texture_filter = 2
-position = Vector2(34, 51)
-scale = Vector2(0.061, 0.061)
+position = Vector2(36.654053, 50.5)
+scale = Vector2(0.096304685, 0.09179686)
 texture = ExtResource("23_loctm")
 
-[node name="Colon" type="Sprite2D" parent="TopMachine/SampleScore"]
+[node name="Colon" type="Sprite2D" parent="TopMachine/SampleScore" unique_id=1513698784]
 texture_filter = 2
 position = Vector2(63, 51)
 scale = Vector2(0.16, 0.16)
 texture = ExtResource("24_12wrv")
 
-[node name="ScoreLabel" type="Label" parent="TopMachine/SampleScore"]
+[node name="ScoreLabel" type="Label" parent="TopMachine/SampleScore" unique_id=400081952]
 offset_left = 76.0
 offset_top = 31.0
 offset_right = 165.0
 offset_bottom = 68.0
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 0.7019608, 0.79607844, 1)
 theme_override_font_sizes/font_size = 28
 clip_text = true
 
-[node name="Shutter" type="Node2D" parent="TopMachine"]
+[node name="Shutter" type="Node2D" parent="TopMachine" unique_id=1966849543]
 position = Vector2(190, 211.5)
 scale = Vector2(0.09765625, 0.09765625)
 
-[node name="FixedGoldHousing" type="Sprite2D" parent="TopMachine/Shutter"]
+[node name="FixedGoldHousing" type="Sprite2D" parent="TopMachine/Shutter" unique_id=322152902]
 texture_filter = 2
 texture = ExtResource("25_m6p3u")
 centered = false
 
-[node name="IrisPose1" type="Polygon2D" parent="TopMachine/Shutter"]
+[node name="IrisPose1" type="Polygon2D" parent="TopMachine/Shutter" unique_id=191847963]
 texture_filter = 2
 texture = ExtResource("25_m6p3u")
 polygon = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 uv = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 
-[node name="IrisPose2" type="Polygon2D" parent="TopMachine/Shutter"]
+[node name="IrisPose2" type="Polygon2D" parent="TopMachine/Shutter" unique_id=982422216]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("26_e67xi")
 polygon = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 uv = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 
-[node name="IrisPose3" type="Polygon2D" parent="TopMachine/Shutter"]
+[node name="IrisPose3" type="Polygon2D" parent="TopMachine/Shutter" unique_id=223522927]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("27_2j1ml")
 polygon = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 uv = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 
-[node name="IrisPose4" type="Polygon2D" parent="TopMachine/Shutter"]
+[node name="IrisPose4" type="Polygon2D" parent="TopMachine/Shutter" unique_id=2091710070]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("28_4ppl5")
 polygon = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 uv = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 
-[node name="IrisPose5" type="Polygon2D" parent="TopMachine/Shutter"]
+[node name="IrisPose5" type="Polygon2D" parent="TopMachine/Shutter" unique_id=1528616729]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("29_c336v")
 polygon = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 uv = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 
-[node name="IrisPose6" type="Polygon2D" parent="TopMachine/Shutter"]
+[node name="IrisPose6" type="Polygon2D" parent="TopMachine/Shutter" unique_id=50731218]
 modulate = Color(1, 1, 1, 0)
 texture_filter = 2
 texture = ExtResource("30_tdn22")
 polygon = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 uv = PackedVector2Array(98, 92, 115, 62, 158, 38, 216, 29, 797, 29, 854, 37, 895, 55, 919, 94, 916, 125, 879, 146, 817, 159, 185, 159, 136, 149, 106, 131)
 
-[node name="Nozzle" type="Sprite2D" parent="TopMachine"]
+[node name="Nozzle" type="Sprite2D" parent="TopMachine" unique_id=1309967206]
 z_as_relative = false
 texture_filter = 2
 position = Vector2(250, 264)
 scale = Vector2(0.15, 0.15)
 texture = ExtResource("31_mtdlj")
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-callback_mode_method = 1
-libraries/ = SubResource("AnimationLibrary_y37ff")
-
-[node name="NextLabel" type="Label" parent="TopMachine"]
+[node name="NextLabel" type="Label" parent="TopMachine" unique_id=1103971197]
 offset_left = 196.0
 offset_top = -12.0
 offset_right = 284.0
 offset_bottom = 8.0
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.847, 0.914, 0.898, 1)
 theme_override_font_sizes/font_size = 13
 text = "DROP_NEXT"
 horizontal_alignment = 1
 
-[node name="CurrentLabel" type="Label" parent="TopMachine"]
+[node name="CurrentLabel" type="Label" parent="TopMachine" unique_id=367785885]
 offset_left = 196.0
 offset_top = 244.0
 offset_right = 284.0
 offset_bottom = 262.0
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.847, 0.914, 0.898, 1)
 theme_override_font_sizes/font_size = 10
 text = "DROP_CURRENT"
 horizontal_alignment = 1
 
-[node name="PulseLabel" type="Label" parent="TopMachine"]
+[node name="PulseLabel" type="Label" parent="TopMachine" unique_id=1190031573]
 offset_left = 340.0
 offset_top = 72.0
 offset_right = 470.0
 offset_bottom = 95.0
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.847, 0.914, 0.898, 1)
 theme_override_font_sizes/font_size = 15
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=1189862754]
+callback_mode_method = 1
+libraries/ = SubResource("AnimationLibrary_y37ff")
