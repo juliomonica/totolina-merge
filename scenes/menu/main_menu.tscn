@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/menu/main_menu.gd" id="1_menu"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/background.png" id="3_background"]
+[ext_resource type="Texture2D" path="res://assets/worlds/environment/background.png" id="3_background"]
 [ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/magical_bowl.png" id="4_bowl"]
 [ext_resource type="Texture2D" path="res://assets/worlds/kitchen/characters/tolinа_idle.png" id="5_tolina"]
 

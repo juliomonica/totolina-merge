@@ -15,6 +15,7 @@ Focused nine-slot discovery validation: use `--suite collection --graphical`.
 Focused developer-spawn validation: use `--suite debug-spawn --graphical`.
 Focused production machine + approved machine lab: use `--suite machine --graphical`.
 Focused Kitchen gameplay controls: use `--suite controls --graphical`.
+Focused authoritative creation/discovery flow: use `--suite creation-result --graphical`.
 The runner copies the current working tree into a temporary directory and isolates
 all discovery saves and imports. It reports the artifact directory and retains logs.
 It fails on parser/resource/runtime errors even when the engine returns exit 0.
@@ -61,6 +62,27 @@ collision circles, sparse collection states and sizing at 390×844, 405×720,
 
 Tests write only explicit temporary discovery files. The audit sandbox delegates
 to the production resolver and is never referenced by production scenes.
+
+## Successful creation → every discovery consumer
+
+`creation_result_validation.gd` follows a real indexed-touch Wheat drop and all
+eight actual contact merges through one continuous run. As soon as the physical
+result exists, it verifies exact-once score/Push, semantic discovery, the fixed
+nine-slot bottom strip, the on-disk save, a freshly opened Recipe Collection, and
+the unchanged run spawn stages (100% Wheat → 75/25 → 60/30/10). It does not call
+the resolver or reward/discovery hooks to simulate success. Existing test-only
+observers delegate to production behavior.
+
+Repeated results cannot rediscover an ID or rewrite its unchanged save. Restart,
+Play Again and a newly loaded gameplay scene preserve all discoveries but reset
+the run to Wheat-only. The gate also removes the optional presentation node and
+requires a real merge to retain all authoritative outcomes. Graphical runs check
+390×844, 405×720 and 540×960, capture the newly earned strip/Recipe Collection,
+and exercise horizontal collection touch scrolling. Saves remain isolated;
+these synthetic desktop checks do not replace physical-device testing.
+
+Both headless and graphical passes are included in the full suite. For a focused
+run, add `--suite creation-result` (and optionally `--graphical`) to the runner.
 
 ## Production machine integration
 

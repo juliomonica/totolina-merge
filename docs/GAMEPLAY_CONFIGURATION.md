@@ -8,14 +8,14 @@ The centralized configuration source is:
 
 It is a plain constants script. Gameplay and presentation scripts preload it directly. It is not an autoload, manager, service, plugin, or save-backed system.
 
-Use this file to tune the gameplay chamber, danger zone, magical bowl, ingredient artwork, and existing gameplay HUD layout. Avoid duplicating these values in scenes or feature scripts.
+Use this file to tune the gameplay chamber, danger zone, ingredient artwork, and existing gameplay HUD layout. Machine presentation has scene-owned controls described below. Avoid duplicating these values in scenes or feature scripts.
 
 ### Current production machine presentation
 
 Kitchen now uses the approved shared Totolina/machine instead of the visible old
-bowl/HUD. The old bowl/Tolina/HUD constants and assets are deliberately retained
-for a separate cleanup audit; their legacy fitting sections below do **not**
-control the new machine. Production composition lives in
+bowl/HUD. The hidden gameplay bowl and its unused fitting constants were removed
+in the asset-deletion audit. Retained legacy HUD values do **not** control the
+new machine. Production composition lives in
 `scripts/presentation/kitchen_machine_presentation.gd`, with the unchanged shared
 pose/timeline tracks in `scenes/presentation/machine_drop_presentation.tscn`.
 Use [PRESENTATION_TUNING_GUIDE.md](PRESENTATION_TUNING_GUIDE.md) for direct
@@ -106,7 +106,7 @@ chamber Y = chamber top  + chamber height × vertical chamber ratio
 
 Normalized chamber ratios are device independent: `0.0` is the chamber's top or left edge and `1.0` is its bottom or right edge. Walls, floor, spawn height, collision radii, and the danger threshold derive from these chamber coordinates. Their screen pixels change responsively, but their relationship to the chamber does not.
 
-Pixel values such as label offsets and UI margins are presentation adjustments, not chamber gameplay coordinates. The magical bowl PNG is also presentation: its top sits a chamber-scaled gap below the shared danger threshold and its floor anchor follows the chamber floor, but the artwork never becomes a physics boundary.
+Pixel values such as label offsets and UI margins are presentation adjustments, not chamber gameplay coordinates. Machine artwork is also presentation: its floor anchor follows the chamber floor, but the artwork never becomes a physics boundary.
 
 ### Physics boundaries
 
@@ -276,58 +276,23 @@ The line is drawn at `_danger_threshold_y`. The label rectangle is anchored to t
 | `DANGER_TEXT_SHADOW_OFFSET` | Warning shadow X/Y displacement. | `Vector2(2, 3)` | VISUAL | Positive Y moves the shadow downward. |
 | `DANGER_TEXT_SHADOW_OUTLINE_SIZE` | Extra shadow outline thickness. | `2` | VISUAL | Use small values. |
 
-## 3. Container/Bowl Visuals
+## 3. Chamber presentation — retired bowl configuration
 
-Legacy/recovery presentation only after machine integration; see the current
-production machine section above. These values do not fit the machine frame.
+The old magical-bowl artwork, hidden gameplay bowl node and fitting code have
+been retired. Their configuration constants are removed; do not recreate them
+to tune the current machine or change physics to compensate for artwork.
 
-All bowl constants are visual-only. They never change `StaticBody2D` positions or collision shapes.
+Current chamber presentation is authored in
+`res://scenes/presentation/kitchen_machine_presentation.tscn` and fitted by
+`res://scripts/presentation/kitchen_machine_presentation.gd`. Its visual-only
+Inspector properties include `floor_edge_texture_y = 1595` and
+`foreground_side_width = 56`. They align and layer the frame relative to the
+unchanged physical floor; they do not resize or reposition collision bodies.
 
-### Automatic chamber-matching mode
-
-Set:
-
-```gdscript
-const BOWL_MATCH_CHAMBER_SIZE := true
-```
-
-The bowl texture is then fitted to the chamber size multiplied by `BOWL_CHAMBER_MATCH_SCALE`.
-
-| Name | Purpose | Current example | Effect | Safe tuning notes |
-| --- | --- | ---: | --- | --- |
-| `BOWL_MATCH_CHAMBER_SIZE` | Selects chamber-matching mode. | `false` | VISUAL | Current default remains the tuned responsive/manual presentation. |
-| `BOWL_CHAMBER_MATCH_SCALE` | Width/height multiplier in chamber-matching mode. | `Vector2.ONE` | VISUAL | Preserve positive values and test the full bowl silhouette. |
-
-### Responsive/manual mode
-
-When `BOWL_MATCH_CHAMBER_SIZE` is `false`, the existing responsive calculation remains active. Manual size components greater than zero override the corresponding responsive dimension.
-
-| Name | Purpose | Current example | Effect | Safe tuning notes |
-| --- | --- | ---: | --- | --- |
-| `BOWL_RESPONSIVE_WIDTH_VIEWPORT_RATIO` | Responsive bowl width relative to viewport width. | `0.98` | VISUAL | Increasing can crop the side walls. |
-| `DANGER_TO_BOWL_TOP_GAP_CHAMBER_WIDTH_RATIO` | Fixed visual gap from the shared danger threshold down to the bowl texture's top. | `0.035` | VISUAL | Increase to place the bowl lower while keeping danger gameplay unchanged. |
-| `BOWL_MANUAL_SIZE_PIXELS` | Optional explicit width and height. Zero components keep responsive dimensions. | `Vector2.ZERO` | VISUAL | Absolute pixels are less portable across phones. |
-| `BOWL_MANUAL_SCALE` | Post-scale applied in responsive/manual mode. | `Vector2.ONE` | VISUAL | Nonuniform values can distort artwork. |
-| `BOWL_MANUAL_OFFSET_PIXELS` | Final X/Y bowl translation in responsive/manual mode. | `Vector2.ZERO` | VISUAL | Positive X moves right; positive Y moves down. |
-
-### Floor alignment
-
-| Name | Purpose | Current example | Effect | Safe tuning notes |
-| --- | --- | ---: | --- | --- |
-| `BOWL_FLOOR_TEXTURE_Y_RATIO` | Selects the texture-height position aligned to the physics floor. | `0.80` | VISUAL | Because the bowl is one sprite, this can alter its scale or position. Tune in small increments such as `0.005`. |
-| `BOWL_VISUAL_FLOOR_OFFSET_PIXELS` | Moves the bowl's visual floor anchor relative to the physics floor. | `0.0` | VISUAL | Negative lifts the bowl anchor; positive lowers it. Does not move pieces or collisions. |
-
-`BOWL_FLOOR_TEXTURE_Y_RATIO` cannot move only the glowing floor while keeping both the complete bowl size and rim fixed. The floor is part of the single bowl PNG. Use the manual size/offset controls for composition, or separate the floor artwork in a dedicated future visual task.
-
-In the default responsive mode, the bowl's vertical size is solved from two chamber-owned anchors:
-
-```text
-bowl top target = _danger_threshold_y
-                + chamber width × DANGER_TO_BOWL_TOP_GAP_CHAMBER_WIDTH_RATIO
-bowl floor target = chamber floor + BOWL_VISUAL_FLOOR_OFFSET_PIXELS
-```
-
-This avoids aspect-dependent vertical clamps that could move the bowl rim away from the danger line. Manual bowl height or scale overrides can intentionally replace this automatic relationship and therefore require all target layouts to be rechecked.
+Use the current production machine section above and
+[PRESENTATION_TUNING_GUIDE.md](PRESENTATION_TUNING_GUIDE.md) for the actual
+scene nodes, responsive footer seam, collection masks and safe tuning workflow.
+Recheck all target portrait sizes after presentation adjustments.
 
 ## 4. Ingredient Visual Scaling
 
@@ -450,7 +415,7 @@ The current layout order is:
 safe area
 Tolina + NEXT / Pulse / Score HUD
 danger warning and shared gameplay/visual threshold line
-magical bowl and pieces
+machine chamber and pieces
 recipe progress strip
 Push Left / Hold Restart / Push Right
 safe area
@@ -464,7 +429,7 @@ Always test:
 - iPhone notch/Dynamic Island safe areas on a real device
 - Android gesture/navigation insets on a real device
 
-Confirm that the complete bowl silhouette remains visible, the danger line matches the gameplay threshold, the recipe strip does not cover grounded pieces, and all three bottom controls remain reachable.
+Confirm that the machine rails and floor remain visible, the danger line matches the gameplay threshold, the recipe strip does not cover grounded pieces, and all three bottom controls remain reachable.
 
 ## Verification checklist after configuration edits
 

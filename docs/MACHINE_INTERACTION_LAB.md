@@ -542,15 +542,22 @@ press .440s, full drop .620s. No feeder, shutter, nozzle or score retiming.
   Existing alpha crossfades can show faint double outlines in slow review;
   this pass deliberately preserves their timing and source art.
 
-Known import caveat: the user's new `assets/worlds/effects/` copies already contain
+Historical import caveat: the user's new `assets/worlds/effects/` copies contained
 duplicate import UIDs from the old Kitchen effect paths. Godot's import scan
 automatically rewrote 14 of those pre-existing sidecars. Only that tool-induced
 change was undone after verifying original bytes against the starting hashes;
-the user's copies and production paths were preserved. A future editor rescan
-may warn/rewrite them again. Resolving the duplicate paths/UIDs belongs to the
-controlled production migration, not this animation task. New Cat/Machine asset
+the user's copies and production paths were preserved. Further editor rescans
+could warn/rewrite them while both copies existed; this was outside that
+animation task. New Cat/Machine asset
 sidecars import successfully. An initial sandboxed process also logged a macOS
 certificate-access error; the final authorized headless/graphical runs are clean.
+
+Current asset-deletion audit: the user removed those 14 duplicate global effect
+PNGs and their import sidecars. The canonical `assets/worlds/kitchen/effects/`
+assets remain, including merge magic and all 13 approved merge-animation images.
+Each removed PNG was byte-identical to its retained Kitchen counterpart. Runtime
+effect references already use those canonical Kitchen paths; the duplicate-UID
+condition described above no longer applies to this removed copy set.
 
 For the four-image arm update, the three replaced press PNGs had stale imported
 textures. The four current images were imported in an isolated temporary Godot

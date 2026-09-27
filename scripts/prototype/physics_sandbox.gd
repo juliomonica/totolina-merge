@@ -126,11 +126,8 @@ func _ready() -> void:
 	_current_creation_id = _roll_spawn_creation_id()
 	_raw_next_creation_id = _roll_spawn_creation_id()
 	machine_presentation = $KitchenMachine
-	# Retain legacy resources/nodes for the separate, later cleanup audit.
-	$KitchenBowl.hide()
 	tolina_visual.hide()
 	hud_panel.hide()
-	$BackgroundCanvas/KitchenBackground.texture = load(MACHINE_TIMELINE.ENV + "background.png")
 	pieces.z_index = 1
 	next_preview.add_theme_stylebox_override("panel", _next_preview_style)
 	_build_recipe_progress_strip()
@@ -396,11 +393,6 @@ func _layout_chamber() -> void:
 		_danger_threshold_y + GAMEPLAY_CONFIG.DANGER_LABEL_BOTTOM_OFFSET
 	)
 	_layout_safe_ui(viewport_size)
-	presentation.layout(
-		_chamber_rect,
-		floor.position.y,
-		_danger_threshold_y
-	)
 	_update_next_preview()
 	queue_redraw()
 
@@ -550,7 +542,8 @@ func _debug_clear_board() -> void:
 		if piece is PrototypePiece:
 			piece.queue_free()
 	_merge_cooldown_remaining = 0.0
-	presentation.reset()
+	if is_instance_valid(presentation):
+		presentation.reset()
 	_discovery_feedback_timer = 0.0
 	_max_merge_feedback_timer = 0.0
 	new_creation_feedback_label.hide()
@@ -983,16 +976,19 @@ func _resolve_merge(
 		result_rotation
 	)
 	_apply_merge_expansion(result_piece)
-	presentation.show_recipe_merge(
-		recipe,
-		safe_result_position,
-		minf(result_radius * 3.0, _chamber_rect.size.x * 0.45)
-	)
-	machine_presentation.show_merge_reaction()
+	# Commit the successful result before disposable presentation. A missing or
+	# interrupted effect must never strand discoveries, spawn unlocks or rewards.
 	_merge_cooldown_remaining = MERGE_RESOLUTION_COOLDOWN_SECONDS
 	_merge_resolution_pending = false
 	_award_creation(result_definition, safe_result_position, result_radius)
 	_request_recipe_evaluation()
+	if is_instance_valid(presentation):
+		presentation.show_recipe_merge(
+			recipe,
+			safe_result_position,
+			minf(result_radius * 3.0, _chamber_rect.size.x * 0.45)
+		)
+	machine_presentation.show_merge_reaction()
 
 
 func _award_creation(definition: CreationDefinition, world_position: Vector2, radius: float) -> void:
@@ -1300,7 +1296,7 @@ func _register_creation(
 	_discovery_feedback_timer = DISCOVERY_FEEDBACK_SECONDS
 	new_creation_feedback_label.text = tr("NEW_CREATION")
 	new_creation_feedback_label.visible = true
-	if not visual_feedback_already_playing:
+	if not visual_feedback_already_playing and is_instance_valid(presentation):
 		presentation.show_discovery(
 			world_position,
 			minf(radius * 3.0, _chamber_rect.size.x * 0.45)
@@ -1441,8 +1437,6 @@ func _show_run_result() -> void:
 		if not highest_new_creation_id.is_empty()
 		else ""
 	)
-	presentation.show_result()
-	result_tolina.texture = tolina_visual.texture
 	result_overlay.visible = true
 	play_again_button.grab_focus()
 
@@ -1582,7 +1576,8 @@ func _restart_sandbox() -> void:
 	highest_creation_id = &""
 	if is_instance_valid(_debug_spawn_panel):
 		_debug_spawn_panel.set_run_active(true)
-	presentation.reset()
+	if is_instance_valid(presentation):
+		presentation.reset()
 	result_overlay.visible = false
 	result_creation.texture = null
 	result_creation_name.text = ""

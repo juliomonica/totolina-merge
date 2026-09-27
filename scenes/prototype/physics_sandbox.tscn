@@ -1,10 +1,9 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scripts/prototype/physics_sandbox.gd" id="1_sandbox"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
 [ext_resource type="Script" path="res://scripts/prototype/sandbox_presentation.gd" id="3_presentation"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/background.png" id="4_background"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/magical_bowl.png" id="5_bowl"]
+[ext_resource type="Texture2D" path="res://assets/worlds/environment/background.png" id="4_background"]
 
 [ext_resource type="PackedScene" path="res://scenes/presentation/kitchen_machine_presentation.tscn" id="6_machine"]
 [ext_resource type="PackedScene" path="res://scenes/presentation/kitchen_gameplay_controls.tscn" id="7_controls"]
@@ -112,10 +111,6 @@ mouse_filter = 2
 texture = ExtResource("4_background")
 expand_mode = 1
 stretch_mode = 6
-
-[node name="KitchenBowl" type="Sprite2D" parent="."]
-z_index = -1
-texture = ExtResource("5_bowl")
 
 [node name="Chamber" type="Node2D" parent="."]
 

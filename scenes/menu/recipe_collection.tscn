@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/menu/recipe_collection.gd" id="1_collection"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_font"]
-[ext_resource type="Texture2D" path="res://assets/worlds/kitchen/environment/background.png" id="3_background"]
+[ext_resource type="Texture2D" path="res://assets/worlds/environment/background.png" id="3_background"]
 
 [sub_resource type="Theme" id="Theme_collection"]
 default_font = ExtResource("2_font")

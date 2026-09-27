@@ -46,7 +46,7 @@ def checked_run(command, log_path, timeout=600, expected_marker=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", default=os.environ.get("GODOT_BIN", "godot"))
-    parser.add_argument("--suite", choices=["all", "integration", "sponge", "touch", "spawn", "collection", "debug-spawn", "animation-lab", "merge-flavor", "machine", "controls"], default="all")
+    parser.add_argument("--suite", choices=["all", "integration", "sponge", "touch", "spawn", "collection", "debug-spawn", "animation-lab", "merge-flavor", "machine", "controls", "creation-result"], default="all")
     parser.add_argument("--graphical", action="store_true", help="Also run actual portrait merge captures")
     parser.add_argument("--timeout", type=int, default=600, help="Maximum seconds per Godot process")
     args = parser.parse_args()
@@ -71,6 +71,8 @@ def main():
         suites = [("spawn_stage_validation", "SPAWN STAGES:", [])]
     if args.suite == "collection":
         suites = [("collection_lifecycle_validation", "COLLECTION LIFECYCLE:", [])]
+    if args.suite == "creation-result":
+        suites = [("creation_result_validation", "CREATION RESULT FLOW:", [])]
     if args.suite == "debug-spawn":
         suites = [("debug_spawn_validation", "DEBUG SPAWN:", [])]
     if args.suite == "animation-lab":
@@ -86,6 +88,7 @@ def main():
         suites[0][2].append("--sponge-only")
     if args.suite == "all":
         suites += [
+            ("creation_result_validation", "CREATION RESULT FLOW:", []),
             ("merge_effect_lab_validation", "MERGE EFFECT LAB:", []),
             ("merge_flavor_validation", "MERGE FLAVOR:", []),
             ("debug_spawn_validation", "DEBUG SPAWN:", []),
@@ -103,6 +106,14 @@ def main():
                     f"--test-output-dir={artifacts}"] + flags,
                     artifacts / f"{name}.log", args.timeout, marker)
     if args.graphical:
+        if args.suite in ("all", "creation-result"):
+            checked_run([engine, "--path", str(project), "--script",
+                         "res://tests/creation_result_validation.gd", "--",
+                         f"--test-output-dir={artifacts}"],
+                        artifacts / "graphical_creation_result.log", args.timeout, "CREATION RESULT FLOW:")
+        if args.suite == "creation-result":
+            print(f"ALL REQUESTED REGRESSIONS PASSED. Logs/captures: {artifacts}", flush=True)
+            return
         if args.suite in ("all", "controls"):
             checked_run([engine, "--path", str(project), "--script",
                          "res://tests/kitchen_controls_validation.gd", "--",

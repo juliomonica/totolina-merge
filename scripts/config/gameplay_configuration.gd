@@ -46,19 +46,6 @@ const DANGER_TEXT_SHADOW_OFFSET := Vector2(2.0, 3.0)
 const DANGER_TEXT_SHADOW_OUTLINE_SIZE := 2
 
 
-# VISUAL VALUES: magical bowl/container.
-# The current presentation uses the responsive/manual branch by default.
-const BOWL_MATCH_CHAMBER_SIZE := false
-const BOWL_CHAMBER_MATCH_SCALE := Vector2.ONE
-const BOWL_RESPONSIVE_WIDTH_VIEWPORT_RATIO := 0.98
-const DANGER_TO_BOWL_TOP_GAP_CHAMBER_WIDTH_RATIO := -0.10
-const BOWL_MANUAL_SIZE_PIXELS := Vector2.ZERO
-const BOWL_MANUAL_SCALE := Vector2.ONE
-const BOWL_MANUAL_OFFSET_PIXELS := Vector2.ZERO
-const BOWL_FLOOR_TEXTURE_Y_RATIO := 0.80
-const BOWL_VISUAL_FLOOR_OFFSET_PIXELS := 0.0
-
-
 # VISUAL VALUES: ingredient artwork. The sequential size curve and artwork
 # calibration live in res://config/worlds/kitchen/kitchen_content.tres.
 const INGREDIENT_GLOBAL_VISUAL_SCALE := 1.0
