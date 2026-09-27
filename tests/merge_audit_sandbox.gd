@@ -1,11 +1,12 @@
 extends "res://scripts/prototype/physics_sandbox.gd"
 
 # Test-only observer. Every override delegates to the real gameplay lifecycle.
-# Store IDs/counters, not references that could keep dead contact state around.
+# Store IDs/counters/value snapshots, not references that could keep dead contact state around.
 var callback_depth := 0
 var resolving_depth := 0
 var contact_events := 0
 var result_spawns: Dictionary = {}
+var result_spawn_positions: Dictionary = {}
 var awards: Dictionary = {}
 var registrations: Dictionary = {}
 var discoveries: Dictionary = {}
@@ -44,6 +45,8 @@ func _spawn_piece(definition: CreationDefinition, position: Vector2,
 	var piece := super._spawn_piece(definition, position, velocity, angular, angle)
 	if resolving_depth > 0 and piece != null:
 		result_spawns[definition.id] = result_spawns.get(definition.id, 0) + 1
+		# Observe the actual spawn before the awake body advances under physics.
+		result_spawn_positions[piece.spawn_sequence] = piece.global_position
 	return piece
 
 

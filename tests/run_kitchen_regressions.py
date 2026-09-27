@@ -49,21 +49,46 @@ def main():
     parser.add_argument("--suite", choices=["all", "integration", "sponge", "touch", "spawn", "collection", "debug-spawn", "animation-lab", "merge-flavor", "machine", "controls", "creation-result"], default="all")
     parser.add_argument("--graphical", action="store_true", help="Also run actual portrait merge captures")
     parser.add_argument("--timeout", type=int, default=600, help="Maximum seconds per Godot process")
+    parser.add_argument("--artifacts-dir", type=Path, help="Create a new artifact directory at this path")
     args = parser.parse_args()
     engine = shutil.which(args.godot)
     if not engine:
         parser.error("Godot not found; pass --godot /absolute/path/to/Godot")
     repository = Path(__file__).resolve().parents[1]
-    artifacts = Path(tempfile.mkdtemp(prefix="game01-merge-regressions-")).resolve()
+    if args.artifacts_dir:
+        artifacts = args.artifacts_dir.resolve()
+        if artifacts.is_relative_to(repository) and not artifacts.is_relative_to(repository / ".godot"):
+            parser.error("In-project artifacts must be under .godot to avoid copying the output into itself")
+        artifacts.mkdir(parents=True, exist_ok=False)
+    else:
+        artifacts = Path(tempfile.mkdtemp(prefix="game01-merge-regressions-")).resolve()
     project = artifacts / "project"
     print(f"ARTIFACTS: {artifacts}", flush=True)
     shutil.copytree(repository, project, ignore=shutil.ignore_patterns(".git", ".godot", "__pycache__"))
+    user_data_name = (artifacts / "user_data").as_posix()
+    if os.name == "nt":
+        # Godot appends the custom name to APPDATA on Windows. These environment
+        # changes affect only this runner process and its children.
+        os.environ["APPDATA"] = str(artifacts)
+        os.environ["LOCALAPPDATA"] = str(artifacts / "cache")
+        user_data_name = "user_data"
     # This file exists only in the test copy. It cannot reset the user's saves.
-    (project / "override.cfg").write_text(
+    override = (
         '[application]\nconfig/use_custom_user_dir=true\n'
-        f'config/custom_user_dir_name="{artifacts / "user_data"}"\n', encoding="utf-8")
+        f'config/custom_user_dir_name="{user_data_name}"\n')
+    (project / "override.cfg").write_text(override, encoding="utf-8")
+    # The editor does not use override.cfg. Suppress eager translation loading
+    # in the disposable project's settings until CSV import creates them.
+    settings_path = project / "project.godot"
+    original_settings = settings_path.read_bytes()
+    settings_path.write_bytes(re.sub(
+        rb"(?m)^locale/translations=[^\r\n]*", b"locale/translations=PackedStringArray()",
+        original_settings))
     base = [engine, "--headless", "--path", str(project)]
-    checked_run(base + ["--editor", "--import", "--quit"], artifacts / "import.log", args.timeout)
+    try:
+        checked_run(base + ["--editor", "--import", "--quit"], artifacts / "import.log", args.timeout)
+    finally:
+        settings_path.write_bytes(original_settings)
     suites = [("merge_integration_validation", "MERGE INTEGRATION:", [])]
     if args.suite == "touch":
         suites = [("touch_input_validation", "TOUCH INPUT:", [])]

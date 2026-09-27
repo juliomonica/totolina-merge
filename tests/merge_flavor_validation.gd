@@ -188,8 +188,12 @@ func _production_portraits() -> void:
 				_check(false, "phone effect exists")
 				continue
 			var effect: MergeFlavorEffect = _flavors()[0]
-			_check(effect.global_position.distance_to(_live(result)[0].position) < 5.0,
-				"effect anchor equals actual safe merge/result location")
+			var result_piece: PrototypePiece = _live(result)[0]
+			var spawn_positions: Dictionary = sandbox.result_spawn_positions
+			# The flavor stays at the spawn anchor while the physical result can fall.
+			_check(spawn_positions.has(result_piece.spawn_sequence)
+				and effect.global_position.distance_to(spawn_positions[result_piece.spawn_sequence]) < 5.0,
+				"effect anchor equals actual initial result spawn location")
 			var animation: StringName = CONTENT.recipe_for(input, input).effect_animation
 			var duration := effect.player.get_animation(animation).length
 			for phase in [0.2, 0.5, 0.8]:
