@@ -1,4 +1,4 @@
-# Kitchen regression gate
+# Totolina's Mystery Journey — Kitchen regression gate
 
 Use the installed project-compatible Godot version. No plugins or new dependencies.
 The runner uses Python's standard library and native Godot SceneTree tests.

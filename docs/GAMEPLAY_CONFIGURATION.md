@@ -1,4 +1,4 @@
-# Cozy Cat Creations — Gameplay Configuration
+# Totolina's Mystery Journey — Gameplay Configuration
 
 ## Overview
 

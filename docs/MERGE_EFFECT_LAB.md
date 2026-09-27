@@ -1,6 +1,6 @@
 # Kitchen merge effect animation lab
 
-This is a development-only scene in the existing game01 project. It loads no
+This is a development-only scene in Totolina's Mystery Journey. It loads no
 gameplay scenes or content configuration, has no physics nodes, and does not
 access saves, discovery, score, Push, RNG, spawning or navigation. Its approved
 animation component is now shared with production; the lab itself is never
@@ -11,7 +11,7 @@ The latter remains the source of truth; this document records only lab details.
 
 ## Open and run
 
-1. Open the existing `game01/project.godot` in Godot 4.7.
+1. Open `project.godot` at the repository root in Godot 4.7.
 2. Open `res://scenes/debug/merge_effect_lab.tscn` in the FileSystem dock.
 3. Choose **Run Current Scene** (F6; Fn+F6 on some Macs). F5 runs the production main scene.
 4. Select Egg, Milk or Cream, then **Play / Replay**.

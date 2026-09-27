@@ -1,6 +1,6 @@
-# Cozy Cat Creations — Animation Guidelines
+# Totolina's Mystery Journey — Animation Guidelines
 
-This document is the source of truth for animation work in Cozy Cat Creations.
+This document is the source of truth for animation work in Totolina's Mystery Journey.
 
 It applies to:
 

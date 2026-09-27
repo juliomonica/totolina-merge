@@ -1,10 +1,10 @@
-# Cozy Cat Creations GDD
+# Totolina's Mystery Journey GDD
 
 ## Identity
 
 **Studio:** Lunitora Games
 
-**Game:** Cozy Cat Creations
+**Game:** Totolina's Mystery Journey
 
 **First gameplay world:** Kitchen
 
@@ -578,7 +578,7 @@ completion.
 
 # 15. Cosmetic Theme Direction
 
-Cozy Cat Creations may support cosmetic themes.
+Totolina's Mystery Journey may support cosmetic themes.
 
 A theme must never provide gameplay advantage.
 
@@ -682,9 +682,9 @@ validated.
 
 ---
 
-# 18. What Cozy Cat Creations Is NOT
+# 18. What Totolina's Mystery Journey Is NOT
 
-Cozy Cat Creations is NOT:
+Totolina's Mystery Journey is NOT:
 
 - a pet simulator
 - a farming game

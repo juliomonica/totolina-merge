@@ -1,6 +1,6 @@
 # Totolina + Machine Interaction Lab
 
-Development-only animation review inside the existing game01 project. The
+Development-only animation review inside Totolina's Mystery Journey. The
 approved shared components now also power production Kitchen gameplay; the lab
 itself remains isolated from production state/navigation. Old asset paths and the
 existing merge-effect lab are deliberately retained for a later cleanup audit.
@@ -30,7 +30,7 @@ values are unchanged.
 
 ## Open / run
 
-1. Open the existing `game01/project.godot` in Godot 4.7.
+1. Open `project.godot` at the repository root in Godot 4.7.
 2. Open `res://scenes/debug/machine_interaction_lab.tscn`.
 3. On your **Mac**, press **Command + R** or click **Run Current Scene** in the
    top-right toolbar. Command + B runs the production main scene, which has no
