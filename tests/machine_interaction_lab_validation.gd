@@ -8,6 +8,7 @@ var contacts := 0
 var contact_x := 0.0
 var output := ""
 var phone: SubViewport
+var authored_nozzle_transform: Transform2D
 
 
 func _initialize() -> void:
@@ -41,7 +42,7 @@ func _reset_ok() -> bool:
 	return not m.busy and not m.player.is_playing() and not m.cat.idle_player.is_playing() \
 		and not m.cat.idle_enabled and is_zero_approx(m.cat.arm_pose) and is_zero_approx(m.cat.blink_pose) \
 		and m.cat.expression_weights == Vector2.ZERO and m.cat.visual.position == Vector2.ZERO \
-		and m.button_pose == 0.0 and m.shutter_pose == 0.0 and m.nozzle.position == Vector2(250, m.NOZZLE_Y) \
+		and m.button_pose == 0.0 and m.shutter_pose == 0.0 and m.nozzle.transform == authored_nozzle_transform \
 		and m.falling_item.modulate.a == 0.0 and m.incoming_item.modulate.a == 0.0 \
 		and m.current_item.position == m._current_base.origin and m.next_item.position == m._next_base.origin \
 		and m.current_item.modulate.a == 1.0 and m.next_item.modulate.a == 1.0 and lab.sample_index == 0
@@ -88,7 +89,10 @@ func _test_actions() -> void:
 		lab.target.value = x
 		contacts = 0
 		lab.play(&"full_drop")
-		m.player.advance(0.19)
+		m.player.advance(0.075)
+		_check(is_equal_approx(m.cat.arm_pose, 1.0) and is_equal_approx(m.button_pose, 0.25)
+			and contacts == 0, "full-drop arm/button first poses remain at 0.075s before contact")
+		m.player.advance(0.115)
 		_check(contacts == 0 and is_equal_approx(m.nozzle.position.x, x), "nozzle arrives before contact")
 		m.player.advance(0.02)
 		_check(contacts == 1 and is_equal_approx(contact_x, x), "exactly one contact at chosen X")
@@ -161,12 +165,17 @@ func _test_press_sequence() -> void:
 	contacts = 0
 	lab.play(&"press")
 	var previous := 0.0
-	for pose in [[0.0, 0.0, 0.0], [0.075, 1.0, 0.25], [0.135, 2.0, 1.0],
+	# Standalone press eases the arm to pose 1 at 0.10s; the button keeps its
+	# 0.075s key. Both still reach full contact at 0.20s and finish at 0.44s.
+	for pose in [[0.0, 0.0, 0.0], [0.04, null, 0.0], [0.075, null, 0.25],
+		[0.10, 1.0, null], [0.135, 2.0, 1.0],
 		[0.20, 3.0, 2.0], [0.235, 3.0, 2.0], [0.305, 2.0, 1.0],
 		[0.37, 1.0, 0.25], [0.44, 0.0, 0.0]]:
 		lab.machine.player.advance(pose[0] - previous)
-		_check(is_equal_approx(lab.machine.cat.arm_pose, pose[1])
-			and is_equal_approx(lab.machine.button_pose, pose[2]), "arm/button key poses stay synchronized")
+		if pose[1] != null:
+			_check(is_equal_approx(lab.machine.cat.arm_pose, pose[1]), "standalone press arm key pose at %.3fs" % pose[0])
+		if pose[2] != null:
+			_check(is_equal_approx(lab.machine.button_pose, pose[2]), "standalone press button key pose at %.3fs" % pose[0])
 		_check(contacts == (0 if pose[0] < 0.20 else 1), "contact fires once at the fully pressed pose")
 		previous = pose[0]
 	lab.machine.player.advance(0.01)
@@ -318,6 +327,10 @@ func _portraits() -> void:
 
 
 func _run() -> void:
+	# Read the authored rest before _ready()/reset() can alter an instance.
+	var authored_machine := preload("res://scenes/presentation/machine_drop_presentation.tscn").instantiate()
+	authored_nozzle_transform = authored_machine.get_node("TopMachine/Nozzle").transform
+	authored_machine.free()
 	lab = LAB.instantiate()
 	root.add_child(lab)
 	await process_frame

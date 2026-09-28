@@ -42,7 +42,7 @@ Paths below are relative to the named scene root. “Game” means production la
 | Feeder glass | `TopMachine/FeederGlass` | Position, Scale | User / Game |
 | Previews | `TopMachine/Current`, `Next`, `Incoming` | Position, Scale; keep Incoming aligned with Next | User / Game |
 | Shutter | `TopMachine/Shutter` | Position, Scale, Ordering | User / Game |
-| Nozzle | `TopMachine/Nozzle` | Base Y / Scale / Rotation; X animates toward input | User / Game |
+| Nozzle | `TopMachine/Nozzle` | Rest Position / Scale / Rotation; action X animates toward input | User / Game |
 | Score housing | `TopMachine/SampleScore` | Position, Scale | User / Game |
 | Score token / colon | `TopMachine/SampleScore/Token`, `Colon` | Position, Scale | User / Game |
 | Score digits | `TopMachine/SampleScore/ScoreLabel` | Control offsets/size, Theme Overrides font size | User / Game |
@@ -92,13 +92,25 @@ collision radii, input bounds and gameplay timing are not presentation controls.
 
 ## Current visual calibration
 
-- Feeder: scale **0.32**, position **(240,121)**; Current **(240,180)** / scale
-  **0.110**, Next and Incoming **(240,95)** / scale **0.105**.
-- Shutter: **(190,211.5)**, scale **100/1024**; its painted bottom at Y≈231.42
-  stays inside the feeder's painted bottom at Y≈233.96. Shutter Z=0, previews
-  Z=1, glass Z=2. Only the authored shutter position changed, not its timeline
-  or the physical release outlet.
-- Score token: **0.061** (formerly 0.048), at (34,51); colon (63,51), label X=76.
+- Totolina: position **(9,78)**, uniform scale **0.15**. These are authored
+  presentation values; the physical release outlet remains Y=269.
+- The hanging idle arm uses **Z=4**, local position **(-16,17)** and no rest
+  rotation. The three pressing arms retain **Z=2**, below the shoulder patch
+  at **Z=3**. The idle contour is continuous beside the body; the patch masks
+  the pressing poses' root seam. Preserve the shared arm anchor **(650,410)**,
+  source pivots, and body-texture patch **Rect(530,325,170,95)**.
+- Feeder: scale **0.32**, position **(259,121)**; Current **(259,180)** / scale
+  **0.110**, Next and Incoming **(259,95)** / scale **0.105**.
+- Shutter: **(209,201.5)**, scale **100/1024**; its bottom at Y≈221.81
+  stays inside the feeder's painted bottom at Y≈233.96. Regression checks pin
+  this authored placement and retain containment and score-clearance checks.
+  Its **12–16px** bottom-inset band is the former **2–6px** band shifted by the
+  authored **10px** rise, with the same width. Shutter Z=0,
+  previews Z=1, glass Z=2. Its timeline and the physical release outlet are unchanged.
+- Nozzle rest: **(256,264)**, scale **0.15**. Stop/Reset restores the authored
+  transform rather than the historical X=250. Input still supplies action targets.
+- Score housing: **(339,95)**. Token scale **(0.096304685,0.09179686)** at
+  **(28.654053,50.5)**; colon **(55,51)**, label X=68.
 - The original mapping used source floor row 1567. The front interior edge is
   around row 1595, 28 source pixels lower: **12.71 / 13.20 / 17.60** display pixels
   at widths 390 / 405 / 540. The art mapping now aligns 1595 with the same physics
@@ -140,6 +152,10 @@ Do **not** blindly move the 0.20s contact event or change the 0.62s full cycle:
 gameplay has an independent release/input clock. A timing change needs an
 explicit integration/test pass. Decorative pose timing/easing can be tested in
 the lab; check paw/button contact and all three target positions afterward.
+The current standalone `press` arm reaches pose 01 at **0.100s**, while its button
+retains the **0.075s** partial-depression key. `full_drop` retains its **0.075s**
+first arm key. Independent key assertions preserve these intentional differences
+without moving the shared **0.200s** full-contact event or either action's length.
 Arm source pivots/rest rotations remain ordinary Sprite properties per pose,
 not hidden frame-specific code. Do not move them randomly to fix the whole cat.
 
@@ -153,7 +169,7 @@ First three exercises:
 
 1. FeederGlass: change uniform scale 0.32 → 0.33; run gameplay. Check compartment
    centers, shutter overlap and score clearance; Undo if worse.
-2. Shutter: move Y 211.5 → 210; run the machine lab, full drop and shutter previews.
+2. Shutter: move Y 201.5 → 200; run the machine lab, full drop and shutter previews.
 3. Open Totolina: move Visual/Eyes X 401 → 403; run blink, excited and surprised.
    One shared eye anchor should move every expression consistently.
 

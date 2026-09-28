@@ -5,6 +5,11 @@ const POOLS = [
 	{&"wheat": 75.0, &"flour": 25.0},
 	{&"wheat": 60.0, &"flour": 30.0, &"cake_mix": 10.0},
 ]
+const SELECTION_ORDERS = [
+	[&"wheat"],
+	[&"wheat", &"flour"],
+	[&"wheat", &"flour", &"cake_mix"],
+]
 var stage_changes: Array[int] = []
 
 
@@ -15,6 +20,8 @@ func _test_stage_configuration() -> void:
 		"only Flour and Cake Mix are configured unlock results")
 	for index in range(3):
 		_check(CONTENT.spawn_stages[index].weights == POOLS[index], "exact configured weights: stage %d" % (index + 1))
+		_check(CONTENT.spawn_stages[index].selection_order == SELECTION_ORDERS[index],
+			"historical cumulative selection order: stage %d" % (index + 1))
 	_check(not CreationDefinition.new().get_property_list().any(func(p): return p.name == "spawn_weight"),
 		"no competing per-creation spawn weights")
 	var world: WorldContentConfiguration = CONTENT.duplicate(true)
@@ -32,6 +39,59 @@ func _test_stage_configuration() -> void:
 	world = CONTENT.duplicate(true)
 	world.spawn_stages[1].unlock_creation_id = &"wheat"
 	_check(not world.spawn_stage_errors().is_empty(), "unlock must be a valid merge result")
+	world = CONTENT.duplicate(true)
+	world.spawn_stages[1].selection_order.remove_at(0)
+	_check(world.spawn_stage_errors().has("Spawn weight is missing from selection_order: wheat."),
+		"selection order cannot omit a weighted ID")
+	world = CONTENT.duplicate(true)
+	world.spawn_stages[0].selection_order.clear()
+	_check(world.spawn_stage_errors().has("Spawn weight is missing from selection_order: wheat."),
+		"empty selection order is rejected without dictionary fallback")
+	world = CONTENT.duplicate(true)
+	world.spawn_stages[1].selection_order.append(&"flour")
+	_check(world.spawn_stage_errors().has("Duplicate spawn selection ID: flour."),
+		"selection order cannot duplicate an ID")
+	world = CONTENT.duplicate(true)
+	world.spawn_stages[1].selection_order.append(&"cake_mix")
+	_check(world.spawn_stage_errors().has("Spawn selection ID has no weight: cake_mix."),
+		"selection order cannot add an unweighted ID")
+
+
+func _seeded_stage_snapshot(stage: SpawnStage) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3245
+	var sequence: Array[StringName] = []
+	for index in range(256):
+		sequence.append(stage.select_creation(rng))
+	return [sequence, rng.state]
+
+
+func _test_stage_serialization() -> void:
+	var world: WorldContentConfiguration = CONTENT.duplicate(true)
+	for index in range(3):
+		var original := CONTENT.spawn_stages[index]
+		var reordered := world.spawn_stages[index]
+		var keys := original.weights.keys()
+		keys.reverse()
+		reordered.weights.clear()
+		for creation_id in keys:
+			reordered.weights[creation_id] = original.weights[creation_id]
+		_check(_seeded_stage_snapshot(reordered) == _seeded_stage_snapshot(original),
+			"dictionary insertion order preserves seeded sequence and RNG state: stage %d" % (index + 1))
+	var path := output_dir.path_join("spawn_stages_roundtrip.tres")
+	var saved := ResourceSaver.save(world, path)
+	_check(saved == OK, "native ResourceSaver saves spawn configuration")
+	if saved != OK:
+		return
+	var reloaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as WorldContentConfiguration
+	_check(reloaded != null, "native ResourceLoader reloads spawn configuration")
+	if reloaded == null:
+		return
+	_check(reloaded.spawn_stage_errors().is_empty(), "saved spawn configuration validates after reload")
+	for index in range(3):
+		_check(reloaded.spawn_stages[index].selection_order == SELECTION_ORDERS[index]
+			and _seeded_stage_snapshot(reloaded.spawn_stages[index]) == _seeded_stage_snapshot(CONTENT.spawn_stages[index]),
+			"native save/reload preserves explicit order, seeded sequence and RNG state: stage %d" % (index + 1))
 
 
 func _selection_snapshot() -> Array:
@@ -190,6 +250,7 @@ func _test_deterministic_replay() -> void:
 
 func _run() -> void:
 	_test_stage_configuration()
+	_test_stage_serialization()
 	await _test_continuous_run()
 	await _test_deterministic_replay()
 	sandbox.queue_free()

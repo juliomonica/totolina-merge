@@ -160,6 +160,21 @@ func _poses_fit(effect: MergeFlavorEffect) -> bool:
 	return true
 
 
+func _hold_capture_phase(effect_ref: WeakRef, target_time: float) -> bool:
+	var deadline := Time.get_ticks_msec() + 6000
+	while Time.get_ticks_msec() < deadline:
+		var live_effect := effect_ref.get_ref() as MergeFlavorEffect
+		if live_effect == null or live_effect.is_queued_for_deletion() \
+			or not is_instance_valid(live_effect.player) or not live_effect.player.is_playing():
+			return false
+		if live_effect.player.current_animation_position >= target_time:
+			# The engine reaches the phase in real time; only capture I/O is held.
+			live_effect.player.pause()
+			return true
+		await create_timer(0.02).timeout
+	return false
+
+
 func _production_portraits() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
@@ -196,13 +211,19 @@ func _production_portraits() -> void:
 				"effect anchor equals actual initial result spawn location")
 			var animation: StringName = CONTENT.recipe_for(input, input).effect_animation
 			var duration := effect.player.get_animation(animation).length
+			var effect_ref: WeakRef = weakref(effect)
 			for phase in [0.2, 0.5, 0.8]:
-				_check(await _wait_for(func(): return not is_instance_valid(effect) or effect.player.current_animation_position >= duration * phase), "real-time phase advances")
-				if is_instance_valid(effect):
+				var reached := await _hold_capture_phase(effect_ref, duration * phase)
+				_check(reached, "real-time phase advances with a live effect")
+				if reached:
 					_check(_poses_fit(effect), "visible source canvases fit phone without clipping")
 					_check(effect.global_position.y > sandbox.hud_panel.get_global_rect().end.y,
 						"in-bowl animation stays beneath HUD layer")
 					await _capture("%dx%d_%s_%02d" % [dimensions.x, dimensions.y, animation, int(phase * 100)])
+					# Drain the capture's elapsed time through a complete paused frame.
+					await RenderingServer.frame_post_draw
+					if is_instance_valid(effect) and not effect.is_queued_for_deletion():
+						effect.player.play(animation)
 			await _frames(45)
 			_stable_after({"recipe": CONTENT.recipe_for(input, input), "before": before})
 			_check(not is_instance_valid(effect) and _live(result).size() == 1, "clear real-result payoff")

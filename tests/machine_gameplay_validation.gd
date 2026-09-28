@@ -103,9 +103,19 @@ func _test_release_transaction() -> void:
 		"glass in front of previews")
 	_check(machine.get_node("TopMachine/Shutter").z_index < machine.current_item.z_index,
 		"shutter behind previews")
-	_check(machine.cat.arms.all(func(arm): return arm.z_index == 2)
-		and machine.cat.visual.get_node("ShoulderOverlap").z_index == 3,
-		"shared approved arm is in front with shoulder seam covered")
+	var idle_arm: Sprite2D = machine.cat.arms[0]
+	var shoulder: Sprite2D = machine.cat.visual.get_node("ShoulderOverlap")
+	# The authored idle arm now hangs beside the body above the overlap patch;
+	# the three reaching poses still pass below that patch at the shoulder root.
+	_check(machine.cat.arms.map(func(arm): return arm.z_index) == [4, 2, 2, 2]
+		and idle_arm.position == Vector2(-16, 17) and is_zero_approx(idle_arm.rotation)
+		and idle_arm.scale == Vector2.ONE * 1.10 and idle_arm.offset == Vector2(-110, -60)
+		and idle_arm.get_parent().position == Vector2(650, 410)
+		and shoulder.z_index == 3 and shoulder.visible and not shoulder.centered
+		and shoulder.position == Vector2(530, 325) and shoulder.region_enabled
+		and shoulder.region_rect == Rect2(530, 325, 170, 95)
+		and shoulder.texture == machine.cat.visual.get_node("cat_totolina_body").texture,
+		"authored idle contour and press-arm shoulder overlap preserve pose-specific layering")
 	_check(machine.cat.eyes.all(func(eye): return eye.scale == Vector2.ONE)
 		and machine.cat.expression_eyes.all(func(eye): return eye.scale == Vector2.ONE),
 		"blink and both expressions reuse approved eye scale")
@@ -113,19 +123,24 @@ func _test_release_transaction() -> void:
 		return (eye.position == Vector2.ZERO and eye.offset == -Vector2(164, 64) and eye.scale == Vector2.ONE
 			and eye.get_parent().position == Vector2(401, 173) and eye.get_parent().scale == Vector2.ONE * 1.10)),
 		"all five eye overlays share the face center, pivot and approved smaller scale")
-	_check(machine.cat.scale == Vector2.ONE * 0.17 and machine.cat.position == Vector2(6, 58.4),
-		"cat/body transform unchanged")
+	_check(machine.cat.scale == Vector2.ONE * 0.15 and machine.cat.position == Vector2(9, 78)
+		and machine.cat.z_index == -4, "authored cat/body transform and machine depth unchanged")
 	var feeder: Sprite2D = machine.get_node("TopMachine/FeederGlass")
 	var shutter: Node2D = machine.get_node("TopMachine/Shutter")
 	var painted := feeder.texture.get_image().get_used_rect()
 	var feeder_bounds := Rect2(feeder.position + (Vector2(painted.position) - feeder.texture.get_size() * 0.5) * feeder.scale,
 		Vector2(painted.size) * feeder.scale)
 	var shutter_bounds := Rect2(shutter.position, Vector2(1024, 208) * shutter.scale)
-	_check(feeder.scale == Vector2.ONE * 0.32 and shutter_bounds.position.y < feeder_bounds.end.y
-		and shutter_bounds.end.y <= feeder_bounds.end.y - 2.0
-		and shutter_bounds.end.y > feeder_bounds.end.y - 6.0
+	# The art pass raised the shutter by 10px (211.5 -> 201.5); translate the
+	# original 2..6px bottom-inset band by that rise without widening its tolerance.
+	_check(feeder.scale == Vector2.ONE * 0.32
+		and shutter.position.is_equal_approx(Vector2(209, 201.5))
+		and shutter.scale == Vector2.ONE * (100.0 / 1024.0)
+		and shutter_bounds.position.y < feeder_bounds.end.y
+		and shutter_bounds.end.y <= feeder_bounds.end.y - 12.0
+		and shutter_bounds.end.y > feeder_bounds.end.y - 16.0
 		and feeder_bounds.end.x < machine.get_node("TopMachine/SampleScore").position.x,
-		"glass encloses shutter housing with a small bottom inset and clears score housing")
+		"authored shutter remains inset within glass and clears score housing")
 	_check(view.frame.get_node("LowerInterior").z_index < sandbox.pieces.z_index
 		and not view.frame.get_node("LowerInterior").z_as_relative
 		and not view.frame.get_node("Chamber").visible,
