@@ -1,6 +1,6 @@
 # GAME DESIGN INPUT DOCUMENT
 
-**Product:** Totolina's Mystery Journey
+**Product:** Totolina Merge
 **Studio:** Lunitora Games
 **Current world:** Kitchen
 **Current character:** Tolina
@@ -33,7 +33,7 @@ linear board ladder.
 
 | Topic | Design input |
 | --- | --- |
-| Game name | **Totolina's Mystery Journey** |
+| Game name | **Totolina Merge** |
 | Studio/brand | **Lunitora Games** |
 | Main character | **Tolina** |
 | First gameplay world | **Kitchen** |
@@ -312,7 +312,7 @@ Fancy Cake creation is a major milestone, but the run continues and multiple Fan
 
 ## 6. Level / Session States
 
-Totolina's Mystery Journey currently has one endless-style Kitchen session rather than authored levels.
+Totolina Merge currently has one endless-style Kitchen session rather than authored levels.
 
 ### Initial state
 
@@ -377,7 +377,7 @@ integer-tier save from unlocking unrelated new creations.
 
 ### Characters
 
-**CONFIRMED:** Tolina is the main character and emotional face of Totolina's Mystery Journey.
+**CONFIRMED:** Tolina is the main character and emotional face of Totolina Merge.
 
 **CONFIRMED 1.0 DIRECTION:** Tolina may gain additional ambient Home behaviors and accomplishment reactions. Existing recipe discoveries may influence which presentation behaviors are available.
 
@@ -456,7 +456,7 @@ No daily reward, streak, quest, battle pass, time gate, energy, rotating event, 
 
 | Screen | Status | Purpose | User goal | Main components | Important interactions | Required information |
 | --- | --- | --- | --- | --- | --- | --- |
-| Main Menu / Kitchen Entrance | IMPLEMENTED | Establish identity and provide entry routes. | Start playing or view recipes. | Kitchen background, Lunitora Games, Totolina's Mystery Journey title, Kitchen subtitle, Tolina, magical bowl, Start, Recipes. | Tap Start; tap Recipes. | Game identity, current world, two clear destinations. |
+| Main Menu / Kitchen Entrance | IMPLEMENTED | Establish identity and provide entry routes. | Start playing or view recipes. | Kitchen background, Lunitora Games, Totolina Merge title, Kitchen subtitle, Tolina, magical bowl, Start, Recipes. | Tap Start; tap Recipes. | Game identity, current world, two clear destinations. |
 | Gameplay | IMPLEMENTED | Host the full drop/merge survival session. | Resolve recipes, discover creations, score, and avoid overflow. | Tolina, Next preview, Score, Push %, danger line/label, bowl and pieces, creation progress strip, left/right Push, hold Restart. | Tap drop position; activate Push left/right when ready; hold Restart for one second. | Next piece, score, Push charge/readiness, danger state, collection progress. |
 | Game Over / Result Overlay | IMPLEMENTED | Turn failure into a creation showcase and replay decision. | Review achievement and begin a fresh run. | Dim layer, Game Over, Tolina reaction, highest creation image/name, optional new recipe, Play Again. | Tap Play Again. | Highest creation and any newly discovered recipe. Current overlay does not include run score. |
 | Recipe Collection | IMPLEMENTED | Show persistent Kitchen discoveries. | Review unlocked creations and understand what remains unknown. | Title, vertically scrollable two-column card grid, nine cards, fixed Back button. | Touch-drag or mouse-wheel scroll; tap Back. | Discovered art/name; locked silhouette and localized Unknown state. |
@@ -757,7 +757,7 @@ Large frame sets, export resolution, frame rate, texture memory, and application
 | Warning/reward banners | Make Danger, New Creation, Max Merge, and Push feedback coherent. | Warning, discovery, final creation, brief action confirmation. | High |
 | Lock/unknown symbol | Reinforce hidden recipes without revealing identity. | Compact strip and full collection-card forms. | High |
 | Tolina production animation set | Replace/extend static pose presentation with expressive authored animation. | Spine editable master plus exported transparent frame sequences or sprite sheets for approved animations. | Critical for Living Home |
-| App icon and store identity set | Represent Totolina's Mystery Journey outside gameplay. | Platform icon, adaptive-safe composition, store key art. | Future production need |
+| App icon and store identity set | Represent Totolina Merge outside gameplay. | Platform icon, adaptive-safe composition, store key art. | Future production need |
 | Optional onboarding illustrations | Explain drop, pair merge, danger, and Push with minimal text. | One contextual visual per concept. | Recommended after UX testing |
 
 ### Asset handoff rules
@@ -962,7 +962,7 @@ Cross-platform purchase transfer between Apple and Google ecosystems is not assu
 
 ### CONFIRMED commercial/product direction
 
-Totolina's Mystery Journey may offer cosmetic presentation themes.
+Totolina Merge may offer cosmetic presentation themes.
 
 The default theme is included with the game.
 
@@ -1012,7 +1012,7 @@ Additional themes should primarily be content production rather than new gamepla
 
 ### CONFIRMED product foundation
 
-- **Totolina's Mystery Journey** is the game identity.
+- **Totolina Merge** is the game identity.
 - **Lunitora Games** is the studio/brand.
 - **Tolina** is the main character.
 - **Kitchen** is the only gameplay world required for version 1.0.

@@ -1,6 +1,6 @@
 # Kitchen merge effect animation lab
 
-This is a development-only scene in Totolina's Mystery Journey. It loads no
+This is a development-only scene in Totolina Merge. It loads no
 gameplay scenes or content configuration, has no physics nodes, and does not
 access saves, discovery, score, Push, RNG, spawning or navigation. Its approved
 animation component is now shared with production; the lab itself is never

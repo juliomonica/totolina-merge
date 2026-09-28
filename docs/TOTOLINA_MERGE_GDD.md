@@ -1,10 +1,10 @@
-# Totolina's Mystery Journey GDD
+# Totolina Merge GDD
 
 ## Identity
 
 **Studio:** Lunitora Games
 
-**Game:** Totolina's Mystery Journey
+**Game:** Totolina Merge
 
 **First gameplay world:** Kitchen
 
@@ -578,7 +578,7 @@ completion.
 
 # 15. Cosmetic Theme Direction
 
-Totolina's Mystery Journey may support cosmetic themes.
+Totolina Merge may support cosmetic themes.
 
 A theme must never provide gameplay advantage.
 
@@ -682,9 +682,9 @@ validated.
 
 ---
 
-# 18. What Totolina's Mystery Journey Is NOT
+# 18. What Totolina Merge Is NOT
 
-Totolina's Mystery Journey is NOT:
+Totolina Merge is NOT:
 
 - a pet simulator
 - a farming game
