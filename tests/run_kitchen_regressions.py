@@ -61,7 +61,7 @@ def main():
             parser.error("In-project artifacts must be under .godot to avoid copying the output into itself")
         artifacts.mkdir(parents=True, exist_ok=False)
     else:
-        artifacts = Path(tempfile.mkdtemp(prefix="totolinas-mystery-journey-regressions-")).resolve()
+        artifacts = Path(tempfile.mkdtemp(prefix="totolina-merge-regressions-")).resolve()
     project = artifacts / "project"
     print(f"ARTIFACTS: {artifacts}", flush=True)
     shutil.copytree(repository, project, ignore=shutil.ignore_patterns(".git", ".godot", "__pycache__"))

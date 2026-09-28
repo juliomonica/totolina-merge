@@ -10,10 +10,10 @@ config_version=5
 
 [application]
 
-config/name="Totolina's Mystery Journey"
+config/name="Totolina Merge"
 run/main_scene="res://scenes/menu/main_menu.tscn"
 config/use_custom_user_dir=true
-config/custom_user_dir_name="TotolinasMysteryJourney"
+config/custom_user_dir_name="TotolinaMerge"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 

@@ -1,6 +1,6 @@
 # Totolina + Machine Interaction Lab
 
-Development-only animation review inside Totolina's Mystery Journey. The
+Development-only animation review inside Totolina Merge. The
 approved shared components now also power production Kitchen gameplay; the lab
 itself remains isolated from production state/navigation. Old asset paths and the
 existing merge-effect lab are deliberately retained for a later cleanup audit.

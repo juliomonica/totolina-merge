@@ -1,4 +1,4 @@
-# Totolina's Mystery Journey — Gameplay Configuration
+# Totolina Merge — Gameplay Configuration
 
 ## Overview
 

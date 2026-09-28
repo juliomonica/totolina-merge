@@ -1,6 +1,6 @@
-# Totolina's Mystery Journey — Animation Guidelines
+# Totolina Merge — Animation Guidelines
 
-This document is the source of truth for animation work in Totolina's Mystery Journey.
+This document is the source of truth for animation work in Totolina Merge.
 
 It applies to:
 
