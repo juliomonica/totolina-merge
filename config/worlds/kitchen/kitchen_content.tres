@@ -161,6 +161,7 @@ result = &"fancy_cake"
 
 [sub_resource type="Resource" id="SpawnStage_start"]
 script = ExtResource("spawn_stage")
+selection_order = Array[StringName]([&"wheat"])
 weights = Dictionary[StringName, float]({
 &"wheat": 100.0
 })
@@ -168,6 +169,7 @@ weights = Dictionary[StringName, float]({
 [sub_resource type="Resource" id="SpawnStage_flour"]
 script = ExtResource("spawn_stage")
 unlock_creation_id = &"flour"
+selection_order = Array[StringName]([&"wheat", &"flour"])
 weights = Dictionary[StringName, float]({
 &"flour": 25.0,
 &"wheat": 75.0
@@ -176,6 +178,7 @@ weights = Dictionary[StringName, float]({
 [sub_resource type="Resource" id="SpawnStage_cake_mix"]
 script = ExtResource("spawn_stage")
 unlock_creation_id = &"cake_mix"
+selection_order = Array[StringName]([&"wheat", &"flour", &"cake_mix"])
 weights = Dictionary[StringName, float]({
 &"cake_mix": 10.0,
 &"flour": 30.0,

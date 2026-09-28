@@ -59,6 +59,10 @@ iPhone testing. Emulation flags are changed only within isolated test processes.
 `--graphical` also captures the three effects and late results with debug
 collision circles, sparse collection states and sizing at 390×844, 405×720,
 540×960. This is desktop rendering, not physical Android/iOS testing.
+Merge-flavor portrait phases require a live, automatically playing effect.
+The test holds that effect only while capturing a reached phase and draining
+the image-write frame, then resumes playback. Screenshot latency must not consume
+the remaining timeline or turn a freed effect into a successful phase check.
 
 Tests write only explicit temporary discovery files. The audit sandbox delegates
 to the production resolver and is never referenced by production scenes.

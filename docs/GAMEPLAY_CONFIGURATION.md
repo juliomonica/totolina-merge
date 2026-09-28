@@ -205,9 +205,14 @@ world resource and rerun to compare curves.
 `WorldContentConfiguration.spawn_stages` in
 `config/worlds/kitchen/kitchen_content.tres` is the only spawn-weight source.
 Each native `SpawnStage` resource has `unlock_creation_id` (empty for the opening
-stage, otherwise a successful merge result) and `weights` (semantic creation IDs
-to relative weights; absent IDs cannot spawn). Stages are ordered by unlock
-progression; weights use their serialized entry order for deterministic selection.
+stage, otherwise a successful merge result), `weights` (semantic creation IDs
+to relative weights; absent IDs cannot spawn), and `selection_order` (an ordered
+array containing every weighted ID exactly once). Stages are ordered by unlock
+progression. Both weight summation and cumulative selection follow `selection_order`,
+preserving the historical Wheat, Flour, Cake Mix intervals shown below. This order
+is explicit because native Godot resource saves sort dictionary keys; dictionary
+insertion order must not change a seeded gameplay sequence. Missing, duplicate,
+or extra selection IDs are configuration errors.
 
 | Run stage | Unlock in this run | Wheat | Flour | Cake Mix |
 | --- | --- | ---: | ---: | ---: |

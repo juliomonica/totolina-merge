@@ -19,14 +19,20 @@ The lab uses the same scene, plus its existing cosmetic falling-sample preview.
 See [PRESENTATION_TUNING_GUIDE.md](PRESENTATION_TUNING_GUIDE.md) for actual node paths,
 Inspector values, animation ownership and save/reopen validation.
 
-Current calibration: feeder scale **0.32**, center **(240,121)**; Next
-**(240,95)**, Current **(240,180)**; shutter **(190,221)** overlaps the feeder foot.
-Score token **0.061**; masks use editable Control offsets **−4 / +4**.
+Current authored calibration is listed in
+[PRESENTATION_TUNING_GUIDE.md](PRESENTATION_TUNING_GUIDE.md#current-visual-calibration).
+Reset restores those saved transforms, including the nozzle's current **(256,264)**
+rest position; it must also preserve deliberately edited transforms after save/reopen.
+Masks use editable Control offsets **−4 / +4**.
 The production visual floor now aligns source row **1595**, rather than 1567,
 with the unchanged physics floor. The central lower interior AND first 70
 footer-source pixels draw behind bodies; side rails/collection trim remain front.
-This section supersedes earlier dated layout values below; approved pose/timing
-values are unchanged.
+This section supersedes earlier dated layout values below. The standalone **Press**
+preview now reaches arm pose 01 at **0.100s**; the button's first partial depression
+remains at **0.075s**. These decorative keys are checked independently. Full Drop
+retains its first arm key at **0.075s**. Both actions still reach full paw/button
+contact at **0.200s**; Press ends at **0.440s**, and Full Drop ends at **0.620s**.
+The gameplay release/input clock and physics authority are unchanged.
 
 ## Open / run
 
@@ -42,7 +48,8 @@ values are unchanged.
 6. Adjust Target X and 0.25×–2.0× speed. Loop repeats the selected action after a
    0.35s review rest (also affected by speed). Blink / Idle uses its own natural
    interval. Stop / Reset cancels both pending repeats and idle motion, and returns
-   to Wheat CURRENT / Flour NEXT with the nozzle at X=250. The **Collection preview**
+   to Wheat CURRENT / Flour NEXT with the nozzle at its authored rest transform.
+   The **Collection preview**
    slider scrubs a fixed nine-position sample track; it does not access discoveries.
 
 ```sh

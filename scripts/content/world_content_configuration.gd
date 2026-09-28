@@ -123,8 +123,17 @@ func spawn_stage_errors() -> PackedStringArray:
 		if triggers.has(trigger):
 			errors.append("Duplicate spawn stage unlock: %s." % trigger)
 		triggers[trigger] = true
+		var ordered_ids: Dictionary = {}
+		for creation_id in stage.selection_order:
+			if ordered_ids.has(creation_id):
+				errors.append("Duplicate spawn selection ID: %s." % creation_id)
+			if not stage.weights.has(creation_id):
+				errors.append("Spawn selection ID has no weight: %s." % creation_id)
+			ordered_ids[creation_id] = true
 		var total := 0.0
 		for creation_id in stage.weights:
+			if not ordered_ids.has(creation_id):
+				errors.append("Spawn weight is missing from selection_order: %s." % creation_id)
 			var weight := stage.weights[creation_id]
 			if creation_for_id(creation_id) == null or not is_finite(weight) or weight < 0.0:
 				errors.append("Invalid spawn stage weight: %s." % creation_id)
