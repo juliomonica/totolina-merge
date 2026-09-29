@@ -7,3 +7,7 @@
 
 # macOS Finder metadata
 .DS_Store
+
+# Ignored files
+/source_art/_inbox/
+/source_art/_staging/
