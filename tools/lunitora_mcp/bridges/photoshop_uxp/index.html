@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { padding: 16px; color: var(--uxp-host-text-color); }
+    h3 { margin: 0 0 12px; }
+    p { margin: 8px 0; }
+    input { width: 100%; margin: 8px 0; }
+    button { margin-top: 8px; }
+    #status { font-weight: bold; }
+    #storage-status { font-size: 11px; }
+    #diagnostic-detail { font-size: 11px; white-space: normal; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <h3>Lunitora Photoshop Bridge</h3>
+  <p>Read-only document inspection</p>
+  <p id="versions"></p>
+  <p id="status">Disconnected</p>
+  <p id="diagnostic-detail" role="status" aria-live="polite">Diagnostics: waiting for plugin initialization.</p>
+  <label for="pairing-token">Pairing token</label>
+  <input id="pairing-token" type="password" placeholder="Paste your local pairing token">
+  <button id="connect">Connect / Reconnect</button>
+  <p id="storage-status">Pairing is stored securely on this computer when available.</p>
+  <script src="index.js"></script>
+</body>
+</html>

@@ -1,0 +1,394 @@
+/* Read-only UXP DOM getters. No batchPlay, file access, save or selection changes. */
+"use strict";
+
+console.log("[Lunitora UXP] Plugin script initialization started");
+
+const photoshop = require("photoshop");
+const uxp = require("uxp");
+const { host, versions } = uxp;
+const VERSION = "0.1.0";
+const PROTOCOL_VERSION = 1;
+const ENDPOINT = "ws://localhost:43127";
+const MAX_PAYLOAD_BYTES = 262144;
+const MAX_LAYERS = 2000;
+const MAX_DEPTH = 64;
+const STORAGE_KEY = "lunitora.phase1.pairing";
+const HOST_VERSION_ERROR = "Could not detect the Photoshop host version from UXP host.version.";
+const HOST_NAME_ERROR = "Could not detect the Photoshop host name from UXP host.name.";
+const ALLOWED = new Set(["photoshop_ping", "photoshop_get_active_document"]);
+const MESSAGES = Object.freeze({
+  INVALID_MESSAGE: "Invalid bridge request.",
+  UNSUPPORTED_OPERATION: "Only the two read-only Photoshop operations are supported.",
+  PHOTOSHOP_READ_FAILED: "Photoshop could not read the current document.",
+  DOCUMENT_TOO_LARGE: "Document exceeds the bounded inspection limits.",
+  UNSUPPORTED_HOST: "Photoshop 27.10 or newer is required."
+});
+
+let diagnosticDetail = null;
+
+function safeDiagnostic(value, secret = "") {
+  if (typeof value !== "string") return "unavailable";
+  // Never pass raw events, errors, messages or auth frames to the console.
+  let text = secret ? value.split(secret).join("[redacted]") : value;
+  if (/(?:token|password|secret|authorization)["'\\\s]*[:=]/i.test(text)) {
+    return "[redacted sensitive detail]";
+  }
+  text = text.replace(/[A-Za-z0-9_-]{64,}/g, "[redacted]");
+  return text.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 4096);
+}
+
+function diagnostic(level, stage, error = null, secret = "", show = true) {
+  const details = [];
+  if (error) {
+    for (const field of ["name", "message", "stack"]) {
+      try {
+        if (typeof error[field] === "string") {
+          details.push(field + "=" + safeDiagnostic(error[field], secret));
+        }
+      } catch (_) { details.push(field + "=unavailable"); }
+    }
+  }
+  const safeStage = safeDiagnostic(stage, secret);
+  console[level]("[Lunitora UXP] " + safeStage + (details.length ? " | " + details.join(" | ") : ""));
+  if (show && diagnosticDetail) {
+    const visible = details.filter(detail => !detail.startsWith("stack="));
+    diagnosticDetail.textContent = safeStage + (visible.length ? " | " + visible.join(" | ").slice(0, 500) : "");
+  }
+}
+
+function socketState(ws) {
+  try { return typeof ws.readyState === "number" ? ws.readyState : "unavailable"; }
+  catch (_) { return "unavailable"; }
+}
+
+function closedDiagnostic(event, show = true) {
+  const code = event && typeof event.code === "number" ? event.code : "unavailable";
+  const clean = event && typeof event.wasClean === "boolean" ? event.wasClean : "unavailable";
+  const reason = event && typeof event.reason === "string" ? safeDiagnostic(event.reason) : "unavailable";
+  diagnostic(clean === true ? "log" : "warn",
+    "Connection closed: code=" + code + ", reason=" + reason + ", wasClean=" + clean, null, "", show);
+}
+
+function fail(code) {
+  const error = new Error(MESSAGES[code]);
+  error.code = code;
+  throw error;
+}
+
+function readHostVersion() {
+  let value;
+  try { value = host.version; }
+  catch (_) { return null; }
+  if (typeof value !== "string") return null;
+  const version = value.trim();
+  const match = version.length < 100 && version.match(/^(\d+)\.(\d+)(?:\.\d+)*$/);
+  if (!match) return null;
+  const major = Number(match[1]), minor = Number(match[2]);
+  if (!Number.isSafeInteger(major) || !Number.isSafeInteger(minor)) return null;
+  return { version, major, minor };
+}
+
+function supportsHost(version) {
+  return version && (version.major > 27 || (version.major === 27 && version.minor >= 10));
+}
+
+function readHostName() {
+  try {
+    const name = host.name;
+    return typeof name === "string" && name.trim().length > 0 && name.length < 100 ? name : null;
+  } catch (_) { return null; }
+}
+
+function optionalString(getter) {
+  try {
+    const value = getter();
+    return value == null ? null : String(value);
+  } catch (_) {
+    return null;
+  }
+}
+
+function ping(version, hostName) {
+  return {
+    host_name: hostName,
+    photoshop_version: version.version,
+    host_version: version.version,
+    uxp_version: optionalString(() => versions.uxp),
+    plugin_version: optionalString(() => versions.plugin) || "unavailable"
+  };
+}
+
+function readActiveDocument() {
+  const app = photoshop.app;
+  if (app.documents.length === 0) return { has_document: false, document: null };
+  const doc = app.activeDocument;
+  if (!doc) return { has_document: false, document: null };
+  let count = 0;
+  function layersOf(collection, depth) {
+    const layers = [];
+    if (!collection) return layers;
+    if (collection.length && depth > MAX_DEPTH) fail("DOCUMENT_TOO_LARGE");
+    for (let index = 0; index < collection.length; index += 1) {
+      count += 1;
+      if (count > MAX_LAYERS) fail("DOCUMENT_TOO_LARGE");
+      const layer = collection[index];
+      layers.push({
+        id: layer.id,
+        name: layer.name,
+        kind: String(layer.kind),
+        children: layersOf(layer.layers, depth + 1)
+      });
+    }
+    return layers;
+  }
+  const layers = layersOf(doc.layers, 1);
+  const artboards = [];
+  const sourceArtboards = doc.artboards;
+  if (sourceArtboards) {
+    if (sourceArtboards.length > MAX_LAYERS) fail("DOCUMENT_TOO_LARGE");
+    for (let index = 0; index < sourceArtboards.length; index += 1) {
+      artboards.push({ id: sourceArtboards[index].id, name: sourceArtboards[index].name });
+    }
+  }
+  let saved = null;
+  try {
+    const state = doc.saved;
+    if (typeof state === "boolean") saved = state;
+  } catch (_) { /* Optional getter; never inspect the filesystem as a fallback. */ }
+  return {
+    has_document: true,
+    document: {
+      id: doc.id,
+      name: doc.name,
+      width_px: doc.width,
+      height_px: doc.height,
+      saved,
+      top_level_layer_count: layers.length,
+      recursive_layer_count: count,
+      layers,
+      artboard_count: artboards.length,
+      artboards
+    }
+  };
+}
+
+function handleRequest(request) {
+  const response = {
+    type: "response",
+    protocol_version: PROTOCOL_VERSION,
+    id: request && typeof request.id === "string" && request.id.length <= 64 ? request.id : "",
+    operation: request && typeof request.operation === "string" && request.operation.length <= 64 ? request.operation : "",
+    ok: false,
+    result: null,
+    error: null
+  };
+  try {
+    if (!request || request.type !== "request" || request.protocol_version !== PROTOCOL_VERSION ||
+        typeof request.id !== "string" || !request.id.length || request.id.length > 64 ||
+        Object.keys(request).sort().join(",") !== "id,operation,protocol_version,type") {
+      fail("INVALID_MESSAGE");
+    }
+    if (!ALLOWED.has(request.operation)) fail("UNSUPPORTED_OPERATION");
+    const version = readHostVersion();
+    const hostName = readHostName();
+    if (!version || !hostName) {
+      const message = !version ? HOST_VERSION_ERROR : HOST_NAME_ERROR;
+      response.error = { code: "HOST_DETECTION_FAILED", message };
+      diagnostic("error", message);
+      return response;
+    }
+    if (!supportsHost(version)) fail("UNSUPPORTED_HOST");
+    response.result = request.operation === "photoshop_ping" ? ping(version, hostName) : readActiveDocument();
+    response.ok = true;
+  } catch (error) {
+    const code = error && Object.prototype.hasOwnProperty.call(MESSAGES, error.code)
+      ? error.code : "PHOTOSHOP_READ_FAILED";
+    response.error = { code, message: MESSAGES[code] };
+  }
+  return response;
+}
+
+// JSON contains escaped control characters; this counts UTF-8 without a Node dependency.
+function byteLength(text) {
+  let bytes = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xD800 && code <= 0xDBFF && index + 1 < text.length &&
+             text.charCodeAt(index + 1) >= 0xDC00 && text.charCodeAt(index + 1) <= 0xDFFF) {
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+function encodeResponse(response) {
+  let raw = JSON.stringify(response);
+  if (byteLength(raw) > MAX_PAYLOAD_BYTES) {
+    raw = JSON.stringify({
+      type: "response", protocol_version: PROTOCOL_VERSION,
+      id: response.id, operation: response.operation, ok: false, result: null,
+      error: { code: "DOCUMENT_TOO_LARGE", message: MESSAGES.DOCUMENT_TOO_LARGE }
+    });
+  }
+  return raw;
+}
+
+let socket = null;
+let generation = 0;
+let authTimer = null;
+
+function disconnect() {
+  generation += 1;
+  if (authTimer !== null) clearTimeout(authTimer);
+  authTimer = null;
+  if (socket) {
+    socket.onopen = socket.onmessage = socket.onerror = null;
+    // Keep only a diagnostic callback so an onerror-triggered close is observable.
+    const closedGeneration = generation;
+    socket.onclose = event => closedDiagnostic(event, generation === closedGeneration && socket === null);
+    try { socket.close(); }
+    catch (error) { diagnostic("warn", "WebSocket close raised an exception", error); }
+    socket = null;
+  }
+}
+
+function initializePanel() {
+  diagnosticDetail = document.getElementById("diagnostic-detail");
+  diagnostic("log", "Plugin panel initializing");
+  const status = document.getElementById("status");
+  const storageStatus = document.getElementById("storage-status");
+  const input = document.getElementById("pairing-token");
+  const hostName = optionalString(() => host.name) || "Host unavailable";
+  const hostLabel = hostName.toLowerCase() === "photoshop" ? "Photoshop" : hostName;
+  const version = readHostVersion();
+  document.getElementById("versions").textContent =
+    safeDiagnostic(hostLabel) + " " + (version ? version.version : "version detection failed") +
+    " · UXP " + safeDiagnostic(optionalString(() => versions.uxp)) + " · Bridge " + VERSION;
+
+  async function connect() {
+    diagnostic("log", "Connect / Reconnect button clicked");
+    diagnostic("log", "typeof WebSocket=" + typeof WebSocket + "; endpoint=" + ENDPOINT);
+    disconnect();
+    const current = generation;
+    let token = input.value.trim();
+    input.value = "";
+    if (!token) {
+      try {
+        const bytes = await uxp.storage.secureStorage.getItem(STORAGE_KEY);
+        token = Array.from(bytes, value => String.fromCharCode(value)).join("");
+      } catch (error) { diagnostic("warn", "Secure pairing cache unavailable", error); }
+    }
+    if (current !== generation) return;
+    if (!/^[A-Za-z0-9_-]{64}$/.test(token)) {
+      status.textContent = "Enter the pairing token from local setup.";
+      diagnostic("warn", "Pairing token missing or invalid");
+      return;
+    }
+    status.textContent = "Connecting…";
+    let ws;
+    diagnostic("log", "Connecting to " + ENDPOINT + "; before new WebSocket");
+    try {
+      ws = new WebSocket(ENDPOINT);
+      diagnostic("log", "WebSocket constructor succeeded; readyState=" + socketState(ws));
+    } catch (error) {
+      status.textContent = "Connection failed. Check the local bridge and plugin network permission.";
+      diagnostic("error", "WebSocket constructor failed", error, token);
+      return;
+    }
+    socket = ws;
+    let authenticated = false;
+    authTimer = setTimeout(() => {
+      if (current !== generation) return;
+      diagnostic("warn", "WebSocket connection/authentication timeout; readyState=" + socketState(ws));
+      disconnect();
+      status.textContent = "Connection timed out. Start the local bridge, then reconnect.";
+    }, 10000);
+    ws.onopen = () => {
+      if (current !== generation) return;
+      diagnostic("log", "WebSocket onopen; readyState=" + socketState(ws));
+      try {
+        ws.send(JSON.stringify({ type: "auth", protocol_version: PROTOCOL_VERSION, token }));
+      } catch (error) { diagnostic("error", "Authentication send failed", error, token); }
+    };
+    ws.onmessage = async event => {
+      if (current !== generation) return;
+      let message;
+      try {
+        if (typeof event.data !== "string" || byteLength(event.data) > MAX_PAYLOAD_BYTES) {
+          throw new Error("Invalid frame");
+        }
+        message = JSON.parse(event.data);
+        const type = message && ["auth_result", "request"].includes(message.type) ? message.type : "unexpected";
+        const operation = message && ALLOWED.has(message.operation) ? message.operation : "none/unsupported";
+        diagnostic("log", "WebSocket onmessage: type=" + type + ", operation=" + operation);
+        if (!message || message.protocol_version !== PROTOCOL_VERSION) throw new Error("Invalid version");
+      } catch (error) {
+        diagnostic("error", "Invalid WebSocket message", error, token);
+        disconnect();
+        status.textContent = "Invalid bridge message. Disconnected.";
+        return;
+      }
+      if (!authenticated) {
+        if (message.type !== "auth_result" || message.ok !== true) {
+          const allowedCodes = ["AUTH_FAILED", "INVALID_MESSAGE", "PAYLOAD_TOO_LARGE", "UNSUPPORTED_OPERATION"];
+          const code = message.error && allowedCodes.includes(message.error.code) ? message.error.code : "UNKNOWN";
+          diagnostic("error", "Authentication rejected: code=" + code);
+          disconnect();
+          status.textContent = "Pairing failed. Re-enter the local token.";
+          return;
+        }
+        authenticated = true;
+        clearTimeout(authTimer);
+        authTimer = null;
+        status.textContent = "Connected · read-only";
+        diagnostic("log", "Connected; authentication accepted: code=OK");
+        // No document requests are handled before authentication succeeds.
+        const pairedToken = token;
+        token = "";
+        try {
+          await uxp.storage.secureStorage.setItem(STORAGE_KEY, pairedToken);
+          if (current === generation) storageStatus.textContent = "Pairing saved securely on this computer.";
+        } catch (error) {
+          diagnostic("warn", "Secure pairing cache write unavailable", error, pairedToken, current === generation);
+          if (current === generation) storageStatus.textContent =
+            "Pairing is valid for this session. Secure storage is unavailable.";
+        }
+        return;
+      }
+      if (message.type !== "request") {
+        diagnostic("error", "Unexpected WebSocket message type");
+        disconnect();
+        status.textContent = "Unexpected bridge message. Disconnected.";
+        return;
+      }
+      const response = handleRequest(message);
+      if (current === generation && ws.readyState === 1) {
+        try { ws.send(encodeResponse(response)); }
+        catch (error) { diagnostic("error", "WebSocket response send failed", error); }
+      }
+    };
+    ws.onerror = event => {
+      if (current !== generation) return;
+      diagnostic("error", "WebSocket onerror; readyState=" + socketState(ws), event && (event.error || event), token);
+      disconnect();
+      status.textContent = "Connection failed. Start the local bridge, then reconnect.";
+    };
+    ws.onclose = event => {
+      closedDiagnostic(event, current === generation);
+      if (current !== generation) return;
+      disconnect();
+      status.textContent = "Disconnected. Start the bridge, then reconnect.";
+    };
+  }
+
+  document.getElementById("connect").addEventListener("click", connect);
+  uxp.entrypoints.setup({ plugin: { destroy: disconnect } });
+  diagnostic("log", "Plugin panel initialized; typeof WebSocket=" + typeof WebSocket + "; endpoint=" + ENDPOINT);
+}
+
+if (typeof document !== "undefined") initializePanel();
+// The same DOM-reading functions are exercised with read-only mocks; never ship a mock host.
+if (typeof module !== "undefined") module.exports = { handleRequest, encodeResponse, byteLength };
