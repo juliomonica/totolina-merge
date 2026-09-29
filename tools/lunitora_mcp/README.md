@@ -12,6 +12,161 @@ are verified on this workstation. Both read-only tools succeeded through the rea
 Codex MCP integration on 2026-09-29 with the restricted localhost configuration
 below.
 
+## New Windows Workstation Setup
+
+Follow this sequence on each new PC. Replace placeholders before running commands.
+Shell examples use **Git Bash**: `<repo-path-bash>` is the checkout's absolute
+Bash path, such as `/d/Development/totolina-merge`. In TOML, `<repo-path>` is the
+same checkout's Windows path, such as `D:\Development\totolina-merge`.
+Each machine uses its own paths.
+
+1. **Install prerequisites.** Use Windows x64, the platform of the dependency
+   lock and verified installation. Install **Photoshop 27.10.0 or newer**
+   (manifest minimum; live verification used 27.10), **Adobe UXP Developer Tool**
+   able to load a Photoshop manifest-v5/API-v2 plugin, standalone **Python 3.12.x
+   x64** (`==3.12.*` in the project; verified with 3.12.10), **Git for Windows
+   with Git Bash**, and **Codex Desktop for Windows**, signed in and able to run
+   local stdio MCP servers. The project pins no Git, UXP Developer Tool, or Codex
+   Desktop version. Node is only needed for optional JavaScript mock tests.
+
+2. **Clone or update `totolina-merge`.** Use the repository URL you already have
+   access to and a branch containing the current Phase 1 files. For a new checkout:
+
+   ~~~bash
+   git clone '<repository-url>' '<repo-path-bash>'
+   ~~~
+
+   For an existing checkout, preserve local work and update its branch:
+
+   ~~~bash
+   git -C '<repo-path-bash>' pull --ff-only
+   ~~~
+
+3. **Create the environment and install the lock.** Replace
+   `<python-3.12-exe-bash>` with this PC's standalone Python executable in Bash
+   form, such as `/c/Users/<username>/AppData/Local/Programs/Python/Python312/python.exe`.
+   Confirm it reports 3.12.x; do not reuse another application's bundled Python.
+
+   ~~~bash
+   cd '<repo-path-bash>/tools/lunitora_mcp'
+   '<python-3.12-exe-bash>' --version
+   '<python-3.12-exe-bash>' -m venv .venv
+   ./.venv/Scripts/python.exe -m pip install --no-cache-dir -r requirements.lock
+   ./.venv/Scripts/python.exe -m pip check
+   ~~~
+
+   All subsequent shell commands run from `tools/lunitora_mcp`. Activation is
+   unnecessary; use `.venv/Scripts/python.exe` directly. The lock pins all 30
+   dependencies, including `mcp==2.2.0` and `websockets==17.1`.
+
+4. **Generate this machine's pairing token.**
+
+   ~~~bash
+   ./.venv/Scripts/python.exe -B -m core.server --setup
+   ~~~
+
+   On a fresh checkout this creates `.local/pairing-token.txt` with a new random
+   token. It prints only the file location, never the token. Repeating setup
+   preserves an existing valid token. Never copy or share another workstation's
+   token, `.local` directory, or Python environment.
+
+5. **Keep local files out of Git.** `.local/` (including the token), `.venv/`,
+   `__pycache__/`, `*.py[cod]`, `*.log`, `*.egg-info/`, and `config.local.toml`
+   are ignored by the toolkit's `.gitignore`. Keep other local diagnostics under
+   `.local/`; never commit or force-add these files. Check without reading contents:
+
+   ~~~bash
+   git check-ignore -v .local/pairing-token.txt .venv/pyvenv.cfg core/__pycache__/config.cpython-312.pyc config.local.toml
+   ~~~
+
+6. **Load the UXP plugin.** Open Photoshop and enable Developer Mode, restarting
+   Photoshop if requested after saving your work. In Adobe UXP Developer Tool,
+   choose **Add Plugin**, select
+   `<repo-path>\tools\lunitora_mcp\bridges\photoshop_uxp\manifest.json`, select the
+   Photoshop host, and choose **Load**. Open Photoshop's
+   **Plugins > Lunitora Photoshop Bridge** panel. Keep the checked-in permission
+   `{"network":{"domains":["ws://localhost/"]}}`; the plugin connects to
+   `ws://localhost:43127` and Python binds only to `127.0.0.1:43127`.
+
+7. **Configure the current user's Codex.** Edit
+   `C:\Users\<username>\.codex\config.toml` (create the directory/file if absent).
+   Add this table, or update its existing entry without duplicating it; preserve
+   unrelated settings. Replace `<repo-path>` with this PC's absolute Windows
+   checkout path, keeping single quotes so backslashes remain literal:
+
+   ~~~toml
+   [mcp_servers.lunitora_photoshop]
+   command = '<repo-path>\tools\lunitora_mcp\.venv\Scripts\python.exe'
+   args = ['-B', '-m', 'core.server']
+   cwd = '<repo-path>\tools\lunitora_mcp'
+   startup_timeout_sec = 15
+   tool_timeout_sec = 35
+   enabled_tools = ['photoshop_ping', 'photoshop_get_active_document']
+   ~~~
+
+   This user-local configuration stays outside the repository. Do not put the
+   pairing token in it or use Bash `/c/` or `/d/` paths for `command`/`cwd`.
+   See the [Codex MCP configuration documentation](https://learn.chatgpt.com/docs/extend/mcp).
+
+8. **Fully restart Codex Desktop and open a new Codex chat** in this repository
+   to load the configuration. Let Codex own the server; do not also run
+   `core.server` or `--live-test` manually alongside it.
+
+9. **Start the bridge from Codex.** Ask the new chat: `Use photoshop_ping.`
+   This lets Codex start/use the configured MCP process. An initial
+   `DISCONNECTED` response is expected before the Photoshop panel is paired.
+
+10. **Pair Photoshop on this workstation.** Open the local token privately:
+
+    ~~~bash
+    notepad.exe './.local/pairing-token.txt'
+    ~~~
+
+    Copy it into the panel's **Pairing token** password input, close Notepad
+    without edits, and click **Connect / Reconnect**. Expect
+    **Connected · read-only**. Never print the token in a terminal or paste it
+    into chat, logs, screenshots, or Git. The plugin caches it in UXP
+    secureStorage when available; otherwise pairing lasts for that connection.
+
+11. **Verify both tools.** Call `photoshop_ping` again. Require `ok=true`,
+    `connected=true`, `error=null`, version information (UXP may be null), and a
+    measured `round_trip_ms`. Then call `photoshop_get_active_document` and
+    compare its name, dimensions, layers, artboards, and saved state with
+    Photoshop. No open document is a successful
+    `has_document=false, document=null` result, not a disconnect. These tools
+    only inspect; they do not edit, save, or export.
+
+12. **Troubleshoot.** For `PORT_IN_USE`, stop an old manual bridge with Ctrl+C
+    or fully quit an older Codex instance first. There is no alternate-port
+    fallback. Identify the listener:
+
+    ~~~bash
+    netstat.exe -ano -p tcp | findstr.exe ':43127'
+    ~~~
+
+    Use the **LISTENING** row's PID and confirm in Task Manager's Details/
+    Command line that it belongs to a stale Lunitora bridge. If that confirmed
+    process cannot be closed normally, replace `<pid>` with its numeric PID:
+
+    ~~~bash
+    MSYS_NO_PATHCONV=1 taskkill.exe /PID '<pid>' /F
+    ~~~
+
+    Git Bash can convert `/PID` into `C:/Program Files/Git/PID`. The command-local
+    `MSYS_NO_PATHCONV=1` prevents that conversion without changing global shell
+    settings; see [Git for Windows' path-conversion notes](https://github.com/git-for-windows/build-extra/blob/main/ReleaseNotes.md#known-issues).
+    Do not terminate unrelated Python or Photoshop processes. After freeing the
+    port, restart Codex Desktop, open a new chat, and repeat steps 9–11; an
+    already-started server with a bind error must be restarted.
+
+    For `DISCONNECTED`, keep Photoshop open, confirm the plugin is loaded,
+    call `photoshop_ping` to start the bridge, then click **Connect / Reconnect**
+    with this machine's token. Re-enter the local token if pairing is rejected.
+    Reload the plugin in UDT after plugin/manifest updates. If tools are missing,
+    check the user config's absolute executable and working-directory paths,
+    then repeat step 8. Keep the localhost permission and fixed endpoint; use
+    the sanitized diagnostics described below for further investigation.
+
 ## Files and local setup
 
 Git Bash is required for Windows development instructions and manual commands.
