@@ -1,0 +1,42 @@
+{
+  "manifestVersion": 5,
+  "id": "com.lunitora.photoshop.bridge",
+  "name": "Lunitora Photoshop Bridge",
+  "version": "0.1.0",
+  "main": "index.html",
+  "host": {
+    "app": "PS",
+    "minVersion": "27.10.0",
+    "data": {
+      "apiVersion": 2
+    }
+  },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "lunitora-photoshop",
+      "label": {
+        "default": "Lunitora Photoshop Bridge"
+      },
+      "minimumSize": {
+        "width": 260,
+        "height": 260
+      },
+      "preferredDockedSize": {
+        "width": 300,
+        "height": 320
+      },
+      "preferredFloatingSize": {
+        "width": 320,
+        "height": 340
+      }
+    }
+  ],
+  "requiredPermissions": {
+    "network": {
+      "domains": [
+        "ws://localhost/"
+      ]
+    }
+  }
+}

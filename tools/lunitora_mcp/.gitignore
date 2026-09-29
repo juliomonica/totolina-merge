@@ -1,0 +1,9 @@
+/.venv/
+/.local/
+__pycache__/
+*.py[cod]
+*.log
+*.egg-info/
+/pairing-token*
+/*secret*
+/config.local.toml
