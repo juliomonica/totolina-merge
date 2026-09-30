@@ -289,9 +289,19 @@ function encodeResponse(response) {
 let socket = null;
 let generation = 0;
 let authTimer = null;
+const RECONNECT_INTERVAL_MS = 5000;
+let reconnectTimer = null;
+let connecting = false;
+let destroyed = false;
+
+function cancelReconnect() {
+  if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+}
 
 function disconnect() {
   generation += 1;
+  connecting = false;
   if (authTimer !== null) clearTimeout(authTimer);
   authTimer = null;
   if (socket) {
@@ -318,13 +328,25 @@ function initializePanel() {
     safeDiagnostic(hostLabel) + " " + (version ? version.version : "version detection failed") +
     " · UXP " + safeDiagnostic(optionalString(() => versions.uxp)) + " · Bridge " + VERSION;
 
-  async function connect() {
-    diagnostic("log", "Connect / Reconnect button clicked");
+  function scheduleReconnect() {
+    if (destroyed || reconnectTimer !== null) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void connect(true);
+    }, RECONNECT_INTERVAL_MS);
+  }
+
+  async function connect(automatic = false) {
+    if (destroyed || (automatic && (connecting || socket))) return;
+    cancelReconnect();
+    diagnostic("log", automatic ? "Automatic reconnect" : "Connect / Reconnect button clicked");
     diagnostic("log", "typeof WebSocket=" + typeof WebSocket + "; endpoint=" + ENDPOINT);
     disconnect();
+    connecting = true;
     const current = generation;
-    let token = input.value.trim();
-    input.value = "";
+    // Background startup never consumes an operator's partially entered token.
+    let token = automatic ? "" : input.value.trim();
+    if (!automatic) input.value = "";
     if (!token) {
       try {
         const bytes = await uxp.storage.secureStorage.getItem(STORAGE_KEY);
@@ -333,6 +355,7 @@ function initializePanel() {
     }
     if (current !== generation) return;
     if (!/^[A-Za-z0-9_-]{64}$/.test(token)) {
+      connecting = false;
       status.textContent = "Enter the pairing token from local setup.";
       diagnostic("warn", "Pairing token missing or invalid");
       return;
@@ -344,8 +367,10 @@ function initializePanel() {
       ws = new WebSocket(ENDPOINT);
       diagnostic("log", "WebSocket constructor succeeded; readyState=" + socketState(ws));
     } catch (error) {
+      connecting = false;
       status.textContent = "Connection failed. Check the local bridge and plugin network permission.";
       diagnostic("error", "WebSocket constructor failed", error, token);
+      scheduleReconnect();
       return;
     }
     socket = ws;
@@ -354,14 +379,19 @@ function initializePanel() {
       if (current !== generation) return;
       diagnostic("warn", "WebSocket connection/authentication timeout; readyState=" + socketState(ws));
       disconnect();
-      status.textContent = "Connection timed out. Start the local bridge, then reconnect.";
+      status.textContent = "Waiting for ChatGPT/Codex. Retrying automatically.";
+      scheduleReconnect();
     }, 10000);
     ws.onopen = () => {
       if (current !== generation) return;
       diagnostic("log", "WebSocket onopen; readyState=" + socketState(ws));
       try {
         ws.send(JSON.stringify({ type: "auth", protocol_version: PROTOCOL_VERSION, token }));
-      } catch (error) { diagnostic("error", "Authentication send failed", error, token); }
+      } catch (error) {
+        diagnostic("error", "Authentication send failed", error, token);
+        disconnect();
+        scheduleReconnect();
+      }
     };
     ws.onmessage = async event => {
       if (current !== generation) return;
@@ -382,6 +412,7 @@ function initializePanel() {
         diagnostic("error", "Invalid WebSocket message", error, token);
         disconnect();
         status.textContent = "Invalid bridge message. Disconnected.";
+        scheduleReconnect();
         return;
       }
       if (!authenticated) {
@@ -391,9 +422,11 @@ function initializePanel() {
           diagnostic("error", "Authentication rejected: code=" + code);
           disconnect();
           status.textContent = "Pairing failed. Re-enter the local token.";
+          // A rejected credential needs operator repair, not repeated auth traffic.
           return;
         }
         authenticated = true;
+        connecting = false;
         clearTimeout(authTimer);
         authTimer = null;
         status.textContent = "Connected · inspection and staging candidates";
@@ -415,6 +448,7 @@ function initializePanel() {
         diagnostic("error", "Unexpected WebSocket message type");
         disconnect();
         status.textContent = "Unexpected bridge message. Disconnected.";
+        scheduleReconnect();
         return;
       }
       const response = await dispatchRequest(message);
@@ -427,19 +461,27 @@ function initializePanel() {
       if (current !== generation) return;
       diagnostic("error", "WebSocket onerror; readyState=" + socketState(ws), event && (event.error || event), token);
       disconnect();
-      status.textContent = "Connection failed. Start the local bridge, then reconnect.";
+      status.textContent = "Waiting for ChatGPT/Codex. Retrying automatically.";
+      scheduleReconnect();
     };
     ws.onclose = event => {
       closedDiagnostic(event, current === generation);
       if (current !== generation) return;
       disconnect();
-      status.textContent = "Disconnected. Start the bridge, then reconnect.";
+      status.textContent = "Waiting for ChatGPT/Codex. Retrying automatically.";
+      scheduleReconnect();
     };
   }
 
-  document.getElementById("connect").addEventListener("click", connect);
-  uxp.entrypoints.setup({ plugin: { destroy: disconnect } });
+  document.getElementById("connect").addEventListener("click", () => connect(false));
+  uxp.entrypoints.setup({ plugin: { create() {}, destroy() {
+    destroyed = true;
+    cancelReconnect();
+    disconnect();
+  } } });
   diagnostic("log", "Plugin panel initialized; typeof WebSocket=" + typeof WebSocket + "; endpoint=" + ENDPOINT);
+  // Runs on plugin load, including startup with the panel hidden. No UI click or ping.
+  void connect(true);
 }
 
 if (typeof document !== "undefined") initializePanel();

@@ -1,4 +1,4 @@
-# Lunitora Photoshop MCP — v0.5 staging background removal
+# Lunitora Photoshop MCP — v0.6 operator convenience
 
 Repository-controlled Photoshop bridge with two compatible read-only tools,
 photoshop_ping and photoshop_get_active_document, plus photoshop_process_image
@@ -13,6 +13,257 @@ are verified on this workstation. Both read-only tools succeeded through the rea
 Codex MCP integration on 2026-09-29 with the restricted localhost configuration
 below.
 
+## Operator convenience v0.6
+
+Daily operator reference: [LUNITORA_COMMANDS.md](../LUNITORA_COMMANDS.md).
+This section and the workstation setup below describe the current workflow;
+older phase/live-test records later in this file are historical technical evidence.
+
+### Repository-local launcher setup
+
+From the checkout root in **Git Bash**:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/setup.ps1
+```
+
+Setup discovers the registered `OpenAI.Codex` Windows desktop package (whose UI
+may be named `ChatGPT.exe`), Photoshop under Program Files/Adobe, and UXP Developer
+Tool. It validates absolute local executable paths before installing the five
+aliases with `git config --local`. It never selects the `codex` CLI from PATH.
+Multiple discovered installations require an explicit selection. Photoshop/UDT
+may be absent on a Codex-only workstation; commands that require them fail clearly.
+Existing valid overrides are preserved. After an app update moves its executable,
+rerun setup to discover its current location. For nonstandard installations:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/setup.ps1 \
+  -DesktopExe 'C:\path\to\ChatGPT.exe' \
+  -PhotoshopExe 'C:\path\to\Photoshop.exe' \
+  -UdtExe 'C:\path\to\Adobe UXP Developer Tools.exe'
+```
+
+Machine paths and the expected checkout root live only in ignored
+`tools/operator_launcher/config.local.json`; the tracked example documents its
+four fields. No secrets belong there. Moving/copying the checkout requires fresh
+setup (remove the old ignored configuration first). There is no global Git change,
+scheduled task, Python dependency, shell-profile edit, or MCP configuration edit.
+Git shell aliases run from the repository root even when invoked in a subdirectory.
+Each alias calls the tracked `launch.ps1` with its matching mode:
+
+```text
+!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 art
+!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 art-refresh
+!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 art-dev
+!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 dev
+!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 dev-refresh
+```
+
+Use `git art -Check` (or any alias with `-Check`) to validate paths without starting
+or stopping applications. The ordinary commands report application startup status,
+not verified Photoshop connectivity. Desktop owns configured stdio MCP processes;
+the launcher never runs `core.server` itself. Do not run a parallel manual server.
+
+Run refresh from **external Git Bash**, after active Desktop tasks finish. It
+closes every process at the configured desktop executable path, first requesting
+window close and allowing eight seconds, then terminating only verified remaining
+desktop processes. Process creation time/path are rechecked using a held process
+handle. It waits ten seconds for the captured Desktop-owned descendants to exit.
+`dev-refresh` never cleans ports or kills those descendants; if they remain, it
+reports them and stops before reopening. It never touches Photoshop or UDT.
+
+`art-refresh` also waits up to ten seconds for port 43127. It reports remaining
+owners by PID/name/executable (never arbitrary command lines). Automatic cleanup
+requires exact repository venv Python and exact `-B -m core.server` arguments, or
+its Windows base-Python child with a still-verifiable venv parent and matching
+`pyvenv.cfg` executable. It must also have belonged to the closing Desktop, or
+have an absent parent, to count as stale. Missing inspection access, an orphaned
+base-Python child without provable ancestry, another live client, or an unknown
+listener stops recovery without killing it. No process-name-wide kill or process
+tree kill is used. The launcher confirms the listener is gone and an exclusive
+IPv4 bind succeeds before ensuring Photoshop is running and reopening Desktop.
+It never closes Photoshop or interacts with UDT controls.
+
+### One-time private .ccx installation
+
+Official documentation checked on 2026-09-30:
+
+- [OpenAI MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
+  documents shared desktop/CLI configuration and stdio `command`, `args`, `cwd`,
+  timeouts and tool allowlists. Keep MCP startup under the client.
+- [Adobe manifest v5](https://developer.adobe.com/photoshop/uxp/2022/guides/uxp-guide/uxp-misc/manifest-v5/)
+  requires Photoshop 23.3+ and retains earlier host metadata.
+- [Photoshop-specific loadEvent](https://developer.adobe.com/photoshop/uxp/2022/guides/uxp-guide/uxp-misc/manifest-v4/photoshop-manifest/)
+  documents `host.data.loadEvent: "startup"` since Photoshop 23.1. This covers our
+  27.10 minimum. The plugin loads shortly after Photoshop starts, even without
+  opening the panel; the JavaScript begins connection on plugin load.
+- [Adobe packaging](https://developer.adobe.com/uxp/guides/how-to/distribution/package/)
+  requires a stable ID and single host object for independent distribution, and
+  recommends UDT packaging. The Photoshop-specific
+  [packaging guide](https://developer.adobe.com/photoshop/uxp/guides/distribution/packaging-your-plugin/)
+  also documents `.ccx` and UDT's Package action. A Marketplace listing requires
+  its portal-generated ID; this private package retains
+  `com.lunitora.photoshop.bridge`. Its registration/Marketplace ownership was not
+  checked, and no Marketplace submission is part of this work.
+- [Adobe installation](https://developer.adobe.com/uxp/guides/how-to/distribution/install/)
+  supports independent `.ccx` installation through Creative Cloud Desktop;
+  unpackaged development loading is a separate UDT workflow.
+
+The manifest is suitable for private packaging: v5, one `PS` host at 27.10.0,
+API v2, stable plugin/panel IDs and exactly `ws://localhost/` network permission.
+No filesystem, launch-process, or wider network permission was added. The existing
+plugin/protocol versions remain 0.1.0/1; v0.6 names this tooling milestone.
+
+Developer packaging and one-time operator installation:
+
+1. Open UDT with `git art-dev`. Add
+   `tools/lunitora_mcp/bridges/photoshop_uxp/manifest.json` if necessary. Unload a
+   development copy with the same ID before testing an installed copy.
+2. In UDT's plugin Actions menu choose **Package**. Select
+   `tools/lunitora_mcp/dist/` (create it if absent), outside the plugin source
+   directory. The plugin need not be loaded to package. Package only the plugin
+   directory; it contains no pairing file, local config, environment or tests.
+   Never create an ad-hoc renamed ZIP as a substitute for UDT validation.
+3. Double-click the generated `.ccx`; Creative Cloud Desktop handles installation.
+   Review the independent-plugin notice and permissions. Verify it is installed
+   in Manage Plugins and available in Photoshop. If Adobe rejects the ID/package,
+   record the exact installer error; do not silently change the ID or permissions.
+4. Save work and restart Photoshop yourself for the startup test. The launcher
+   never closes it. Close UDT. Open the installed Lunitora panel for first pairing,
+   privately enter this machine's token, and choose **Connect / Reconnect**.
+5. After pairing, daily `git art` and direct image requests need no UDT or ping.
+   Verify cold Photoshop startup with the panel closed, then a Desktop restart
+   while Photoshop stays open. Verify reconnection and a new staging candidate.
+
+`dist/` and `.ccx` files are ignored; do not commit generated installers. For an
+update, package the edited source again and reinstall through Creative Cloud;
+if its installer requires a higher plugin version, make a deliberate release
+version update before packaging. Reloading in UDT changes only the development
+copy, not the installed package. Never run both copies as bridge clients.
+
+### Pairing and reconnect behavior
+
+The token keeps its existing UXP secure-storage key and is saved only after
+successful authentication. It is never put in local launcher settings, logged,
+or included in the package. [Adobe secureStorage](https://developer.adobe.com/photoshop/uxp/2022/uxp/reference-js/Modules/uxp/Key-Value%20Storage/SecureStorage/)
+encrypts per-plugin values but describes this storage as a recoverable cache.
+Expect one pairing per installation/storage reset; a development-to-installed
+transition may require pairing again. If storage is unavailable the panel explains
+the session-only connection. Never claim storage is permanent.
+
+On startup, the saved token triggers a connection to `ws://localhost:43127`.
+Connection errors/closures retry after five seconds; a hung connection/auth attempt
+has a ten-second deadline. Only one socket attempt and one retry timer are active.
+Manual reconnect retires the old attempt; plugin destruction clears all timers
+and ignores pending storage results. Missing/invalid credentials or explicit
+authentication rejection require operator pairing and do not loop. No token or
+raw authentication payload is logged.
+
+When Photoshop starts before Codex Desktop/MCP, the plugin may make several
+failed localhost connection attempts while the server is starting. This is
+expected and acceptable: after one-time pairing, it connects automatically once
+the Codex-owned MCP listener appears. This startup sequence does not require
+manual reconnect or another token entry.
+
+Real Photoshop calls wait for authentication for up to eight seconds, bounded by
+their original deadline (five seconds by default for document inspection, thirty
+for processing). The wait consumes the deadline, so it cannot extend a processing
+request beyond thirty seconds. Invalid parameters and startup errors fail first;
+`photoshop_ping` retains immediate diagnostic behavior. An operation already sent
+to Photoshop is never automatically replayed after a disconnect. After a cold
+Photoshop launch takes longer than the grace period, wait for Photoshop to finish
+opening and retry the request. Staging no-overwrite protection still applies.
+
+Bare-filename natural-language defaults are defined in the root `AGENTS.md`.
+For character/fine detail, prefer removal, human visual review, copying the approved
+candidate to `_inbox`, then resizing. Combined operations remain supported.
+
+### v0.6 validation — 2026-09-30
+
+**VERIFIED live (operator-confirmed):** `git dev`, `git dev-refresh`, `git art`,
+`git art-refresh`, and `git art-dev`; packaged `.ccx` installation; Photoshop and
+packaged-plugin startup without UXP Developer Tool; one-time pairing-token setup;
+secure token reuse after restart; automatic reconnect when Photoshop starts before
+the Codex-owned MCP server; and direct Photoshop processing without a preliminary
+`photoshop_ping`. Several failed localhost attempts before the listener appears
+are expected and acceptable. These confirmations complete the v0.6 live operator
+workflow checks previously marked as pending here.
+
+**VERIFIED automated:** the complete suite passes with port 43127 free. The
+listener's executable, exact repository server command, Windows venv parent and
+Codex Desktop ancestry were verified before stopping only the bridge processes.
+Desktop and Photoshop stayed open. Exclusive-bind checks passed before and after
+validation. No manual bridge was launched alongside the tests.
+
+| Suite | Passed | Failures | Errors | Skips |
+| --- | ---: | ---: | ---: | ---: |
+| Python Phase 1, including packaging icons | 50 | 0 | 0 | 0 |
+| Python Phase 2A/2B | 76 | 0 | 0 | 0 |
+| Python validation diagnostics | 12 | 0 | 0 | 0 |
+| Python background removal | 25 | 0 | 0 | 0 |
+| Python authenticated reconnect | 8 | 0 | 0 | 0 |
+| JavaScript plugin/panel, including packaged startup | 61 | 0 | 0 | 0 |
+| JavaScript image processing | 104 | 0 | 0 | 0 |
+| PowerShell launcher safety/workflow | 43 | 0 | 0 | 0 |
+| Automated tests/checks | **379** | **0** | **0** | **0** |
+
+Python discovery ran all **171 tests in 34.162 seconds**, with no expected failures
+or unexpected successes. This supersedes the earlier partial 123-test and
+168-test records; all previously deferred fixed-port tests now execute. Current
+totals also include the packaging-icon, packaged-startup and launcher checks added
+since those records. Launcher process mutations and Photoshop segmentation are
+mocked in the automated suites.
+
+All **112 supplemental checks** pass: syntax compilation for 20 Python, four
+JavaScript and four PowerShell files; 30 installed dependency pins; one `pip check`;
+six Git Bash alias checks (all five commands with `-Check`, plus a subdirectory);
+32 ignore probes; and 15 repository/port audit checks. Combined final result:
+**491 passed, zero failures, errors or skips**. The first six alias probes failed
+because Git Bash inherited this runner's incompatible PowerShell module path.
+They passed when rerun with the native Windows PowerShell module path scoped only
+to the test process. No launcher code or persistent environment setting changed;
+the initial failed-probe logs are retained separately.
+
+The full diff and all untracked candidates were reviewed, including the four icon
+PNGs. No regression or unintended change was found. Only
+`tools/LUNITORA_COMMANDS.md` and this README changed during this pass. The existing
+implementation and tests were preserved. Generated `.ccx`, `.local`, pairing
+tokens, caches, virtual environments and local configuration are ignored and are
+not commit candidates; no ignored file is already tracked. Credential scans found
+no local pairing value in the working candidates or index and no credential
+patterns in changed/new files. All ten protected artwork/package/token/config
+files are unchanged. HEAD and the index are unchanged, nothing is staged, and
+`git diff --check` passes. Nothing was committed or pushed. Logs and audit scripts
+remain in ignored `.local/v06-live-validation-20260930-014335/`.
+
+**NOT EXECUTED in this automated rerun:** additional live application launches,
+refreshes, installation or Photoshop processing; the operator-confirmed checks
+above supply that live evidence. Godot/game tests and the additional v0.5
+Device/Cloud, cancellation, cleanup and near-limit cases were not rerun.
+
+**REQUIRES USER TEST:** no outstanding v0.6 operator workflow checks from the list
+confirmed above. Every generated staging candidate still requires human visual
+approval, especially character edges and fine detail. Additional v0.5 processing
+cases listed in the historical validation section remain outside this operator
+workflow confirmation.
+
+For a full automated rerun, first finish Desktop tasks and close Desktop yourself,
+then confirm port 43127 is free. Do not kill an unknown listener. Run from Git Bash:
+
+```bash
+# From the repository root; the launcher tests do not touch real applications.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/tests/test_launcher.ps1
+cd tools/lunitora_mcp
+./.venv/Scripts/python.exe -B -m unittest discover -s tests -t . -v
+node tests/test_plugin.js
+node tests/test_processing.js
+./.venv/Scripts/python.exe -B -m pip check
+```
+
+The transport tests use disposable credentials. If a running installed plugin
+attempts to pair with a test server and reports rejection, use its Connect button
+after the test run and normal Desktop restart. Do not replace its real token.
+
 ## New Windows Workstation Setup
 
 Follow this sequence on each new PC. Replace placeholders before running commands.
@@ -23,12 +274,13 @@ Each machine uses its own paths.
 
 1. **Install prerequisites.** Use Windows x64, the platform of the dependency
    lock and verified installation. Install **Photoshop 27.10.0 or newer**
-   (manifest minimum; live verification used 27.10), **Adobe UXP Developer Tool**
-   able to load a Photoshop manifest-v5/API-v2 plugin, standalone **Python 3.12.x
+   (manifest minimum; live verification used 27.10), **Creative Cloud Desktop**
+   for packaged plugin installation, standalone **Python 3.12.x
    x64** (`==3.12.*` in the project; verified with 3.12.10), **Git for Windows
    with Git Bash**, and **Codex Desktop for Windows**, signed in and able to run
    local stdio MCP servers. The project pins no Git, UXP Developer Tool, or Codex
-   Desktop version. Node is only needed for optional JavaScript mock tests.
+   Desktop version. UXP Developer Tool is needed only on a developer/packaging
+   machine. Node is only needed for optional JavaScript mock tests.
 
 2. **Clone or update `totolina-merge`.** Use the repository URL you already have
    access to and a branch containing the current toolkit files. For a new checkout:
@@ -80,12 +332,8 @@ Each machine uses its own paths.
    git check-ignore -v .local/pairing-token.txt .venv/pyvenv.cfg core/__pycache__/config.cpython-312.pyc config.local.toml
    ~~~
 
-6. **Load the UXP plugin.** Open Photoshop and enable Developer Mode, restarting
-   Photoshop if requested after saving your work. In Adobe UXP Developer Tool,
-   choose **Add Plugin**, select
-   `<repo-path>\tools\lunitora_mcp\bridges\photoshop_uxp\manifest.json`, select the
-   Photoshop host, and choose **Load**. Open Photoshop's
-   **Plugins > Lunitora Photoshop Bridge** panel. Keep the checked-in permission
+6. **Install the UXP plugin.** Follow the private `.ccx` steps above. Open Photoshop's
+   **Plugins > Lunitora Photoshop Bridge** panel for first pairing. Keep the permission
    `{"network":{"domains":["ws://localhost/"]}}`; the plugin connects to
    `ws://localhost:43127` and Python binds only to `127.0.0.1:43127`.
 
@@ -102,7 +350,7 @@ Each machine uses its own paths.
    cwd = '<repo-path>\tools\lunitora_mcp'
    startup_timeout_sec = 15
    tool_timeout_sec = 35
-   enabled_tools = ['photoshop_ping', 'photoshop_get_active_document']
+   enabled_tools = ['photoshop_ping', 'photoshop_get_active_document', 'photoshop_process_image']
    ~~~
 
    This user-local configuration stays outside the repository. Do not put the
@@ -113,9 +361,8 @@ Each machine uses its own paths.
    to load the configuration. Let Codex own the server; do not also run
    `core.server` or `--live-test` manually alongside it.
 
-9. **Start the bridge from Codex.** Ask the new chat: `Use photoshop_ping.`
-   This lets Codex start/use the configured MCP process. An initial
-   `DISCONNECTED` response is expected before the Photoshop panel is paired.
+9. **Open the repository in Desktop.** Codex owns the configured MCP process.
+   No preliminary ping is required. `photoshop_ping` remains an optional diagnostic.
 
 10. **Pair Photoshop on this workstation.** Open the local token privately:
 
@@ -137,33 +384,23 @@ Each machine uses its own paths.
     `has_document=false, document=null` result, not a disconnect. These tools
     only inspect; they do not edit, save, or export.
 
-12. **Troubleshoot.** For `PORT_IN_USE`, stop an old manual bridge with Ctrl+C
-    or fully quit an older Codex instance first. There is no alternate-port
-    fallback. Identify the listener:
+12. **Troubleshoot.** Install the launcher aliases above, then use `git art-refresh`
+    from external Git Bash for `PORT_IN_USE` recovery. There is no alternate-port
+    fallback. To inspect a listener manually:
 
     ~~~bash
     netstat.exe -ano -p tcp | findstr.exe ':43127'
     ~~~
 
-    Use the **LISTENING** row's PID and confirm in Task Manager's Details/
-    Command line that it belongs to a stale Lunitora bridge. If that confirmed
-    process cannot be closed normally, replace `<pid>` with its numeric PID:
-
-    ~~~bash
-    MSYS_NO_PATHCONV=1 taskkill.exe /PID '<pid>' /F
-    ~~~
-
-    Git Bash can convert `/PID` into `C:/Program Files/Git/PID`. The command-local
-    `MSYS_NO_PATHCONV=1` prevents that conversion without changing global shell
-    settings; see [Git for Windows' path-conversion notes](https://github.com/git-for-windows/build-extra/blob/main/ReleaseNotes.md#known-issues).
-    Do not terminate unrelated Python or Photoshop processes. After freeing the
-    port, restart Codex Desktop, open a new chat, and repeat steps 9–11; an
-    already-started server with a bind error must be restarted.
+    Do not terminate unknown PIDs, unrelated Python or Photoshop processes.
+    Stop a known manual bridge with Ctrl+C in its own terminal. Unknown owners
+    require developer investigation; the launcher fails safely.
 
     For `DISCONNECTED`, keep Photoshop open, confirm the plugin is loaded,
-    call `photoshop_ping` to start the bridge, then click **Connect / Reconnect**
-    with this machine's token. Re-enter the local token if pairing is rejected.
-    Reload the plugin in UDT after plugin/manifest updates. If tools are missing,
+    allow automatic reconnect, or use **Connect / Reconnect** for diagnostics.
+    Re-enter the local token only if pairing is rejected or the cache is lost.
+    Repackage/reinstall installed plugin updates; UDT Reload is developer-only.
+    If tools are missing,
     check the user config's absolute executable and working-directory paths,
     then repeat step 8. Keep the localhost permission and fixed endpoint; use
     the sanitized diagnostics described below for further investigation.
@@ -183,7 +420,7 @@ Follow [ART_GUIDE.md](../../source_art/ART_GUIDE.md) for staging review.
    (25,165,824 bytes, inclusive)**. Source and canvas dimensions remain limited
    to 1..2048 px per axis. JPEG, indexed/grayscale PNG, 16-bit PNG, interlaced PNG,
    APNG, PNG tRNS color keys and PSD remain outside this slice.
-2. Reload the plugin in UXP Developer Tool. In this user's local Codex config,
+2. Install the current packaged plugin (developers may reload in UDT). In this user's local Codex config,
    opt into the new tool by replacing only the existing enabled_tools line:
 
    ~~~toml
@@ -191,8 +428,8 @@ Follow [ART_GUIDE.md](../../source_art/ART_GUIDE.md) for staging review.
    ~~~
 
    Keep the existing command/cwd, token, endpoint and permissions. Fully restart
-   Codex Desktop, open a new chat, call photoshop_ping, then pair/reconnect the
-   Photoshop panel. The setup examples above deliberately enable inspection only.
+   Codex Desktop and open a new chat. The paired plugin reconnects automatically;
+   no preliminary ping is needed. The current setup enables all three tools.
 3. Ask Codex to process the selected source into a **new** staging filename,
    providing integer canvas dimensions. Use mode="fit" to shrink larger artwork
    proportionally, or omit mode for the existing preserve_size behavior.
@@ -546,8 +783,8 @@ This workstation's environment and pairing file have already been created.
 Reproduction on another PC uses its own local token. Do not copy credentials:
 
 ~~~bash
-cd /d/Development/LunitoraGames/totolina-merge/tools/lunitora_mcp
-'/c/Users/lunam/AppData/Local/Programs/Python/Python312/python.exe' -m venv .venv
+cd <repo-path-bash>/tools/lunitora_mcp
+'<python-3.12-exe-bash>' -m venv .venv
 ./.venv/Scripts/python.exe -m pip install --no-cache-dir -r requirements.lock
 ./.venv/Scripts/python.exe -B -m core.server --setup
 ~~~
@@ -1205,14 +1442,14 @@ controls after reload. Automated mocks do not establish live Photoshop success.
 1. Keep Photoshop 2026 27.10 open. Confirm Developer Mode is enabled.
    If Photoshop requires a restart, handle any unsaved work yourself first.
 2. In Adobe UXP Developer Tool, choose Add Plugin and select:
-   D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp\bridges\photoshop_uxp\manifest.json
+   <repo-path>\tools\lunitora_mcp\bridges\photoshop_uxp\manifest.json
 3. Select the Photoshop 27.10 host and Load the added plugin.
 4. In Photoshop, open Plugins > Lunitora Photoshop Bridge. Confirm the panel
    shows Bridge 0.1.0, the Photoshop version and its disconnected status.
 5. Open a normal Git Bash terminal and prepare the local pairing value:
 
 ~~~bash
-cd /d/Development/LunitoraGames/totolina-merge/tools/lunitora_mcp
+cd <repo-path-bash>/tools/lunitora_mcp
 notepad.exe './.local/pairing-token.txt'
 ~~~
 
@@ -1266,9 +1503,9 @@ Codex MCP activation is verified on this workstation. Reference configuration:
 
 ~~~toml
 [mcp_servers.lunitora_photoshop]
-command = 'D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp\.venv\Scripts\python.exe'
+command = '<repo-path>\tools\lunitora_mcp\.venv\Scripts\python.exe'
 args = ['-B', '-m', 'core.server']
-cwd = 'D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp'
+cwd = '<repo-path>\tools\lunitora_mcp'
 startup_timeout_sec = 15
 tool_timeout_sec = 35
 enabled_tools = ['photoshop_ping', 'photoshop_get_active_document']
@@ -1306,7 +1543,7 @@ remains MCP protocol traffic. The WebSocket library's wire logging stays disable
 4. In Git Bash run:
 
 ~~~bash
-cd /d/Development/LunitoraGames/totolina-merge/tools/lunitora_mcp
+cd <repo-path-bash>/tools/lunitora_mcp
 ./.venv/Scripts/python.exe -B -m core.server --live-test --wait-seconds 120
 ~~~
 

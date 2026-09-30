@@ -7,3 +7,5 @@ __pycache__/
 /pairing-token*
 /*secret*
 /config.local.toml
+/dist/
+*.ccx

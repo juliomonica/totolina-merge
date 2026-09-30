@@ -6,6 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../bridges/photoshop_uxp/index.js"), "utf8");
 let tests = 0;
+const flushPromises = () => new Promise(resolve => setImmediate(resolve));
 function check(name, fn) { fn(); tests += 1; console.log("PASS " + name); }
 function readonly(value) {
   if (!value || typeof value !== "object") return value;
@@ -222,7 +223,7 @@ function panel(options = {}) {
     module: { exports: {} },
     console: { log: capture("log"), warn: capture("warn"), error: capture("error") },
     document: { getElementById: id => elements[id] },
-    setTimeout: callback => { timers.set(++timerId, callback); return timerId; },
+    setTimeout: (callback, delay) => { callback.delay = delay; timers.set(++timerId, callback); return timerId; },
     clearTimeout: id => timers.delete(id),
     require(name) {
       if (name === "photoshop") return { app: { documents: [],
@@ -232,12 +233,19 @@ function panel(options = {}) {
         ...(options.environment || runtime),
         storage: { secureStorage: {
           async getItem() {
+            if (options.readStorage) return options.readStorage();
             if (options.storageError) throw options.storageError;
             return Uint8Array.from(DIAGNOSTIC_TOKEN, character => character.charCodeAt(0));
           },
           async setItem() { if (options.storageError) throw options.storageError; }
         } },
-        entrypoints: { setup() {} }
+        entrypoints: { setup(entries) {
+          if (typeof entries.plugin.create !== "function") {
+            throw new Error("create method is not defined for plugin.");
+          }
+          options.destroy = entries.plugin.destroy;
+          entries.plugin.create();
+        } }
       };
       throw new Error("Unexpected module");
     }
@@ -246,6 +254,13 @@ function panel(options = {}) {
   vm.runInNewContext(source, context);
   return {
     logs, sockets, timers, elements,
+    destroy: () => options.destroy(),
+    async fireTimer(delay) {
+      const entry = [...timers].find(([, callback]) => callback.delay === delay);
+      assert.ok(entry, "Expected timer with delay " + delay);
+      timers.delete(entry[0]); entry[1]();
+      await flushPromises();
+    },
     get clickHandlers() { return clickHandlers; },
     click: () => elements.connect.click(),
     detail: () => elements["diagnostic-detail"].textContent,
@@ -267,6 +282,28 @@ async function diagnosticTests() {
     tests += 1;
     console.log("PASS " + name);
   }
+  await checkPanel("packaged startup passes UXP lifecycle validation and connects automatically", async () => {
+    const manifest = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "../bridges/photoshop_uxp/manifest.json"), "utf8"));
+    assert.equal(manifest.host.data.loadEvent, "startup");
+    let storageReads = 0;
+    const ui = panel({ readStorage: async () => {
+      storageReads += 1;
+      return Uint8Array.from(DIAGNOSTIC_TOKEN, character => character.charCodeAt(0));
+    } });
+    await flushPromises();
+    assert.match(ui.logs.join("\n"), /Plugin panel initialized/);
+    assert.match(ui.logs.join("\n"), /Automatic reconnect/);
+    assert.doesNotMatch(ui.logs.join("\n"), /button clicked/);
+    assert.equal(storageReads, 1);
+    assert.equal(ui.sockets.length, 1);
+    ui.open();
+    assert.deepEqual(ui.sockets[0].sent.map(message => message.type), ["auth"]);
+    await ui.message({ type: "auth_result", protocol_version: 1, ok: true });
+    assert.match(ui.elements.status.textContent, /Connected/);
+    assert.equal(ui.timers.size, 0);
+    ui.assertSafe();
+  });
   for (const [operation, limit] of [["photoshop_process_image", 33555456], ["photoshop_ping", 262144]]) {
     await checkPanel(operation + " incoming UTF-8 message boundaries", async () => {
       for (const size of [limit - 1, limit, limit + 1]) {
@@ -353,7 +390,7 @@ async function diagnosticTests() {
     socket.onerror({ error: new Error("Network denied " + DIAGNOSTIC_TOKEN) });
     assert.match(ui.detail(), /WebSocket onerror.*Network denied/);
     assert.equal(socket.onmessage, null);
-    assert.equal(ui.timers.size, 0);
+    assert.equal(ui.timers.size, 1); // One bounded retry replaces the auth timer.
     socket.onclose({ code: 1006, reason: "Handshake failed", wasClean: false });
     assert.match(ui.detail(), /code=1006, reason=Handshake failed, wasClean=false/);
     ui.assertSafe();
@@ -431,6 +468,86 @@ async function diagnosticTests() {
     await ui.click();
     assert.match(ui.logs.join("\n"), /warn:.*Secure pairing cache unavailable/);
     assert.equal(ui.logs.join("\n").includes("private-cache-value"), false);
+    ui.assertSafe();
+  });
+  await checkPanel("saved pairing auto-connects at load without a click or ping", async () => {
+    const ui = panel();
+    await flushPromises();
+    assert.equal(ui.sockets.length, 1);
+    assert.equal(ui.elements["pairing-token"].value, DIAGNOSTIC_TOKEN);
+    ui.open();
+    await ui.message({ type: "auth_result", protocol_version: 1, ok: true });
+    assert.match(ui.elements.status.textContent, /Connected/);
+    assert.equal(ui.timers.size, 0);
+    ui.assertSafe();
+  });
+  await checkPanel("saved token retries a late server every five seconds with one socket", async () => {
+    const ui = panel();
+    await flushPromises();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const old = ui.sockets.at(-1);
+      old.onerror({});
+      old.onclose({ code: 1006 });
+      assert.equal(ui.timers.size, 1);
+      await ui.fireTimer(5000);
+      assert.equal(ui.sockets.filter(socket => socket.readyState !== 3).length, 1);
+    }
+    ui.open();
+    await ui.message({ type: "auth_result", protocol_version: 1, ok: true });
+    assert.equal(ui.timers.size, 0);
+    assert.equal(ui.sockets.at(-1).sent[0].token, DIAGNOSTIC_TOKEN);
+    ui.assertSafe();
+  });
+  await checkPanel("authenticated disconnect reconnects automatically", async () => {
+    const ui = panel(); await flushPromises(); ui.open();
+    await ui.message({ type: "auth_result", protocol_version: 1, ok: true });
+    ui.sockets.at(-1).onclose({ code: 1000 });
+    await ui.fireTimer(5000); ui.open();
+    await ui.message({ type: "auth_result", protocol_version: 1, ok: true });
+    assert.equal(ui.sockets.length, 2);
+    assert.equal(ui.timers.size, 0);
+    ui.assertSafe();
+  });
+  await checkPanel("hung connection has a deadline followed by a bounded retry", async () => {
+    const ui = panel(); await flushPromises();
+    await ui.fireTimer(10000);
+    assert.equal(ui.sockets[0].readyState, 3);
+    assert.equal(ui.timers.size, 1);
+    await ui.fireTimer(5000);
+    assert.equal(ui.sockets.length, 2);
+    ui.assertSafe();
+  });
+  await checkPanel("missing or rejected token does not create endless authentication attempts", async () => {
+    const missing = panel({ readStorage: async () => new Uint8Array() });
+    await flushPromises();
+    assert.equal(missing.sockets.length, 0); assert.equal(missing.timers.size, 0);
+    const rejected = panel(); await flushPromises(); rejected.open();
+    await rejected.message({ type: "auth_result", protocol_version: 1, ok: false, error: { code: "AUTH_FAILED" } });
+    assert.equal(rejected.timers.size, 0);
+    missing.assertSafe(); rejected.assertSafe();
+  });
+  await checkPanel("manual reconnect cancels a pending retry", async () => {
+    const ui = panel(); await flushPromises(); ui.sockets[0].onerror({});
+    await ui.click();
+    assert.equal(ui.sockets.length, 2);
+    assert.deepEqual([...ui.timers.values()].map(callback => callback.delay), [10000]);
+    ui.assertSafe();
+  });
+  await checkPanel("destroy cancels retries, authentication and pending secure-storage reads", async () => {
+    for (const retry of [false, true]) {
+      const ui = panel(); await flushPromises();
+      if (retry) ui.sockets[0].onerror({});
+      ui.destroy();
+      assert.equal(ui.timers.size, 0); assert.equal(ui.sockets[0].readyState, 3);
+      await ui.click(); assert.equal(ui.sockets.length, 1);
+      ui.assertSafe();
+    }
+    let finishRead;
+    const ui = panel({ readStorage: () => new Promise(resolve => { finishRead = resolve; }) });
+    ui.destroy();
+    finishRead(Uint8Array.from(DIAGNOSTIC_TOKEN, c => c.charCodeAt(0)));
+    await flushPromises();
+    assert.equal(ui.sockets.length, 0); assert.equal(ui.timers.size, 0);
     ui.assertSafe();
   });
   console.log("PLUGIN TESTS: " + tests + " passed (including panel diagnostics)");
