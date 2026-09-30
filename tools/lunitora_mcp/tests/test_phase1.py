@@ -324,12 +324,16 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(reply.structured_content["error"]["code"], code)
                         self.assertNotIn("private peer detail", json.dumps(reply.structured_content))
 
-    async def test_initialize_exact_two_schemas_and_disconnected_result(self):
+    async def test_initialize_compatible_readonly_schemas_and_disconnected_result(self):
         async with Client(create_server(Config(), secrets.token_urlsafe(48))) as client:
             listing = await client.list_tools()
             self.assertEqual({tool.name for tool in listing.tools},
-                             {"photoshop_ping", "photoshop_get_active_document"})
+                             {"photoshop_ping", "photoshop_get_active_document", "photoshop_process_image"})
             for tool in listing.tools:
+                if tool.name == "photoshop_process_image":
+                    self.assertFalse(tool.annotations.read_only_hint)
+                    self.assertFalse(tool.annotations.idempotent_hint)
+                    continue
                 self.assertEqual(tool.input_schema["properties"], {})
                 self.assertTrue(tool.annotations.read_only_hint)
                 self.assertFalse(tool.annotations.destructive_hint)
@@ -352,7 +356,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unpaired_server_still_lists_tools(self):
         async with Client(create_server(Config(), None)) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 2)
+            self.assertEqual(len((await client.list_tools()).tools), 3)
             reply = await client.call_tool("photoshop_ping", {})
             self.assertEqual(reply.structured_content["error"]["code"], "UNPAIRED")
 
@@ -361,7 +365,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             occupied.bind((HOST, PORT))
             occupied.listen(1)
             async with Client(create_server(Config(), secrets.token_urlsafe(48))) as client:
-                self.assertEqual(len((await client.list_tools()).tools), 2)
+                self.assertEqual(len((await client.list_tools()).tools), 3)
                 reply = await client.call_tool("photoshop_ping", {})
                 self.assertTrue(reply.is_error)
                 self.assertEqual(reply.structured_content["error"]["code"], "PORT_IN_USE")
@@ -387,7 +391,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             process.stdin.write(b'{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
             listing = await exchange({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
             self.assertEqual({tool["name"] for tool in listing["result"]["tools"]},
-                             {"photoshop_ping", "photoshop_get_active_document"})
+                             {"photoshop_ping", "photoshop_get_active_document", "photoshop_process_image"})
             response = await exchange({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
                                        "params": {"name": "photoshop_ping", "arguments": {}}})
             self.assertTrue(response["result"]["isError"])

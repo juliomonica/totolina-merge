@@ -9,7 +9,7 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 from core.config import ENDPOINT
-from modules.photoshop.protocol import BRIDGE_VERSION, PROTOCOL_VERSION, decode, encode
+from modules.photoshop.protocol import BRIDGE_VERSION, MAX_PAYLOAD_BYTES, PROTOCOL_VERSION, decode, encode
 
 PING = {"photoshop_version": "27.10.0", "host_version": "27.10.0",
         "uxp_version": "test-runtime", "plugin_version": BRIDGE_VERSION}
@@ -47,7 +47,7 @@ class FakePhotoshopClient:
 
     async def __aenter__(self):
         # Match the IPv4-only listener without delaying short tests on an IPv6 refusal.
-        self.socket = await connect(ENDPOINT, family=socket.AF_INET, proxy=None, max_size=262144,
+        self.socket = await connect(ENDPOINT, family=socket.AF_INET, proxy=None, max_size=MAX_PAYLOAD_BYTES,
                                     compression=None, close_timeout=1)
         await self.socket.send(encode({"type": "auth", "protocol_version": PROTOCOL_VERSION,
                                        "token": self.token}))

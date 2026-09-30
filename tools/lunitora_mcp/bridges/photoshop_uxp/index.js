@@ -1,4 +1,4 @@
-/* Read-only UXP DOM getters. No batchPlay, file access, save or selection changes. */
+/* Compatible read-only getters; separate bounded processing of temporary copies. */
 "use strict";
 
 console.log("[Lunitora UXP] Plugin script initialization started");
@@ -9,13 +9,16 @@ const { host, versions } = uxp;
 const VERSION = "0.1.0";
 const PROTOCOL_VERSION = 1;
 const ENDPOINT = "ws://localhost:43127";
-const MAX_PAYLOAD_BYTES = 262144;
+const MAX_INSPECTION_BYTES = 262144;
+// Match Python: canonical Base64 for one 24 MiB PNG plus 1 KiB of JSON metadata.
+const MAX_PAYLOAD_BYTES = 4 * Math.ceil((24 * 1024 * 1024) / 3) + 1024;
 const MAX_LAYERS = 2000;
 const MAX_DEPTH = 64;
 const STORAGE_KEY = "lunitora.phase1.pairing";
 const HOST_VERSION_ERROR = "Could not detect the Photoshop host version from UXP host.version.";
 const HOST_NAME_ERROR = "Could not detect the Photoshop host name from UXP host.name.";
-const ALLOWED = new Set(["photoshop_ping", "photoshop_get_active_document"]);
+const PROCESS_OPERATION = "photoshop_process_image";
+const ALLOWED = new Set(["photoshop_ping", "photoshop_get_active_document", PROCESS_OPERATION]);
 const MESSAGES = Object.freeze({
   INVALID_MESSAGE: "Invalid bridge request.",
   UNSUPPORTED_OPERATION: "Only the two read-only Photoshop operations are supported.",
@@ -188,7 +191,7 @@ function handleRequest(request) {
         Object.keys(request).sort().join(",") !== "id,operation,protocol_version,type") {
       fail("INVALID_MESSAGE");
     }
-    if (!ALLOWED.has(request.operation)) fail("UNSUPPORTED_OPERATION");
+    if (!ALLOWED.has(request.operation) || request.operation === PROCESS_OPERATION) fail("UNSUPPORTED_OPERATION");
     const version = readHostVersion();
     const hostName = readHostName();
     if (!version || !hostName) {
@@ -204,6 +207,42 @@ function handleRequest(request) {
     const code = error && Object.prototype.hasOwnProperty.call(MESSAGES, error.code)
       ? error.code : "PHOTOSHOP_READ_FAILED";
     response.error = { code, message: MESSAGES[code] };
+  }
+  return response;
+}
+
+async function dispatchRequest(request) {
+  if (!request || request.operation !== PROCESS_OPERATION) return handleRequest(request);
+  const response = {
+    type: "response", protocol_version: PROTOCOL_VERSION,
+    id: typeof request.id === "string" && request.id.length <= 64 ? request.id : "",
+    operation: PROCESS_OPERATION, ok: false, result: null, error: null
+  };
+  if (request.type !== "request" || request.protocol_version !== PROTOCOL_VERSION ||
+      !response.id || Object.keys(request).sort().join(",") !== "id,operation,parameters,protocol_version,type") {
+    response.error = { code: "INVALID_MESSAGE", message: "Invalid processing request." };
+    return response;
+  }
+  const hostCheck = handleRequest({ type: "request", protocol_version: PROTOCOL_VERSION,
+    id: request.id, operation: "photoshop_ping" });
+  if (!hostCheck.ok) { response.error = hostCheck.error; return response; }
+  try {
+    response.result = await require("./processing.js").processImage(request.parameters);
+    response.ok = true;
+  } catch (error) {
+    const errors = {
+      INVALID_MESSAGE: "Invalid processing request.",
+      INVALID_IMAGE: "Only bounded non-interlaced RGBA8 PNG is supported.",
+      INVALID_DIMENSIONS: "Canvas dimensions must be integers from 1 through 2048.",
+      CANVAS_TOO_SMALL: "Canvas would crop the source.",
+      IMAGE_TOO_LARGE: "PNG exceeds the 24 MiB processing limit.",
+      BACKGROUND_REMOVAL_UNAVAILABLE: "Reliable offline background removal is not enabled.",
+      BUSY: "A temporary image is already being processed.",
+      PHOTOSHOP_PROCESSING_FAILED: "Photoshop could not process the temporary image."
+    };
+    const code = error && Object.prototype.hasOwnProperty.call(errors, error.code)
+      ? error.code : "PHOTOSHOP_PROCESSING_FAILED";
+    response.error = { code, message: errors[code] };
   }
   return response;
 }
@@ -226,7 +265,8 @@ function byteLength(text) {
 
 function encodeResponse(response) {
   let raw = JSON.stringify(response);
-  if (byteLength(raw) > MAX_PAYLOAD_BYTES) {
+  const limit = response.operation === PROCESS_OPERATION ? MAX_PAYLOAD_BYTES : MAX_INSPECTION_BYTES;
+  if (byteLength(raw) > limit) {
     raw = JSON.stringify({
       type: "response", protocol_version: PROTOCOL_VERSION,
       id: response.id, operation: response.operation, ok: false, result: null,
@@ -321,6 +361,9 @@ function initializePanel() {
           throw new Error("Invalid frame");
         }
         message = JSON.parse(event.data);
+        if ((!message || message.operation !== PROCESS_OPERATION) && byteLength(event.data) > MAX_INSPECTION_BYTES) {
+          throw new Error("Invalid frame");
+        }
         const type = message && ["auth_result", "request"].includes(message.type) ? message.type : "unexpected";
         const operation = message && ALLOWED.has(message.operation) ? message.operation : "none/unsupported";
         diagnostic("log", "WebSocket onmessage: type=" + type + ", operation=" + operation);
@@ -343,7 +386,7 @@ function initializePanel() {
         authenticated = true;
         clearTimeout(authTimer);
         authTimer = null;
-        status.textContent = "Connected · read-only";
+        status.textContent = "Connected · inspection and staging candidates";
         diagnostic("log", "Connected; authentication accepted: code=OK");
         // No document requests are handled before authentication succeeds.
         const pairedToken = token;
@@ -364,7 +407,7 @@ function initializePanel() {
         status.textContent = "Unexpected bridge message. Disconnected.";
         return;
       }
-      const response = handleRequest(message);
+      const response = await dispatchRequest(message);
       if (current === generation && ws.readyState === 1) {
         try { ws.send(encodeResponse(response)); }
         catch (error) { diagnostic("error", "WebSocket response send failed", error); }
@@ -391,4 +434,4 @@ function initializePanel() {
 
 if (typeof document !== "undefined") initializePanel();
 // The same DOM-reading functions are exercised with read-only mocks; never ship a mock host.
-if (typeof module !== "undefined") module.exports = { handleRequest, encodeResponse, byteLength };
+if (typeof module !== "undefined") module.exports = { handleRequest, dispatchRequest, encodeResponse, byteLength };
