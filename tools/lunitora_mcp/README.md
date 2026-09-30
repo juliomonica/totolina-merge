@@ -341,8 +341,55 @@ unsaved document, cancellation and temporary-file cleanup on the actual host.
 Alpha edges and profile/color-management behavior require visual review; alpha
 validation does not promise identical RGB values. Near-limit runtime/memory also
 needs a live test. This Phase 2A live record does not verify Phase 2B RGB conversion
-or fit resampling. Background removal, cropping, upscaling, batching and production
-promotion are not implemented.
+or fit resampling. Background removal, cropping, upscaling, a dedicated batch MCP
+tool and production promotion are not implemented.
+
+## Supported sequential batch workflow
+
+Codex may process multiple selected `source_art/_inbox/` images by calling the
+existing `photoshop_process_image` tool sequentially, once per image. Each image
+remains an independent operation with its own source, staging destination,
+arguments and result. Wait for each call to finish before starting the next;
+only one processing call runs at a time.
+
+1. Call `photoshop_process_image` for each selected source and its intended
+   `source_art/_staging/` destination.
+2. Record each success or failure and continue processing the remaining files
+   if an item fails. A failed item must not undo successful candidates from
+   earlier calls; there is no batch rollback.
+3. At the end, report one aggregate table with source, destination, success or
+   failure, error code, and successful artwork dimensions/offsets, plus total
+   attempted, succeeded and failed counts.
+
+All existing no-overwrite rules, path restrictions, staging-only behavior,
+input/output validation and human review/approval requirements apply independently
+to every item. Successful candidates remain unapproved staging files until human
+approval; the workflow does not promote them to production. Rerunning a valid
+source against an existing destination returns `DESTINATION_EXISTS`. Do not
+delete, rename or overwrite an existing candidate to make a rerun succeed.
+
+**Live validation through Codex:** four sequential calls used `mode="fit"`,
+default bicubic resampling (the `resample` argument was omitted), a 384x384 canvas
+and `remove_background=false`. Sources were in `source_art/_inbox/` and
+destinations in `source_art/_staging/`:
+
+| Source | Destination | Result | Artwork (W x H px) | Offset (X, Y px) |
+| --- | --- | --- | --- | --- |
+| batch_rgb_portrait_941x1672.png | batch_rgb_portrait_fit_384.png | Success | 216 x 384 | 84, 0 |
+| batch_rgb_landscape_1600x900.png | batch_rgb_landscape_fit_384.png | Success | 384 x 216 | 0, 84 |
+| batch_rgba_alpha_640x480.png | batch_rgba_alpha_fit_384.png | Success | 384 x 288 | 0, 48 |
+| batch_invalid_grayscale_512x512.png | batch_invalid_grayscale_fit_384.png | Failure: `INVALID_IMAGE` | N/A | N/A |
+
+Initial total: **4 attempted, 3 succeeded, 1 failed**. The unsupported grayscale
+image failed independently and the three valid RGB/RGBA candidates remained intact.
+Repeating the same four calls against the same destinations continued after every
+failure: the first three returned `DESTINATION_EXISTS`, and grayscale again
+returned `INVALID_IMAGE` (**4 attempted, 0 succeeded, 4 failed**). SHA-256 checks
+confirmed all three existing candidates were unchanged; no new output was created.
+
+This workflow intentionally uses repeated calls to the existing tool. A separate
+batch MCP tool is not needed unless future scale or performance evidence justifies
+adding one. No implementation, schema, dependency or functionality change is required.
 
 ## Files and local setup
 
