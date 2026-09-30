@@ -41,7 +41,9 @@ ERROR_MESSAGES = {
     "INVALID_DIMENSIONS": "Canvas width and height must be integers from 1 through 2048.",
     "CANVAS_TOO_SMALL": "The requested canvas would crop the image; use its original size or a larger canvas.",
     "IMAGE_TOO_LARGE": "Phase 2A input and output PNGs must each fit within 24 MiB.",
-    "INVALID_IMAGE": "Phase 2A requires a complete non-interlaced 8-bit RGBA PNG.",
+    "INVALID_IMAGE": "Processing requires a complete non-interlaced 8-bit RGB or RGBA PNG.",
+    "INVALID_MODE": "Processing mode must be preserve_size or fit.",
+    "INVALID_RESAMPLE": "Resample must be bicubic or nearest.",
     "BACKGROUND_REMOVAL_UNAVAILABLE": "Reliable offline background removal is not enabled in Phase 2A.",
     "PHOTOSHOP_PROCESSING_FAILED": "Photoshop could not process the temporary image; no candidate was published.",
     "OUTPUT_VALIDATION_FAILED": "The exported PNG failed independent dimensions, alpha, or padding validation.",
@@ -50,15 +52,18 @@ ERROR_MESSAGES = {
 
 
 class BridgeError(Exception):
-    def __init__(self, code: str, *, connected: bool = False):
+    def __init__(self, code: str, *, connected: bool = False, diagnostics: dict | None = None):
         self.code = code if code in ERROR_MESSAGES else "INVALID_MESSAGE"
         self.connected = connected
+        # Locally constructed validation measurements only; never attach peer errors.
+        self.diagnostics = diagnostics if self.code == "OUTPUT_VALIDATION_FAILED" else None
         super().__init__(ERROR_MESSAGES[self.code])
 
 
 class ErrorInfo(TypedDict):
     code: str
     message: str
+    diagnostics: NotRequired[dict]
 
 
 class PingData(TypedDict):
@@ -123,6 +128,7 @@ class ProcessingValidation(TypedDict):
     has_transparency: bool
     dimensions_verified: bool
     source_alpha_preserved: bool
+    alpha_validation: str
     padding_verified: bool
     source_unchanged: bool
     bytes_written: int
@@ -135,6 +141,13 @@ class ProcessingData(TypedDict):
     staging_relative_path: str
     width_px: int
     height_px: int
+    mode: str
+    resample: str
+    source_color_type: str
+    artwork_width_px: int
+    artwork_height_px: int
+    offset_x_px: int
+    offset_y_px: int
     background_removal_requested: bool
     background_removal_completed: bool
     validation: ProcessingValidation
@@ -157,9 +170,16 @@ def image_bytes(value: object) -> bytes:
 
 
 def validate_processing_parameters(data: dict) -> None:
+    required = {"image_base64", "width_px", "height_px", "remove_background"}
     if (not isinstance(data, dict)
-            or set(data) != {"image_base64", "width_px", "height_px", "remove_background"}):
+            or not required <= set(data) <= required | {"mode", "resample"}):
         raise BridgeError("INVALID_MESSAGE")
+    mode = data.get("mode", "preserve_size")
+    if type(mode) is not str or mode not in ("preserve_size", "fit"):
+        raise BridgeError("INVALID_MODE")
+    resample = data.get("resample", "bicubic")
+    if type(resample) is not str or resample not in ("bicubic", "nearest"):
+        raise BridgeError("INVALID_RESAMPLE")
     for key in ("width_px", "height_px"):
         if type(data[key]) is not int or not 1 <= data[key] <= 2048:
             raise BridgeError("INVALID_DIMENSIONS")
@@ -174,6 +194,9 @@ def error_info(code: str) -> ErrorInfo:
 
 def envelope(result: dict | None = None, *, elapsed_ms: float | None = None,
              error: BridgeError | None = None) -> dict:
+    failure = error_info(error.code) if error else None
+    if failure is not None and error.diagnostics is not None:
+        failure["diagnostics"] = error.diagnostics
     return {
         "ok": error is None,
         "connected": error is None or error.connected,
@@ -181,7 +204,7 @@ def envelope(result: dict | None = None, *, elapsed_ms: float | None = None,
         "bridge_version": BRIDGE_VERSION,
         "round_trip_ms": elapsed_ms,
         "result": result if error is None else None,
-        "error": error_info(error.code) if error else None,
+        "error": failure,
     }
 
 
@@ -251,8 +274,12 @@ def validate_result(operation: str, data: dict) -> None:
         require(type(value.get("id")) is int and isinstance(value.get("name"), str))
 
     if operation == PROCESS_OPERATION:
-        require(set(data) == {"png_base64", "width_px", "height_px",
-                              "background_removal_requested", "background_removal_completed"})
+        required = {"png_base64", "width_px", "height_px",
+                    "background_removal_requested", "background_removal_completed"}
+        require(required <= set(data) <= required | {"resampled_alpha_crc32"})
+        if "resampled_alpha_crc32" in data:
+            require(type(data["resampled_alpha_crc32"]) is int
+                    and 0 <= data["resampled_alpha_crc32"] <= 0xffffffff)
         image_bytes(data["png_base64"])
         for field in ("width_px", "height_px"):
             require(type(data[field]) is int and 1 <= data[field] <= 2048)

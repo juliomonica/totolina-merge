@@ -21,7 +21,8 @@ from core.config import Config, ENDPOINT, ROOT
 from core.server import create_server
 from modules.photoshop import path_security, processing
 from modules.photoshop.path_security import locked_parent, relative_parts
-from modules.photoshop.png_validation import MAX_IMAGE_BYTES, PNGError, read_png, verify_canvas
+from modules.photoshop.png_validation import (MAX_IMAGE_BYTES, PNG, PNGError, read_png, verify_canvas,
+                                             fitted_size, rgba_png)
 from modules.photoshop.processing import ImageProcessor
 from modules.photoshop.protocol import (BridgeError, MAX_IMAGE_BASE64_BYTES, MAX_INSPECTION_BYTES,
                                        MAX_PAYLOAD_BYTES, PROCESS_OPERATION, decode, encode,
@@ -33,16 +34,17 @@ def chunk(kind, data):
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
 
-def png(width=2, height=2, *, alpha=None, filter_type=0):
-    pixels = [bytes((40, 80, 120, alpha[i] if alpha is not None else [0, 128, 255, 255][i % 4]))
+def png(width=2, height=2, *, alpha=None, filter_type=0, color_type=6):
+    channels = 3 if color_type == 2 else 4
+    pixels = [bytes((40, 80, 120, alpha[i] if alpha is not None else [0, 128, 255, 255][i % 4]))[:channels]
               for i in range(width * height)]
-    previous = bytes(width * 4)
+    previous = bytes(width * channels)
     rows = []
     for y in range(height):
         row = b"".join(pixels[y * width:(y + 1) * width])
         encoded = bytearray()
         for x, value in enumerate(row):
-            a, b, c = row[x - 4] if x >= 4 else 0, previous[x], previous[x - 4] if x >= 4 else 0
+            a, b, c = row[x - channels] if x >= channels else 0, previous[x], previous[x - channels] if x >= channels else 0
             p = a + b - c
             pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
             paeth = a if pa <= pb and pa <= pc else b if pb <= pc else c
@@ -50,7 +52,7 @@ def png(width=2, height=2, *, alpha=None, filter_type=0):
             encoded.append((value - prediction) & 255)
         rows.append(bytes([filter_type]) + encoded)
         previous = row
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
 
 
@@ -88,16 +90,172 @@ class PNGTests(unittest.TestCase):
             with self.subTest(length=len(candidate)), self.assertRaises(PNGError):
                 read_png(candidate)
 
-    def test_apng_interlaced_rgb_and_oversized_input_rejected(self):
+    def test_apng_interlaced_indexed_and_oversized_input_rejected(self):
         for data in (png()[:33] + chunk(b"acTL", b"\0" * 8) + png()[33:],
                      b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 6, 0, 0, 1)),
-                     b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0)),
+                     b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 3, 0, 0, 0)),
                      png() + b"x" * MAX_IMAGE_BYTES):
             with self.assertRaises(PNGError):
                 read_png(data)
 
     def test_alpha_and_padding_preserved_in_odd_canvas(self):
         verify_canvas(read_png(png()), read_png(padded(3, 5)), 3, 5)
+
+    def test_rgb_all_filters_decode_to_opaque_rgba_pixels(self):
+        expected = bytes((40, 80, 120, 255)) * 15
+        for method in range(5):
+            image = read_png(png(3, 5, color_type=2, filter_type=method))
+            self.assertEqual(image.color_type, 2)
+            self.assertEqual(image.pixels, expected)
+            self.assertFalse(image.has_transparency)
+
+    def test_rgb_conversion_preserves_pixels_profiles_and_text(self):
+        metadata = chunk(b"iCCP", b"test\0\0" + zlib.compress(b"profile fixture")) + chunk(b"tEXt", b"note\0keep")
+        original = png(3, 5, color_type=2)
+        original = original[:33] + metadata + chunk(b"sBIT", b"\x06\x07\x08") + original[33:]
+        converted = rgba_png(original)
+        self.assertEqual(read_png(converted).color_type, 6)
+        self.assertEqual(read_png(converted).pixels, read_png(original).pixels)
+        self.assertIn(metadata, converted)
+        self.assertIn(chunk(b"sBIT", b"\x06\x07\x08\x08"), converted)
+        self.assertEqual(rgba_png(converted), converted)
+        for invalid in (b"\0\x08\x08", b"\x09\x08\x08", b"\x08" * 4):
+            rgb = png(color_type=2)
+            with self.assertRaises(PNGError):
+                rgba_png(rgb[:33] + chunk(b"sBIT", invalid) + rgb[33:])
+
+    def test_rgb_transparent_color_key_and_unsupported_depth_rejected(self):
+        rgb = png(color_type=2)
+        cases = [rgb[:33] + chunk(b"tRNS", b"\0" * 6) + rgb[33:]]
+        for depth, color in ((16, 2), (16, 6), (8, 0), (8, 3), (8, 4)):
+            cases.append(rgb[:8] + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, depth, color, 0, 0, 0)) + rgb[33:])
+        for candidate in cases:
+            with self.assertRaises(PNGError):
+                read_png(candidate)
+
+    def test_fit_portrait_and_landscape_dimensions(self):
+        self.assertEqual(fitted_size(4, 8, 4, 4, "fit"), (2, 4))
+        self.assertEqual(fitted_size(8, 4, 4, 4, "fit"), (4, 2))
+        self.assertEqual(fitted_size(941, 1672, 512, 512, "fit"), (288, 512))
+
+    def test_fit_same_size_smaller_source_and_one_pixel_dimension(self):
+        for mode in ("preserve_size", "fit"):
+            self.assertEqual(fitted_size(4, 4, 4, 4, mode), (4, 4))
+            self.assertEqual(fitted_size(2, 3, 9, 9, mode), (2, 3))
+        self.assertEqual(fitted_size(1, 2048, 1, 1, "fit"), (1, 1))
+        self.assertEqual(fitted_size(7, 3, 4, 4, "fit"), (4, 2))
+
+    def test_fit_preserves_hand_calculated_partial_alpha_and_odd_padding(self):
+        source = read_png(png(4, 8, alpha=list(range(32))))
+        # 4x8 -> 2x4: sample columns 1,3 and rows 1,3,5,7.
+        alpha = [0, 5, 7, 0, 0, 0, 13, 15, 0, 0,
+                 0, 21, 23, 0, 0, 0, 29, 31, 0, 0]
+        verify_canvas(source, read_png(png(5, 4, alpha=alpha)), 5, 4, "fit", "nearest")
+        for position in (0, 1, 19):
+            wrong = alpha.copy()
+            wrong[position] += 1
+            with self.assertRaises(PNGError):
+                verify_canvas(source, read_png(png(5, 4, alpha=wrong)), 5, 4, "fit", "nearest")
+
+    def test_fit_rejects_stretched_or_shifted_alpha(self):
+        source = read_png(png(8, 4, alpha=list(range(32))))
+        good = [0] * 4 + [9, 11, 13, 15, 25, 27, 29, 31] + [0] * 4
+        verify_canvas(source, read_png(png(4, 4, alpha=good)), 4, 4, "fit", "nearest")
+        for alpha in ([9, 11, 13, 15] * 4, good[4:] + [0] * 4):
+            with self.assertRaises(PNGError):
+                verify_canvas(source, read_png(png(4, 4, alpha=alpha)), 4, 4, "fit", "nearest")
+
+    def test_bicubic_alpha_uses_native_checksum_and_still_checks_padding(self):
+        source = read_png(png(4, 8, alpha=list(range(32))))
+        # Simulated native response, deliberately unlike nearest samples.
+        artwork = [3, 6, 11, 14, 19, 22, 27, 30]
+        alpha = [0, 3, 6, 0, 0, 0, 11, 14, 0, 0,
+                 0, 19, 22, 0, 0, 0, 27, 30, 0, 0]
+        checksum = zlib.crc32(bytes(artwork))
+        output = read_png(png(5, 4, alpha=alpha))
+        self.assertEqual(verify_canvas(source, output, 5, 4, "fit", "bicubic", checksum),
+                         "photoshop_bicubic_crc32")
+        for bad in (None, True, -1, 2**32, "123", checksum ^ 1):
+            with self.subTest(checksum=bad), self.assertRaises(PNGError):
+                verify_canvas(source, output, 5, 4, "fit", "bicubic", bad)
+        for position in (0, 1, 19):
+            wrong = alpha.copy()
+            wrong[position] += 1
+            with self.assertRaises(PNGError):
+                verify_canvas(source, read_png(png(5, 4, alpha=wrong)), 5, 4, "fit", "bicubic", checksum)
+        with self.assertRaises(PNGError):
+            verify_canvas(source, output, 5, 4, "fit", "nearest", checksum)
+
+    def test_bicubic_no_resize_still_requires_exact_source_alpha(self):
+        for mode in ("preserve_size", "fit"):
+            self.assertEqual(verify_canvas(read_png(png()), read_png(padded()), 4, 4, mode), "source_exact")
+            with self.assertRaises(PNGError):
+                verify_canvas(read_png(png()), read_png(png(4, 4)), 4, 4, mode, "bicubic", 0)
+
+    def test_rgb_unscaled_and_nearest_still_require_exact_opacity(self):
+        for sw, sh, mode, resample, expected in (
+                (2, 4, "preserve_size", "bicubic", "source_exact"),
+                (2, 4, "preserve_size", "nearest", "source_exact"),
+                (2, 4, "fit", "bicubic", "source_exact"),
+                (4, 8, "fit", "nearest", "nearest_exact")):
+            with self.subTest(mode=mode, resample=resample):
+                source = read_png(png(sw, sh, color_type=2))
+                alpha = [0, 255, 255, 0] * 4
+                self.assertEqual(verify_canvas(source, read_png(png(4, 4, alpha=alpha)),
+                                              4, 4, mode, resample), expected)
+                alpha[1] = 220
+                checksum = zlib.crc32(bytes([220] + [255] * 7))
+                with self.assertRaisesRegex(PNGError, "Source transparency changed"):
+                    verify_canvas(source, read_png(png(4, 4, alpha=alpha)),
+                                  4, 4, mode, resample, checksum)
+
+    def test_resample_wire_validation_accepts_legacy_and_rejects_invalid_values(self):
+        request = {"image_base64": base64.b64encode(png()).decode("ascii"),
+                   "width_px": 4, "height_px": 4, "remove_background": False}
+        for extra in ({}, {"mode": "fit"}, {"mode": "preserve_size"}):
+            validate_processing_parameters({**request, **extra})
+            for resample in ("bicubic", "nearest"):
+                validate_processing_parameters({**request, **extra, "resample": resample})
+        for resample in (None, True, 1, "", "BICUBIC", "bilinear", [], {}):
+            with self.assertRaises(BridgeError) as caught:
+                validate_processing_parameters({**request, "resample": resample})
+            self.assertEqual(caught.exception.code, "INVALID_RESAMPLE")
+        with self.assertRaises(BridgeError):
+            validate_processing_parameters({**request, "resample": "bicubic", "script": "forbidden"})
+
+    def test_native_alpha_checksum_response_is_optional_and_bounded(self):
+        validate_result(PROCESS_OPERATION, result())
+        for checksum in (0, 2**32 - 1):
+            validate_result(PROCESS_OPERATION, {**result(), "resampled_alpha_crc32": checksum})
+        for checksum in (None, True, -1, 2**32, "123", [], {}):
+            with self.assertRaises(BridgeError):
+                validate_result(PROCESS_OPERATION, {**result(), "resampled_alpha_crc32": checksum})
+
+    def test_exact_opaque_rgb_still_requires_rgba_output(self):
+        source = read_png(png(color_type=2))
+        with self.assertRaises(PNGError):
+            verify_canvas(source, source, 2, 2)
+        output = read_png(rgba_png(png(color_type=2)))
+        verify_canvas(source, output, 2, 2)
+        self.assertFalse(output.has_transparency)
+
+    def test_rgba_conversion_cannot_bypass_encoded_limit(self):
+        original = sized_png(500, png(color_type=2))
+        self.assertGreater(len(rgba_png(original)), len(original))
+        with patch("modules.photoshop.png_validation.MAX_IMAGE_BYTES", len(original)):
+            with self.assertRaises(PNGError):
+                rgba_png(original)
+
+    def test_processing_modes_preserve_legacy_wire_and_reject_invalid_values(self):
+        request = {"image_base64": base64.b64encode(png()).decode("ascii"),
+                   "width_px": 4, "height_px": 4, "remove_background": False}
+        validate_processing_parameters(request)
+        for mode in ("preserve_size", "fit"):
+            validate_processing_parameters({**request, "mode": mode})
+        for mode in ("", "FIT", "crop", None, False, 1, [], {}):
+            with self.assertRaises(BridgeError) as caught:
+                validate_processing_parameters({**request, "mode": mode})
+            self.assertEqual(caught.exception.code, "INVALID_MODE")
 
     def test_alpha_loss_opaque_padding_and_wrong_dimensions_rejected(self):
         for data in (png(4, 4, alpha=[255] * 16), png(4, 4), padded(5, 5)):
@@ -168,14 +326,65 @@ class PNGTests(unittest.TestCase):
         common = {"protocol_version": 1, "id": "\0" * 64, "operation": PROCESS_OPERATION}
         image = base64.b64encode(b"x" * MAX_IMAGE_BYTES).decode("ascii")
         request = {**common, "type": "request", "parameters": {
-            "image_base64": image, "width_px": 2048, "height_px": 2048, "remove_background": False}}
+            "image_base64": image, "width_px": 2048, "height_px": 2048, "remove_background": False,
+            "mode": "preserve_size", "resample": "bicubic"}}
         response = {**common, "type": "response", "ok": True, "error": None, "result": {
             "png_base64": image, "width_px": 2048, "height_px": 2048,
-            "background_removal_requested": False, "background_removal_completed": False}}
+            "background_removal_requested": False, "background_removal_completed": False,
+            "resampled_alpha_crc32": 2**32 - 1}}
         for message in (request, response):
             size = len(encode(message).encode("utf-8"))
             self.assertLessEqual(size - len(image), 1024)
             self.assertEqual(decode(encode(message)), message)
+
+
+class RGBBicubicRegressionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Synthetic native alpha with the live portrait's geometry, extrema and
+        # 1,196 partial edge pixels; no claim to reproduce Photoshop's kernel.
+        cls.source = PNG(941, 1672, bytes((40, 80, 120, 255)) * (941 * 1672), 2)
+        artwork = bytes([220]) * 216 + (bytes([220]) + bytes([255]) * 214 + bytes([220])) * 382 + bytes([220]) * 216
+        cls.checksum = zlib.crc32(artwork)
+        pixels = bytearray(bytes((40, 80, 120, 0)) * (384 * 384))
+        for y in range(384):
+            start = (y * 384 + 84) * 4 + 3
+            pixels[start:start + 216 * 4:4] = artwork[y * 216:(y + 1) * 216]
+        cls.output = PNG(384, 384, bytes(pixels))
+
+    def test_live_portrait_partial_edges_pass_with_native_checksum(self):
+        self.assertEqual(fitted_size(941, 1672, 384, 384, "fit"), (216, 384))
+        self.assertEqual(sum(0 < a < 255 for a in self.output.pixels[3::4]), 1196)
+        self.assertEqual(verify_canvas(self.source, self.output, 384, 384, "fit",
+                                      resampled_alpha_crc32=self.checksum), "photoshop_bicubic_crc32")
+
+    def test_changed_exported_edge_alpha_fails_native_checksum(self):
+        pixels = bytearray(self.output.pixels)
+        pixels[84 * 4 + 3] = 221
+        with self.assertRaisesRegex(PNGError, "Native resampled transparency changed"):
+            verify_canvas(self.source, PNG(384, 384, bytes(pixels)), 384, 384,
+                          "fit", "bicubic", self.checksum)
+
+    def test_missing_invalid_or_mismatched_native_checksum_fails(self):
+        for checksum in (None, True, -1, 2**32, "123", self.checksum ^ 1):
+            with self.subTest(checksum=checksum), self.assertRaises(PNGError):
+                verify_canvas(self.source, self.output, 384, 384, "fit", "bicubic", checksum)
+
+    def test_nonzero_alpha_outside_expected_rectangle_fails_even_with_matching_checksum(self):
+        for x, y in ((83, 0), (300, 383)):
+            pixels = bytearray(self.output.pixels)
+            pixels[(y * 384 + x) * 4 + 3] = 1
+            with self.subTest(x=x, y=y), self.assertRaisesRegex(PNGError, "Opaque horizontal padding"):
+                verify_canvas(self.source, PNG(384, 384, bytes(pixels)), 384, 384,
+                              "fit", "bicubic", self.checksum)
+
+    def test_wrong_dimensions_and_shifted_artwork_fail(self):
+        with self.assertRaisesRegex(PNGError, "Wrong output dimensions"):
+            verify_canvas(self.source, self.output, 385, 384, "fit", "bicubic", self.checksum)
+        shifted = b"".join(b"\0" * 4 + self.output.pixels[y * 384 * 4:((y + 1) * 384 - 1) * 4]
+                           for y in range(384))
+        with self.assertRaisesRegex(PNGError, "Opaque horizontal padding"):
+            verify_canvas(self.source, PNG(384, 384, shifted), 384, 384, "fit", "bicubic", self.checksum)
 
 
 class ProcessingTests(unittest.IsolatedAsyncioTestCase):
@@ -201,7 +410,8 @@ class ProcessingTests(unittest.IsolatedAsyncioTestCase):
     async def run_image(self, **kwargs):
         return await self.processor.process(
             kwargs.get("source", self.source_name), kwargs.get("output", self.output_name),
-            kwargs.get("width", 4), kwargs.get("height", 4), kwargs.get("remove_background", False))
+            kwargs.get("width", 4), kwargs.get("height", 4), kwargs.get("remove_background", False),
+            kwargs.get("mode", "preserve_size"), kwargs.get("resample", "bicubic"))
 
     async def assert_error(self, code, **kwargs):
         with self.assertRaises(BridgeError) as caught:
@@ -232,6 +442,197 @@ class ProcessingTests(unittest.IsolatedAsyncioTestCase):
     async def test_nested_staging_directories_created_safely(self):
         await self.run_image(output="source_art/_staging/new/nested/candidate.png")
         self.assertEqual((self.repo / "source_art/_staging/new/nested/candidate.png").read_bytes(), padded())
+
+    async def test_rgb_input_produces_rgba_with_transparent_padding(self):
+        self.source.write_bytes(png(color_type=2))
+        original = self.source.read_bytes()
+        alpha = [0, 0, 0, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0]
+        self.bridge.request.return_value = (result(png(4, 4, alpha=alpha)), 1)
+        data, _ = await self.run_image()
+        self.assertEqual(data["source_color_type"], "RGB")
+        self.assertEqual(data["mode"], "preserve_size")
+        self.assertTrue(data["validation"]["has_transparency"])
+        self.assertEqual(read_png(self.output.read_bytes()).color_type, 6)
+        self.assertEqual(self.source.read_bytes(), original)
+
+    async def test_exact_rgb_export_is_encoded_rgba_without_erasing_pixels(self):
+        original = png(color_type=2)
+        self.source.write_bytes(original)
+        self.bridge.request.return_value = (result(original, 2, 2), 1)
+        data, _ = await self.run_image(width=2, height=2, mode="fit")
+        candidate = read_png(self.output.read_bytes())
+        self.assertEqual(candidate.color_type, 6)
+        self.assertEqual(candidate.pixels, read_png(original).pixels)
+        self.assertFalse(data["validation"]["has_transparency"])
+        self.assertEqual((data["artwork_width_px"], data["artwork_height_px"]), (2, 2))
+        self.assertEqual((data["offset_x_px"], data["offset_y_px"]), (0, 0))
+        self.assertEqual(self.source.read_bytes(), original)
+
+    async def test_rgba_portrait_fit_preserves_sampled_alpha_and_source(self):
+        original = png(4, 8, alpha=list(range(32)))
+        self.source.write_bytes(original)
+        alpha = [0, 5, 7, 0, 0, 0, 13, 15, 0, 0,
+                 0, 21, 23, 0, 0, 0, 29, 31, 0, 0]
+        self.bridge.request.return_value = (result(png(5, 4, alpha=alpha), 5, 4), 1)
+        data, _ = await self.run_image(width=5, height=4, mode="fit", resample="nearest")
+        self.assertEqual((data["artwork_width_px"], data["artwork_height_px"]), (2, 4))
+        self.assertEqual((data["offset_x_px"], data["offset_y_px"]), (1, 0))
+        self.assertEqual(data["source_color_type"], "RGBA")
+        self.assertTrue(data["validation"]["source_alpha_preserved"])
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assertEqual(self.bridge.request.call_args.args[1]["mode"], "fit")
+        self.assertEqual(self.bridge.request.call_args.args[1]["resample"], "nearest")
+        self.assertEqual(data["resample"], "nearest")
+        self.assertEqual(data["validation"]["alpha_validation"], "nearest_exact")
+
+    async def test_default_and_explicit_bicubic_preserve_native_alpha_through_publication(self):
+        artwork = [6, 8, 10, 12, 22, 24, 26, 28]
+        output = png(4, 4, alpha=[0] * 4 + artwork + [0] * 4)
+        self.bridge.request.return_value = ({**result(output), "resampled_alpha_crc32": zlib.crc32(bytes(artwork))}, 1)
+        for color_type in (2, 6):
+            original = png(8, 4, alpha=list(range(32)), color_type=color_type)
+            self.source.write_bytes(original)
+            for index, extra in enumerate(({}, {"resample": "bicubic"})):
+                data, _ = await self.run_image(mode="fit", output=f"source_art/_staging/bicubic-{color_type}-{index}.png", **extra)
+                self.assertEqual(self.bridge.request.call_args.args[1]["resample"], "bicubic")
+                self.assertEqual(data["resample"], "bicubic")
+                self.assertEqual(data["validation"]["alpha_validation"], "photoshop_bicubic_crc32")
+                self.assertTrue(data["validation"]["source_alpha_preserved"])
+                self.assertEqual((self.repo / data["staging_relative_path"]).read_bytes(), output)
+                self.assertEqual(self.source.read_bytes(), original)
+
+    async def test_bicubic_missing_checksum_or_matted_export_cannot_publish(self):
+        for color_type in (2, 6):
+            self.source.write_bytes(png(8, 4, color_type=color_type))
+            for output, proof in ((png(4, 4), {}),
+                                  (png(4, 4, alpha=[0] * 4 + [255] * 8 + [0] * 4),
+                                   {"resampled_alpha_crc32": zlib.crc32(bytes([0, 128, 255, 255] * 2))})):
+                self.bridge.request.return_value = ({**result(output), **proof}, 1)
+                with self.assertRaises(BridgeError) as caught:
+                    await self.run_image(mode="fit")
+                self.assertEqual(caught.exception.code, "OUTPUT_VALIDATION_FAILED")
+                self.assertFalse(self.output.exists())
+
+    async def test_invalid_resample_never_contacts_host_or_publishes(self):
+        for resample in (None, True, 1, "", "BICUBIC", "bilinear", [], {}):
+            await self.assert_error("INVALID_RESAMPLE", mode="fit", resample=resample)
+        self.bridge.request.assert_not_called()
+
+    async def test_preserve_size_resample_choices_keep_legacy_wire(self):
+        for index, resample in enumerate(("bicubic", "nearest")):
+            data, _ = await self.run_image(resample=resample, output=f"source_art/_staging/legacy-{index}.png")
+            self.assertEqual(set(self.bridge.request.call_args.args[1]),
+                             {"image_base64", "width_px", "height_px", "remove_background"})
+            self.assertEqual(data["validation"]["alpha_validation"], "source_exact")
+
+    async def test_fit_smaller_rgba_keeps_existing_padding_without_upscale(self):
+        self.bridge.request.return_value = (result(padded(3, 5), 3, 5), 1)
+        data, _ = await self.run_image(width=3, height=5, mode="fit")
+        self.assertEqual((data["artwork_width_px"], data["artwork_height_px"]), (2, 2))
+        self.assertEqual((data["offset_x_px"], data["offset_y_px"]), (0, 1))
+        self.assertEqual(self.output.read_bytes(), padded(3, 5))
+
+    async def test_fit_exact_rgba_does_not_resample_alpha(self):
+        self.bridge.request.return_value = (result(png(), 2, 2), 1)
+        data, _ = await self.run_image(width=2, height=2, mode="fit")
+        self.assertEqual(self.output.read_bytes(), png())
+        self.assertEqual((data["artwork_width_px"], data["artwork_height_px"]), (2, 2))
+
+    async def test_fit_cannot_publish_opaque_padding_or_lost_alpha(self):
+        for color_type in (2, 6):
+            original = png(8, 4, color_type=color_type)
+            self.source.write_bytes(original)
+            self.bridge.request.return_value = (result(png(4, 4, color_type=2)), 1)
+            with self.assertRaises(BridgeError) as caught:
+                await self.run_image(mode="fit")
+            self.assertEqual(caught.exception.code, "OUTPUT_VALIDATION_FAILED")
+            self.assertFalse(self.output.exists())
+            self.assertEqual(self.source.read_bytes(), original)
+
+    async def test_invalid_modes_never_contact_host_or_publish(self):
+        for mode in (None, True, 1, "", "FIT", "crop", [], {}):
+            await self.assert_error("INVALID_MODE", mode=mode)
+        self.bridge.request.assert_not_called()
+
+    async def test_fit_keeps_path_and_no_overwrite_preflight(self):
+        await self.assert_error("INVALID_PATH", mode="fit", output="assets/fit.png")
+        await self.assert_error("INVALID_PATH", mode="fit", source="source_art/_inbox/../source.png")
+        self.output.write_bytes(b"existing owner")
+        with self.assertRaises(BridgeError) as caught:
+            await self.run_image(mode="fit")
+        self.assertEqual(caught.exception.code, "DESTINATION_EXISTS")
+        self.assertEqual(self.output.read_bytes(), b"existing owner")
+        self.bridge.request.assert_not_called()
+
+    async def test_fit_keeps_background_removal_unavailable(self):
+        await self.assert_error("BACKGROUND_REMOVAL_UNAVAILABLE", mode="fit", remove_background=True)
+        self.bridge.request.assert_not_called()
+
+    async def test_mcp_mode_schema_and_invalid_mode_validation(self):
+        token = secrets.token_urlsafe(48)
+        async with Client(create_server(Config(), token)) as client:
+            listing = await client.list_tools()
+            tool = next(tool for tool in listing.tools if tool.name == PROCESS_OPERATION)
+            self.assertEqual(tool.input_schema["properties"]["mode"]["enum"], ["preserve_size", "fit"])
+            self.assertEqual(tool.input_schema["properties"]["mode"]["default"], "preserve_size")
+            self.assertNotIn("mode", tool.input_schema["required"])
+            self.assertEqual(tool.input_schema["properties"]["resample"]["enum"], ["bicubic", "nearest"])
+            self.assertEqual(tool.input_schema["properties"]["resample"]["default"], "bicubic")
+            self.assertNotIn("resample", tool.input_schema["required"])
+            async with FakePhotoshopClient(token) as peer:
+                for mode in ("crop", None, True, 1, []):
+                    reply = await client.call_tool(PROCESS_OPERATION, {
+                        "source_relative_path": self.source_name, "staging_relative_path": self.output_name,
+                        "width_px": 4, "height_px": 4, "mode": mode})
+                    self.assertTrue(reply.is_error)
+                for resample in (None, True, 1, "", "BICUBIC", "bilinear", [], {}):
+                    reply = await client.call_tool(PROCESS_OPERATION, {
+                        "source_relative_path": self.source_name, "staging_relative_path": self.output_name,
+                        "width_px": 4, "height_px": 4, "mode": "fit", "resample": resample})
+                    self.assertTrue(reply.is_error)
+                self.assertEqual(peer.requests, [])
+                self.assertFalse(self.output.exists())
+
+    async def test_real_mcp_rgb_landscape_fit_and_additive_result(self):
+        original = png(8, 4, color_type=2)
+        self.source.write_bytes(original)
+        output = png(4, 4, alpha=[0] * 4 + [255] * 8 + [0] * 4)
+        token = secrets.token_urlsafe(48)
+        def respond(response):
+            response["result"] = {**result(output), "resampled_alpha_crc32": zlib.crc32(bytes([255] * 8))}
+        async with Client(create_server(Config(), token)) as client:
+            async with FakePhotoshopClient(token, mutate=respond) as peer:
+                reply = await client.call_tool(PROCESS_OPERATION, {
+                    "source_relative_path": self.source_name, "staging_relative_path": self.output_name,
+                    "width_px": 4, "height_px": 4, "mode": "fit"})
+                self.assertFalse(reply.is_error, reply.structured_content)
+                data = reply.structured_content["result"]
+                self.assertEqual((data["artwork_width_px"], data["artwork_height_px"]), (4, 2))
+                self.assertEqual((data["offset_x_px"], data["offset_y_px"]), (0, 1))
+                self.assertEqual(data["mode"], "fit")
+                self.assertEqual(data["source_color_type"], "RGB")
+                self.assertTrue(data["validation"]["human_approval_required"])
+                self.assertEqual(peer.requests[0]["parameters"]["mode"], "fit")
+                self.assertEqual(self.output.read_bytes(), output)
+                self.assertEqual(self.source.read_bytes(), original)
+
+    async def test_mcp_resample_default_and_explicit_choices_round_trip(self):
+        self.source.write_bytes(png(8, 4, color_type=2))
+        output = png(4, 4, alpha=[0] * 4 + [255] * 8 + [0] * 4)
+        token = secrets.token_urlsafe(48)
+        def respond(response):
+            response["result"] = {**result(output), "resampled_alpha_crc32": zlib.crc32(bytes([255] * 8))}
+        async with Client(create_server(Config(), token)) as client:
+            async with FakePhotoshopClient(token, mutate=respond) as peer:
+                for index, extra in enumerate(({}, {"resample": "bicubic"}, {"resample": "nearest"})):
+                    reply = await client.call_tool(PROCESS_OPERATION, {
+                        "source_relative_path": self.source_name,
+                        "staging_relative_path": f"source_art/_staging/mcp-{index}.png",
+                        "width_px": 4, "height_px": 4, "mode": "fit", **extra})
+                    self.assertFalse(reply.is_error, reply.structured_content)
+                    expected = extra.get("resample", "bicubic")
+                    self.assertEqual(reply.structured_content["result"]["resample"], expected)
+                    self.assertEqual(peer.requests[-1]["parameters"]["resample"], expected)
 
     async def test_traversal_and_windows_path_tricks_rejected(self):
         for path in ("source_art/_inbox/../outside.png", "source_art/_inbox/./source.png",
