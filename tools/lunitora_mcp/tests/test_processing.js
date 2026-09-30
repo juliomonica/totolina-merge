@@ -45,6 +45,8 @@ function sizedPng(data, size) {
 
 function load(options = {}) {
   const events = [], files = [], modalOptions = [], saves = [], resizes = [], imageResizes = [];
+  const batchCalls = [];
+  let pixelRead = 0, modal = false;
   const sourceInput = options.input || input;
   const sourceWidth = sourceInput.readUInt32BE(16), sourceHeight = sourceInput.readUInt32BE(20);
   let hasBackground = !!options.background || sourceInput[25] === 2;
@@ -52,7 +54,11 @@ function load(options = {}) {
   let active = options.noDocument ? null : previous;
   let open = false;
   const autoClose = new Set();
-  function maybe(stage) { if (options.fail === stage) throw new Error("private path/token detail"); }
+  function maybe(stage) {
+    if (options.fail === stage || (Array.isArray(options.fail) && options.fail.includes(stage))) {
+      throw new Error("private path/token detail");
+    }
+  }
   const context = {
     isCancelled: options.cancel === "before",
     hostControl: {
@@ -61,6 +67,7 @@ function load(options = {}) {
     }
   };
   const doc = {
+    layers: [{ id: 9 }], activeLayers: [{ id: 9 }],
     get id() { assert.equal(open, true, "No DOM getters after closing the document"); return 8; },
     width: options.wrongSource ? sourceWidth + 1 : sourceWidth, height: sourceHeight,
     get backgroundLayer() {
@@ -88,6 +95,7 @@ function load(options = {}) {
     saveAs: { async png(file, config, asCopy) {
       events.push("export"); saves.push({ file, config, asCopy }); maybe("export");
       file.data = options.output || output;
+      if (options.cancel === "export") context.isCancelled = true;
     }},
     async closeWithoutSaving() {
       events.push("close"); maybe("close"); open = false; active = previous;
@@ -116,29 +124,43 @@ function load(options = {}) {
       const bounds = options.pixelBounds || { left: 0, top: 0, right: doc.width, bottom: doc.height };
       const width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
       const components = options.pixelComponents || 4;
+      const suppliedAlpha = options.alphas && options.alphas[pixelRead++];
       if (options.cancel === "get-pixels") context.isCancelled = true;
       return { level: options.pixelLevel || 0, sourceBounds: bounds,
         imageData: { width, height, components, colorSpace: "RGB", componentSize: 8, hasAlpha: components === 4,
           async getData(config) {
             events.push("pixel-data"); maybe("pixel-data");
             assert.equal(config.chunky, true);
-            return Uint8Array.from(options.pixelData || Buffer.alloc(width * height * components));
+            return Uint8Array.from(suppliedAlpha ? suppliedAlpha.flatMap(a => [40, 80, 120, a]) :
+              options.pixelData || Buffer.alloc(width * height * components));
           },
           dispose() { events.push("dispose-pixels"); maybe("dispose-pixels"); }
         }
       };
     }
-  }, constants: { PNGMethod: { QUICK: "quick" },
+  }, action: { async batchPlay(commands, settings) {
+    assert.equal(modal, true, "Native mutation must run inside executeAsModal");
+    assert.equal(active, doc); assert.equal(hasBackground, false);
+    events.push("batch-play"); batchCalls.push(JSON.parse(JSON.stringify({ commands, settings })));
+    if (options.batchError) throw options.batchError;
+    maybe("batch-play");
+    if (options.cancel === "batch-play") context.isCancelled = true;
+    return options.batchResults || [{}, {}];
+  } }, constants: { PNGMethod: { QUICK: "quick" },
     ResampleMethod: { BICUBIC: "bicubic", NEARESTNEIGHBOR: "nearest-neighbor" }, AnchorPosition: { TOPLEFT: "top-left" } }, core: {
     async executeAsModal(callback, settings) {
       modalOptions.push(settings); maybe("modal");
       if (options.gate) await options.gate;
-      try { return await callback(context); }
+      try { modal = true; return await callback(context); }
       finally {
+        modal = false;
         if (autoClose.size) { open = false; active = previous; autoClose.clear(); events.push("auto-close"); }
       }
     }
   }};
+  if (options.capability === false) delete photoshop.action;
+  if (options.imagingCapability === false) delete photoshop.imaging;
+  if (options.wrongActiveLayer) doc.activeLayers = [{ id: 10 }];
   const uxp = {
     host: { name: "photoshop", version: options.version || "27.10.0" },
     versions: { uxp: "mock", plugin: "0.1.0" },
@@ -179,7 +201,7 @@ function load(options = {}) {
   }
   processing = run(processingSource);
   const plugin = run(pluginSource);
-  return { processing, plugin, events, files, previous, app, resizes, imageResizes, saves, modalOptions,
+  return { processing, plugin, events, files, previous, app, resizes, imageResizes, saves, modalOptions, batchCalls,
     isOpen: () => open };
 }
 function cleaned(host) {
@@ -433,7 +455,7 @@ function cleaned(host) {
     assert.equal(h.files.length, 0);
   });
   await check("background removal returns explicit unsupported error without export", async () => {
-    const h = load(), reply = await h.plugin.dispatchRequest(wire({ ...params(), remove_background: true }));
+    const h = load({ capability: false }), reply = await h.plugin.dispatchRequest(wire({ ...params(), remove_background: true }));
     assert.equal(reply.error.code, "BACKGROUND_REMOVAL_UNAVAILABLE");
     assert.equal(reply.ok, false); assert.equal(reply.result, null); assert.equal(h.files.length, 0);
   });
@@ -574,6 +596,161 @@ function cleaned(host) {
         assert.ok(Buffer.byteLength(raw) < 1024);
       }
     }
+  });
+  const removalParams = source => ({ ...params(), image_base64: source.toString("base64"), remove_background: true });
+  const fixedCommands = [
+    { _obj: "autoCutout", sampleAllLayers: false },
+    { _obj: "make", new: { _class: "channel" }, at: { _ref: "channel", _enum: "channel", _value: "mask" },
+      using: { _enum: "userMaskEnabled", _value: "revealSelection" } }
+  ];
+  for (const color of [2, 6]) {
+    await check((color === 2 ? "RGB" : "RGBA") + " removal captures native alpha before normalization and preserves fixed descriptors", async () => {
+      const source = png(2, 2, color), before = color === 2 ? [255, 255, 255, 255] : [0, 128, 255, 255];
+      const after = color === 2 ? [0, 255, 255, 255] : [0, 0, 255, 255];
+      const h = load({ input: source, alphas: [before, after] });
+      const reply = await h.plugin.dispatchRequest(wire(removalParams(source)));
+      assert.equal(reply.ok, true);
+      assert.equal(reply.result.background_removal_requested, true);
+      assert.equal(reply.result.background_removal_completed, true);
+      assert.deepEqual(h.batchCalls, [{ commands: fixedCommands, settings: {} }]);
+      assert.equal(reply.result.removal_evidence.removed_pixels, 1);
+      assert.equal(reply.result.removal_evidence.visible_pixels, color === 2 ? 4 : 3);
+      assert.equal(reply.result.removal_evidence.foreground_pixels, color === 2 ? 3 : 2);
+      assert.equal(reply.result.removal_evidence.before_alpha_crc32, crc32(before));
+      assert.equal(reply.result.removal_evidence.after_alpha_crc32, crc32(after));
+      assert.equal(reply.result.resampled_alpha_crc32, crc32(after));
+      assert.equal(h.events.filter(e => e === "get-pixels").length, 2);
+      assert.ok(h.events.indexOf("get-pixels") < h.events.indexOf("batch-play"));
+      assert.ok(h.events.lastIndexOf("get-pixels") < h.events.indexOf("resize"));
+      assert.equal(h.app.activeDocument, h.previous); cleaned(h);
+    });
+  }
+  for (const removed of [1, 2, 3]) {
+    await check("RGB native removal threshold " + removed + "/2000", async () => {
+      const source = png(40, 50, 2), before = Array(2000).fill(255), after = [...before];
+      after.fill(0, 0, removed);
+      const h = load({ input: source, output: png(40, 50), alphas: [before, after] });
+      const reply = await h.plugin.dispatchRequest(wire({ ...removalParams(source), width_px: 40, height_px: 50 }));
+      assert.equal(reply.ok, removed >= 2);
+      if (removed < 2) {
+        assert.equal(reply.error.code, "OUTPUT_VALIDATION_FAILED");
+        assert.equal(reply.error.reason, "BACKGROUND_REMOVAL_NO_OP");
+        assert.equal(h.resizes.length, 0); assert.equal(h.saves.length, 0);
+      }
+      cleaned(h);
+    });
+  }
+  for (const [label, before, after, reason] of [
+    ["opaque no-op", [255,255,255,255], [255,255,255,255], "BACKGROUND_REMOVAL_NO_OP"],
+    ["RGBA existing alpha", [0,128,255,255], [0,128,255,255], "BACKGROUND_REMOVAL_NO_OP"],
+    ["empty subject", [255,255,255,255], [0,0,0,0], "BACKGROUND_REMOVAL_EMPTY_SUBJECT"],
+    ["increased alpha", [0,255,255,255], [255,0,255,255], "BACKGROUND_REMOVAL_ALPHA_INCREASED"],
+    ["insignificant alpha drop", [23,255,255,255], [8,255,255,255], "BACKGROUND_REMOVAL_NO_OP"],
+    ["insufficiently cleared pixel", [255,255,255,255], [9,255,255,255], "BACKGROUND_REMOVAL_NO_OP"]
+  ]) {
+    await check(label + " rejects before resizing, padding or export", async () => {
+      const h = load({ alphas: [before, after] });
+      const reply = await h.plugin.dispatchRequest(wire(removalParams(input)));
+      assert.equal(reply.error.code, "OUTPUT_VALIDATION_FAILED"); assert.equal(reply.error.reason, reason);
+      assert.equal(reply.result, null); assert.equal(h.saves.length, 0); assert.equal(h.resizes.length, 0);
+      assert.equal(h.imageResizes.length, 0); cleaned(h);
+    });
+  }
+  for (const resample of ["bicubic", "nearest"]) {
+    await check("removal then fit uses " + resample + " and captures artwork alpha before padding", async () => {
+      const source = png(4, 8, 2), before = Array(32).fill(255);
+      const after = Array(16).fill(0).concat(Array(16).fill(255));
+      const scaled = [0,0,0,0,255,255,255,255];
+      const h = load({ input: source, alphas: [before, after, scaled] });
+      const reply = await h.plugin.dispatchRequest(wire({ ...removalParams(source), mode: "fit", resample }));
+      assert.equal(reply.ok, true);
+      assert.equal(reply.result.resampled_alpha_crc32, crc32(scaled));
+      assert.deepEqual(h.imageResizes, [[2,4,undefined,resample === "bicubic" ? "bicubic" : "nearest-neighbor"]]);
+      assert.ok(h.events.indexOf("batch-play") < h.events.indexOf("resize-image"));
+      assert.ok(h.events.lastIndexOf("get-pixels") > h.events.indexOf("resize-image"));
+      assert.equal(h.events.filter(e => e === "dispose-pixels").length, 3); cleaned(h);
+    });
+  }
+  for (const [label, extra, code] of [
+    ["missing imaging API", { imagingCapability: false }, "BACKGROUND_REMOVAL_UNAVAILABLE"],
+    ["wrong active layer", { wrongActiveLayer: true }, "PHOTOSHOP_PROCESSING_FAILED"],
+    ["native error result", { batchResults: [{ _obj: "error", result: -1, message: "private" }] }, "PHOTOSHOP_PROCESSING_FAILED"],
+    ["native rejected promise", { batchError: new Error("private") }, "PHOTOSHOP_PROCESSING_FAILED"],
+    ["cancelled result", { batchResults: [{ _obj: "error", result: -128 }] }, "PHOTOSHOP_CANCELLED"],
+    ["cancelled rejection", { batchError: { number: -128, message: "private" } }, "PHOTOSHOP_CANCELLED"],
+    ["cancelled context", { cancel: "batch-play" }, "PHOTOSHOP_CANCELLED"],
+    ["cancelled export", { cancel: "export" }, "PHOTOSHOP_CANCELLED"],
+    ["incomplete native results", { batchResults: [{}] }, "PHOTOSHOP_PROCESSING_FAILED"]
+  ]) {
+    await check(label + " yields the correct structured failure and cleans resources", async () => {
+      const h = load({ alphas: [[255,255,255,255], [0,255,255,255]], ...extra });
+      const reply = await h.plugin.dispatchRequest(wire(removalParams(input)));
+      assert.equal(reply.error.code, code); assert.equal(reply.result, null);
+      assert.equal(JSON.stringify(reply).includes("private"), false);
+      if (label !== "cancelled export") assert.equal(h.saves.length, 0);
+      cleaned(h);
+    });
+  }
+  for (const [label, extra, code] of [
+    ["no-op", { alphas: [[255,255,255,255], [255,255,255,255]] }, "OUTPUT_VALIDATION_FAILED"],
+    ["cancel", { alphas: [[255,255,255,255]], batchResults: [{ _obj: "error", result: -128 }] }, "PHOTOSHOP_CANCELLED"],
+    ["operation", { alphas: [[255,255,255,255]], batchError: new Error("private") }, "PHOTOSHOP_PROCESSING_FAILED"]
+  ]) {
+    await check(label + " retains original failure when document and private-file cleanup both fail", async () => {
+      const h = load({ ...extra, fail: ["close", "delete"] });
+      const reply = await h.plugin.dispatchRequest(wire(removalParams(input)));
+      assert.equal(reply.error.code, code); assert.equal(reply.result, null);
+      assert.ok(h.events.includes("auto-close"));
+      assert.equal(h.events.filter(e => e === "delete").length, 2);
+      assert.equal(h.app.activeDocument, h.previous);
+      assert.equal(h.isOpen(), false);
+    });
+  }
+  await check("removal rejects every caller-controlled descriptor surface before filesystem access", async () => {
+    for (const field of ["ActionJSON", "commands", "selection", "_target", "_options", "sampleAllLayers"]) {
+      const h = load();
+      const reply = await h.plugin.dispatchRequest(wire({ ...removalParams(input), [field]: "arbitrary" }));
+      assert.equal(reply.error.code, "INVALID_MESSAGE");
+      assert.equal(h.files.length, 0); assert.equal(h.batchCalls.length, 0);
+    }
+  });
+  await check("remove_background false never invokes native removal even when its APIs are absent", async () => {
+    const h = load({ capability: false, imagingCapability: false });
+    const reply = await h.plugin.dispatchRequest(wire(params()));
+    assert.equal(reply.ok, true); assert.equal(reply.result.background_removal_completed, false);
+    assert.equal("removal_evidence" in reply.result, false); assert.equal(h.batchCalls.length, 0);
+    cleaned(h);
+  });
+  await check("RGB baseline must be fully opaque before invoking removal", async () => {
+    const source = png(2, 2, 2), h = load({ input: source, alphas: [[0,255,255,255]] });
+    const reply = await h.plugin.dispatchRequest(wire(removalParams(source)));
+    assert.equal(reply.error.code, "OUTPUT_VALIDATION_FAILED");
+    assert.equal(reply.error.reason, "BACKGROUND_REMOVAL_EVIDENCE_MISMATCH");
+    assert.equal(h.batchCalls.length, 0); assert.equal(h.saves.length, 0); cleaned(h);
+  });
+  await check("invalid removal exports never return a candidate", async () => {
+    for (const exported of [png(4, 4, 2), png(5, 4), Buffer.from("invalid")]) {
+      const h = load({ alphas: [[255,255,255,255], [0,255,255,255]], output: exported });
+      const reply = await h.plugin.dispatchRequest(wire(removalParams(input)));
+      assert.equal(reply.error.code, "OUTPUT_VALIDATION_FAILED");
+      assert.equal(reply.error.reason, "BACKGROUND_REMOVAL_OUTPUT_INVALID");
+      assert.equal(reply.result, null); cleaned(h);
+    }
+  });
+  await check("cancelled pixel capture is preserved through disposal and close failures", async () => {
+    const h = load({ alphas: [[255,255,255,255]], cancel: "get-pixels", fail: ["dispose-pixels", "close"] });
+    const reply = await h.plugin.dispatchRequest(wire(removalParams(input)));
+    assert.equal(reply.error.code, "PHOTOSHOP_CANCELLED");
+    assert.ok(h.events.includes("dispose-pixels")); assert.ok(h.events.includes("auto-close"));
+    assert.equal(h.saves.length, 0); cleaned(h);
+  });
+  await check("removal busy state resets after a no-op and cleanup failure", async () => {
+    const options = { alphas: [[255,255,255,255], [255,255,255,255]], fail: "delete" };
+    const h = load(options);
+    assert.equal((await h.plugin.dispatchRequest(wire(removalParams(input)))).error.code, "OUTPUT_VALIDATION_FAILED");
+    options.fail = null;
+    const second = await h.plugin.dispatchRequest(wire(params()));
+    assert.equal(second.ok, true); assert.equal(h.isOpen(), false);
   });
   console.log(count + " Phase 2 UXP checks passed.");
 })().catch(error => { console.error(error); process.exitCode = 1; });

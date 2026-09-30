@@ -56,7 +56,10 @@ def register_tools(server: MCPServer, bridge: PhotoshopBridge) -> None:
         a canvas at least the source size; fit shrinks proportionally without
         upscaling or cropping, then centers with transparent padding. Fit uses
         native bicubic sampling by default; request nearest explicitly for pixel art.
-        Resample is unused unless fit actually shrinks. Background removal is unavailable.
+        Resample is unused unless fit actually shrinks. remove_background=true opts
+        into native Photoshop subject masking before normalization; unchanged alpha
+        is rejected. Photoshop follows its own Device/Cloud Image Processing preference.
+        Lunitora adds no external network integration. Human visual approval is required.
         """
         try:
             data, elapsed = await processor.process(

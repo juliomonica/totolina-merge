@@ -169,7 +169,7 @@ def rgba_png(data: bytes) -> bytes:
 
 def verify_canvas(source: PNG, output: PNG, width: int, height: int,
                   mode: str = "preserve_size", resample: str = "bicubic",
-                  resampled_alpha_crc32: int | None = None) -> str:
+                  resampled_alpha_crc32: int | None = None, *, removal: bool = False) -> str:
     """Check padding and exact source/nearest alpha, or native bicubic alpha integrity.
 
     Bicubic RGB/RGBA alpha is checked against Photoshop's pre-padding pixel checksum,
@@ -185,7 +185,7 @@ def verify_canvas(source: PNG, output: PNG, width: int, height: int,
     if dx < 0 or dy < 0:
         raise PNGError("Canvas would crop the source.")
     resized = (artwork_width, artwork_height) != (source.width, source.height)
-    native_alpha = resized and resample == "bicubic"
+    native_alpha = removal or resized and resample == "bicubic"
     if native_alpha and (type(resampled_alpha_crc32) is not int
                          or not 0 <= resampled_alpha_crc32 <= 0xffffffff):
         raise PNGError("Missing native resampled alpha checksum.")
@@ -210,4 +210,64 @@ def verify_canvas(source: PNG, output: PNG, width: int, height: int,
             raise PNGError("Opaque vertical padding.")
     if native_alpha and checksum != resampled_alpha_crc32:
         raise PNGError("Native resampled transparency changed during padding/export.")
-    return "photoshop_bicubic_crc32" if native_alpha else "nearest_exact" if resized and resample == "nearest" else "source_exact"
+    return "background_removal_native_crc32" if removal else "photoshop_bicubic_crc32" if native_alpha else "nearest_exact" if resized and resample == "nearest" else "source_exact"
+
+
+REMOVAL_FIELDS = frozenset({"before_alpha_crc32", "after_alpha_crc32", "visible_pixels",
+                            "removed_pixels", "foreground_pixels"})
+REMOVAL_REASONS = frozenset({"BACKGROUND_REMOVAL_NO_OP", "BACKGROUND_REMOVAL_EMPTY_SUBJECT",
+                           "BACKGROUND_REMOVAL_ALPHA_INCREASED", "BACKGROUND_REMOVAL_EVIDENCE_MISMATCH",
+                           "BACKGROUND_REMOVAL_OUTPUT_OPAQUE", "BACKGROUND_REMOVAL_OUTPUT_INVALID"})
+
+
+def removal_evidence(before: bytes, after: bytes) -> dict:
+    """Measure only newly cleared alpha at original resolution, never padding."""
+    if len(before) != len(after):
+        raise PNGError("BACKGROUND_REMOVAL_EVIDENCE_MISMATCH")
+    if any(b > a for a, b in zip(before, after)):
+        raise PNGError("BACKGROUND_REMOVAL_ALPHA_INCREASED")
+    visible = sum(a >= 16 for a in before)
+    removed = sum(a - b >= 16 and b <= 8 for a, b in zip(before, after))
+    foreground = sum(b >= 16 for b in after)
+    minimum = max(1, (visible + 999) // 1000)
+    if foreground < minimum:
+        raise PNGError("BACKGROUND_REMOVAL_EMPTY_SUBJECT")
+    if removed < minimum:
+        raise PNGError("BACKGROUND_REMOVAL_NO_OP")
+    return {"before_alpha_crc32": zlib.crc32(before), "after_alpha_crc32": zlib.crc32(after),
+            "visible_pixels": visible, "removed_pixels": removed, "foreground_pixels": foreground}
+
+
+def verify_removal_canvas(source: PNG, output: PNG, width: int, height: int, mode: str,
+                          resample: str, evidence: object, native_checksum: int | None) -> str:
+    before = source.pixels[3::4]  # RGB decode supplies 255 for every pixel.
+    visible = sum(a >= 16 for a in before)
+    if (not isinstance(evidence, dict) or set(evidence) != REMOVAL_FIELDS
+            or any(type(v) is not int or not 0 <= v <= 0xffffffff for v in evidence.values())
+            or evidence["before_alpha_crc32"] != zlib.crc32(before)
+            or evidence["visible_pixels"] != visible
+            or evidence["removed_pixels"] + evidence["foreground_pixels"] > visible):
+        raise PNGError("BACKGROUND_REMOVAL_EVIDENCE_MISMATCH")
+    minimum = max(1, (visible + 999) // 1000)
+    if evidence["foreground_pixels"] < minimum:
+        raise PNGError("BACKGROUND_REMOVAL_EMPTY_SUBJECT")
+    if evidence["removed_pixels"] < minimum:
+        raise PNGError("BACKGROUND_REMOVAL_NO_OP")
+    validation = verify_canvas(source, output, width, height, mode, resample, native_checksum, removal=True)
+    aw, ah = fitted_size(source.width, source.height, width, height, mode)
+    dx, dy = (width - aw) // 2, (height - ah) // 2
+    artwork = b"".join(output.pixels[((y + dy) * width + dx) * 4 + 3:
+                                    ((y + dy) * width + dx + aw) * 4:4] for y in range(ah))
+    if (aw, ah) == (source.width, source.height):
+        # With no resampling, independently recompute every removal measurement.
+        if removal_evidence(before, artwork) != evidence:
+            raise PNGError("BACKGROUND_REMOVAL_EVIDENCE_MISMATCH")
+    # Scaling can eliminate the subject or the cleared background. Check the
+    # artwork again, excluding padding, against the scaled visible-area floor.
+    denominator = len(before) * 1000
+    minimum = max(1, (visible * aw * ah + denominator - 1) // denominator)
+    if sum(a >= 16 for a in artwork) < minimum:
+        raise PNGError("BACKGROUND_REMOVAL_EMPTY_SUBJECT")
+    if sum(a <= 8 for a in artwork) < minimum:
+        raise PNGError("BACKGROUND_REMOVAL_OUTPUT_OPAQUE")
+    return validation

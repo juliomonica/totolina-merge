@@ -564,9 +564,10 @@ class ProcessingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.output.read_bytes(), b"existing owner")
         self.bridge.request.assert_not_called()
 
-    async def test_fit_keeps_background_removal_unavailable(self):
+    async def test_fit_propagates_background_removal_unavailable(self):
+        self.bridge.request.side_effect = BridgeError("BACKGROUND_REMOVAL_UNAVAILABLE", connected=True)
         await self.assert_error("BACKGROUND_REMOVAL_UNAVAILABLE", mode="fit", remove_background=True)
-        self.bridge.request.assert_not_called()
+        self.bridge.request.assert_awaited_once()
 
     async def test_mcp_mode_schema_and_invalid_mode_validation(self):
         token = secrets.token_urlsafe(48)
@@ -745,8 +746,9 @@ class ProcessingTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.processor._busy)
 
     async def test_background_removal_fails_explicitly_without_side_effects(self):
+        self.bridge.request.side_effect = BridgeError("BACKGROUND_REMOVAL_UNAVAILABLE", connected=True)
         await self.assert_error("BACKGROUND_REMOVAL_UNAVAILABLE", remove_background=True)
-        self.bridge.request.assert_not_called()
+        self.bridge.request.assert_awaited_once()
 
     async def test_invalid_export_never_published(self):
         self.bridge.request.return_value = (result(png(4, 4, alpha=[255] * 16)), 1)

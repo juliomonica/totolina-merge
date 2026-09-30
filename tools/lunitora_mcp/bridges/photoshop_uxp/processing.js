@@ -13,6 +13,93 @@ let sequence = 0;
 
 function fail(code) { const error = new Error(code); error.code = code; throw error; }
 
+function invalidRemoval(reason) {
+  const error = new Error("OUTPUT_VALIDATION_FAILED");
+  error.code = "OUTPUT_VALIDATION_FAILED";
+  error.reason = reason;
+  throw error;
+}
+
+function cancelled(context) { if (context.isCancelled) fail("PHOTOSHOP_CANCELLED"); }
+
+function operationError(error, context) {
+  // Never replace an already classified failure with a later cleanup/cancel error.
+  if (error && typeof error.code === "string") return error;
+  if (context.isCancelled || (error && (error.number === -128 || error.code === -128))) {
+    const cancellation = new Error("PHOTOSHOP_CANCELLED");
+    cancellation.code = "PHOTOSHOP_CANCELLED";
+    return cancellation;
+  }
+  return error;
+}
+
+async function cleanup(primary, actions) {
+  for (const action of actions) {
+    try { await action(); } catch (error) { if (!primary) primary = error; }
+  }
+  return primary;
+}
+
+function checksum(alpha) {
+  let crc = 0xffffffff;
+  for (const value of alpha) {
+    crc ^= value;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function removalEvidence(before, after) {
+  if (before.length !== after.length) invalidRemoval("BACKGROUND_REMOVAL_EVIDENCE_MISMATCH");
+  let visible = 0, removed = 0, foreground = 0;
+  for (let i = 0; i < before.length; i++) {
+    if (after[i] > before[i]) invalidRemoval("BACKGROUND_REMOVAL_ALPHA_INCREASED");
+    visible += before[i] >= 16;
+    removed += before[i] - after[i] >= 16 && after[i] <= 8;
+    foreground += after[i] >= 16;
+  }
+  const minimum = Math.max(1, Math.ceil(visible / 1000));
+  if (foreground < minimum) invalidRemoval("BACKGROUND_REMOVAL_EMPTY_SUBJECT");
+  if (removed < minimum) invalidRemoval("BACKGROUND_REMOVAL_NO_OP");
+  return { before_alpha_crc32: checksum(before), after_alpha_crc32: checksum(after),
+    visible_pixels: visible, removed_pixels: removed, foreground_pixels: foreground };
+}
+
+async function removeBackground(doc, context, width, height, opaqueSource) {
+  const documentId = doc.id;
+  if (photoshop.app.activeDocument.id !== documentId || doc.layers.length !== 1 ||
+      doc.activeLayers.length !== 1 || doc.activeLayers[0].id !== doc.layers[0].id) {
+    fail("PHOTOSHOP_PROCESSING_FAILED");
+  }
+  const before = await alphaPixels(documentId, width, height);
+  if (opaqueSource && before.some(alpha => alpha !== 255)) {
+    invalidRemoval("BACKGROUND_REMOVAL_EVIDENCE_MISMATCH");
+  }
+  cancelled(context);
+  // Photoshop 27.10 Actions > Copy As JavaScript, also Adobe Discover
+  // removeBackgroundTalent.applyFnc (524.js). No caller-controlled descriptors.
+  const results = await photoshop.action.batchPlay([
+    { _obj: "autoCutout", sampleAllLayers: false },
+    { _obj: "make", new: { _class: "channel" },
+      at: { _ref: "channel", _enum: "channel", _value: "mask" },
+      using: { _enum: "userMaskEnabled", _value: "revealSelection" } }
+  ], {});
+  if (!Array.isArray(results)) fail("PHOTOSHOP_PROCESSING_FAILED");
+  for (const result of results) {
+    if (result && result.result === -128) fail("PHOTOSHOP_CANCELLED");
+    if (!result || String(result._obj).toLowerCase() === "error" ||
+        (typeof result.result === "number" && result.result !== 0)) fail("PHOTOSHOP_PROCESSING_FAILED");
+  }
+  if (results.length !== 2) fail("PHOTOSHOP_PROCESSING_FAILED");
+  cancelled(context);
+  if (photoshop.app.activeDocument.id !== documentId || doc.width !== width || doc.height !== height) {
+    fail("PHOTOSHOP_PROCESSING_FAILED");
+  }
+  const after = await alphaPixels(documentId, width, height);
+  cancelled(context);
+  return removalEvidence(before, after);
+}
+
 function encode(bytes) {
   // A small scratch buffer avoids millions of string nodes at the 24 MiB limit.
   // These are local encoding fragments; the transport still sends one JSON message.
@@ -70,12 +157,13 @@ function dimensions(bytes) {
   return { width, height, colorType: bytes[25] };
 }
 
-async function alphaChecksum(documentId, width, height) {
+async function alphaPixels(documentId, width, height) {
   // Read the native result before padding/export, without another resize or matte.
   const pixels = await photoshop.imaging.getPixels({ documentID: documentId,
     sourceBounds: { left: 0, top: 0, right: width, bottom: height },
     colorSpace: "RGB", componentSize: 8, applyAlpha: false });
   const data = pixels.imageData;
+  let primary = null;
   try {
     const bounds = pixels.sourceBounds;
     if (pixels.level !== 0 || !bounds ||
@@ -99,14 +187,13 @@ async function alphaChecksum(documentId, width, height) {
           ? raw[(y * data.width + x) * 4 + 3] : 255;
       }
     }
-    let crc = 0xffffffff;
-    for (const value of alpha) {
-      crc ^= value;
-      for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
-    }
-    return (crc ^ 0xffffffff) >>> 0;
+    return alpha;
+  } catch (error) {
+    primary = error;
+    throw error;
   } finally {
-    if (data) data.dispose();
+    const failure = await cleanup(primary, [() => { if (data) data.dispose(); }]);
+    if (!primary && failure) throw failure;
   }
 }
 
@@ -121,7 +208,9 @@ async function processImage(parameters) {
   if (!["bicubic", "nearest"].includes(resample)) fail("INVALID_RESAMPLE");
   const { width_px: width, height_px: height } = parameters;
   if (![width, height].every(n => Number.isInteger(n) && n >= 1 && n <= MAX_DIMENSION)) fail("INVALID_DIMENSIONS");
-  if (parameters.remove_background) fail("BACKGROUND_REMOVAL_UNAVAILABLE");
+  const removal = parameters.remove_background;
+  if (removal && (typeof photoshop.action?.batchPlay !== "function" ||
+      typeof photoshop.imaging?.getPixels !== "function")) fail("BACKGROUND_REMOVAL_UNAVAILABLE");
   const input = decode(parameters.image_base64);
   const source = dimensions(input);
   let artworkWidth = source.width, artworkHeight = source.height;
@@ -138,7 +227,7 @@ async function processImage(parameters) {
   }
   if (busy) fail("BUSY");
   busy = true;
-  let inputFile = null, outputFile = null, resampledAlpha;
+  let inputFile = null, outputFile = null, resampledAlpha, evidence, primary = null;
   try {
     // Only plugin-private temporary entries; the peer cannot supply a filename or URL.
     const folder = await uxp.storage.localFileSystem.getTemporaryFolder();
@@ -147,10 +236,10 @@ async function processImage(parameters) {
     outputFile = await folder.createFile(name + "-output.png", { overwrite: false });
     await inputFile.write(input.buffer, { format: uxp.storage.formats.binary });
     await photoshop.core.executeAsModal(async context => {
-      let doc = null, documentId = null;
+      let doc = null, documentId = null, failure = null;
       const previous = photoshop.app.documents.length ? photoshop.app.activeDocument : null;
       try {
-        if (context.isCancelled) fail("PHOTOSHOP_PROCESSING_FAILED");
+        cancelled(context);
         doc = await photoshop.app.open(inputFile);
         // Host cleanup also runs if cancellation prevents a normal DOM close.
         documentId = doc.id;
@@ -164,56 +253,73 @@ async function processImage(parameters) {
           await background.delete();
           if (doc.backgroundLayer) fail("PHOTOSHOP_PROCESSING_FAILED");
         }
-        if (context.isCancelled) fail("PHOTOSHOP_PROCESSING_FAILED");
+        cancelled(context);
+        if (removal) evidence = await removeBackground(doc, context, source.width, source.height, source.colorType === 2);
         if (artworkWidth !== source.width || artworkHeight !== source.height) {
           await doc.resizeImage(artworkWidth, artworkHeight, undefined,
             resample === "bicubic" ? photoshop.constants.ResampleMethod.BICUBIC
               : photoshop.constants.ResampleMethod.NEARESTNEIGHBOR);
           if (doc.width !== artworkWidth || doc.height !== artworkHeight) fail("PHOTOSHOP_PROCESSING_FAILED");
-          if (context.isCancelled) fail("PHOTOSHOP_PROCESSING_FAILED");
-          if (resample === "bicubic") {
-            resampledAlpha = await alphaChecksum(documentId, artworkWidth, artworkHeight);
+          cancelled(context);
+          if (resample === "bicubic" || removal) {
+            resampledAlpha = checksum(await alphaPixels(documentId, artworkWidth, artworkHeight));
           }
         }
-        if (context.isCancelled) fail("PHOTOSHOP_PROCESSING_FAILED");
+        if (removal && resampledAlpha === undefined) resampledAlpha = evidence.after_alpha_crc32;
+        cancelled(context);
         // First add symmetric padding, then put any odd extra pixel at right/bottom.
         const evenWidth = width - ((width - artworkWidth) % 2);
         const evenHeight = height - ((height - artworkHeight) % 2);
         await doc.resizeCanvas(evenWidth, evenHeight);
         if (evenWidth !== width || evenHeight !== height) {
-          if (context.isCancelled) fail("PHOTOSHOP_PROCESSING_FAILED");
+          cancelled(context);
           await doc.resizeCanvas(width, height, photoshop.constants.AnchorPosition.TOPLEFT);
         }
-        if (context.isCancelled) fail("PHOTOSHOP_PROCESSING_FAILED");
+        cancelled(context);
         await doc.saveAs.png(outputFile, {
           method: photoshop.constants.PNGMethod.QUICK, compression: 6, interlaced: false
         }, true);
+        cancelled(context);
+      } catch (error) {
+        failure = operationError(error, context);
       } finally {
-        try {
+        failure = await cleanup(failure, [async () => {
           if (doc) {
             await doc.closeWithoutSaving();
             await context.hostControl.unregisterAutoCloseDocument(documentId);
           }
-        } finally {
+        }, () => {
           if (previous) photoshop.app.activeDocument = previous;
-        }
+        }]);
+        if (failure) throw failure;
       }
     }, { commandName: "Create Lunitora staging candidate", timeOut: 1 });
     const output = new Uint8Array(await outputFile.read({ format: uxp.storage.formats.binary }));
     if (output.length > MAX_BYTES) fail("IMAGE_TOO_LARGE");
-    const size = dimensions(output);
-    if (size.width !== width || size.height !== height) fail("PHOTOSHOP_PROCESSING_FAILED");
-    return { png_base64: encode(output), width_px: width, height_px: height,
-      background_removal_requested: false, background_removal_completed: false,
-      ...(resampledAlpha === undefined ? {} : { resampled_alpha_crc32: resampledAlpha }) };
-  } finally {
-    try {
-      // Cleanup failures prevent success; the caller never receives a candidate.
-      if (inputFile) await inputFile.delete();
-    } finally {
-      try { if (outputFile) await outputFile.delete(); }
-      finally { busy = false; }
+    let size;
+    try { size = dimensions(output); }
+    catch (error) {
+      if (removal) invalidRemoval("BACKGROUND_REMOVAL_OUTPUT_INVALID");
+      throw error;
     }
+    if (size.width !== width || size.height !== height || (removal && size.colorType !== 6)) {
+      if (removal) invalidRemoval("BACKGROUND_REMOVAL_OUTPUT_INVALID");
+      fail("PHOTOSHOP_PROCESSING_FAILED");
+    }
+    return { png_base64: encode(output), width_px: width, height_px: height,
+      background_removal_requested: removal, background_removal_completed: removal,
+      ...(removal ? { removal_evidence: evidence } : {}),
+      ...(resampledAlpha === undefined ? {} : { resampled_alpha_crc32: resampledAlpha }) };
+  } catch (error) {
+    primary = operationError(error, { isCancelled: false });
+    throw primary;
+  } finally {
+    const failure = await cleanup(primary, [
+      async () => { if (inputFile) await inputFile.delete(); },
+      async () => { if (outputFile) await outputFile.delete(); }
+    ]);
+    busy = false;
+    if (!primary && failure) throw failure;
   }
 }
 

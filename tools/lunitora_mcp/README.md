@@ -1,4 +1,4 @@
-# Lunitora Photoshop MCP — Phase 2B staging normalization
+# Lunitora Photoshop MCP — v0.5 staging background removal
 
 Repository-controlled Photoshop bridge with two compatible read-only tools,
 photoshop_ping and photoshop_get_active_document, plus photoshop_process_image
@@ -238,7 +238,7 @@ Document.resizeImage(width, height, undefined, ResampleMethod.BICUBIC or
 ResampleMethod.NEARESTNEIGHBOR). No custom raster resampler is implemented.
 Nearest can alias edges and lose fine detail; use it intentionally for pixel art.
 
-Python verifies exact source alpha for unscaled artwork, exact sampled source alpha
+With remove_background=false, Python verifies exact source alpha for unscaled artwork, exact sampled source alpha
 for nearest (including full opacity for RGB), and zero alpha for every padding pixel.
 Bicubic can produce partial edge alpha even from opaque RGB artwork. Both RGB and
 RGBA downscales use the native alpha checksum. After the native resize and before
@@ -271,10 +271,10 @@ PNG validation and enforces the 24 MiB publication limit. Exact-size
 opaque artwork can therefore have has_transparency=false while still being RGBA;
 the tool does not erase source pixels just to create transparency.
 
-Background removal is **not enabled**: a reliable offline implementation has
-not been established for this slice. remove_background defaults to false;
-true returns BACKGROUND_REMOVAL_UNAVAILABLE without publishing a candidate.
-There is no cloud/API fallback or silent success when removal was requested.
+Background removal is an explicit **remove_background=true** opt-in; the default
+false retains the existing normalization path. See the v0.5 contract below.
+Opaque RGB exports are converted to RGBA only on the false path. Intentional
+removal requires a real RGBA8 export with validated subject transparency.
 
 Paths must be repository-relative, use forward slashes, and start with exactly
 source_art/_inbox/ for input or source_art/_staging/ for output. Subdirectories
@@ -320,7 +320,7 @@ Failures use the existing structured error envelope (ok=false, result=null,
 isError=true). Processing errors include INVALID_PATH, PATH_UNSAFE,
 UNSUPPORTED_PLATFORM, SOURCE_NOT_FOUND, DESTINATION_EXISTS, INVALID_DIMENSIONS, INVALID_MODE, INVALID_RESAMPLE,
 CANVAS_TOO_SMALL, IMAGE_TOO_LARGE, INVALID_IMAGE, BACKGROUND_REMOVAL_UNAVAILABLE,
-PHOTOSHOP_PROCESSING_FAILED, OUTPUT_VALIDATION_FAILED and STAGING_WRITE_FAILED.
+PHOTOSHOP_PROCESSING_FAILED, PHOTOSHOP_CANCELLED, OUTPUT_VALIDATION_FAILED and STAGING_WRITE_FAILED.
 DISCONNECTED, PORT_IN_USE, TIMEOUT and BUSY retain their transport meanings.
 Invalid MCP mode/resample arguments are rejected by the SDK's enum schemas before
 the tool body; direct processor/wire validation uses INVALID_MODE/INVALID_RESAMPLE.
@@ -329,6 +329,142 @@ Phase 1 tool schemas and the existing processing fields remain compatible.
 Only one processing call runs at a time. A timeout/disconnect cannot publish a
 late reply; Photoshop may still finish cleaning up its private temporary copy.
 
+### v0.5 native background-removal contract
+
+The existing tool's inputs are unchanged. No ActionJSON, command names, selections,
+targets or execution options are accepted from MCP callers. With removal enabled,
+the plugin checks that its private imported document has one intended active pixel
+layer, then runs these fixed internal commands inside the existing executeAsModal scope:
+
+~~~javascript
+await photoshop.action.batchPlay([
+  { _obj: "autoCutout", sampleAllLayers: false },
+  { _obj: "make", new: { _class: "channel" },
+    at: { _ref: "channel", _enum: "channel", _value: "mask" },
+    using: { _enum: "userMaskEnabled", _value: "revealSelection" } }
+], {});
+~~~
+
+Descriptor provenance: captured through **Actions > Copy As JavaScript** on
+Photoshop **27.10 (20260824.r.26 9d9635d)** by recording Select Subject followed by
+Layer > Layer Mask > Reveal Selection. It matches Adobe's shipped
+removeBackgroundTalent.applyFnc mutation sequence in
+`C:/Program Files/Adobe/Adobe Photoshop 2026/Required/UXP/com.adobe.unifiedpanel/js/524.js`
+(SHA-256 `DC4B2E47EC038C2D21EB8BF634B1F2DD4970AD83709DC969833DA7BC717BF3A7`).
+Neither recorded mutation has `_target`, `_options`, layer IDs or document IDs;
+they operate on the active private document/layer. The helper's later layerID get
+is bookkeeping. Its separate preview descriptors are not used here. A direct
+Properties-panel Remove Background recording instead yielded the single wrapper
+`{_obj:"removeBackground"}`; that wrapper's internals are not inferred or used.
+See Adobe's [batchPlay and descriptor-discovery documentation](https://developer.adobe.com/photoshop/uxp/ps_reference/media/batchplay/).
+DOM APIs continue to handle opening, normalization, export and cleanup.
+
+**Device/Cloud disclosure:** Lunitora adds no external network integration,
+Firefly Services, HTTP API, credentials or cloud storage. Photoshop's native
+Select Subject/Remove Background follows its own **Preferences > Image Processing**
+Device/Cloud setting; Adobe documents Device as the default. Cloud can use
+Adobe-hosted processing. Lunitora neither overrides that preference nor promises
+offline processing. See [Adobe's processing guidance](https://helpx.adobe.com/photoshop/desktop/make-selections/automatic-color-based-selections/improved-select-subject-and-remove-background-results.html).
+
+Validation uses full-canvas composited 8-bit alpha captured immediately before
+and after removal, **before any resize or padding**. getPixels uses applyAlpha=false;
+trimmed empty bounds are reconstructed as zeros and pixel buffers are disposed.
+RGB begins fully opaque. Originally visible means alpha >=16. The acceptance
+floor is max(1, ceil(originally_visible_pixels / 1000)), or 0.1% rounded up.
+A newly removed pixel must decrease by at least 16 and end at alpha <=8.
+At least the same floor of foreground pixels must remain at alpha >=16.
+Alpha increases are rejected. Existing transparent pixels on RGBA sources count
+as zero removal evidence. An already-cut-out source with unchanged or insignificant
+additional removal is a no-op, even if Photoshop successfully created a mask.
+These are conservative internal validation thresholds, not Adobe quality guarantees.
+
+Only passing removal proceeds to preserve_size/fit. The bridge carries bounded
+scalar evidence (original/post-removal alpha CRC-32, visible/removed/foreground counts)
+plus the artwork alpha checksum after any resize and before padding. Python checks
+the original checksum/count against decoded source bytes and validates the count
+bounds and thresholds. Without resizing it independently recomputes all removal
+evidence from the exported artwork. With resizing, the authenticated plugin is
+trusted for the original-resolution segmentation measurements; Python does not
+recreate Photoshop's segmentation or interpolation. In every removal mode, Python
+checks final artwork alpha against the native pre-padding checksum, RGBA8 PNG
+structure/dimensions, every padding pixel, and unchanged source bytes before
+exclusive staging publication. CRC-32 is an integrity check, not authentication.
+Final artwork must retain both cleared pixels (alpha <=8) and visible foreground
+(alpha >=16), using the original visible-area floor scaled to the fitted area,
+rounded up to at least one. Padding alone cannot satisfy this check.
+
+Successful intentional removal reports background_removal_requested=true,
+background_removal_completed=true, source_alpha_preserved=false and
+validation.alpha_validation="background_removal_native_crc32". The false path's
+flags, alpha modes and wire fields remain unchanged. No-op, opaque or invalid
+results never report successful completion and never publish a candidate.
+
+| Failure | Structured code / diagnostic |
+| --- | --- |
+| Required native action/imaging API unavailable | BACKGROUND_REMOVAL_UNAVAILABLE |
+| Native action rejection or returned action error | PHOTOSHOP_PROCESSING_FAILED |
+| Confirmed modal cancellation or Photoshop error -128 | PHOTOSHOP_CANCELLED |
+| Insignificant newly cleared alpha | OUTPUT_VALIDATION_FAILED / BACKGROUND_REMOVAL_NO_OP |
+| Empty or near-empty subject | OUTPUT_VALIDATION_FAILED / BACKGROUND_REMOVAL_EMPTY_SUBJECT |
+| Increased alpha or inconsistent removal evidence | OUTPUT_VALIDATION_FAILED / BACKGROUND_REMOVAL_ALPHA_INCREASED or BACKGROUND_REMOVAL_EVIDENCE_MISMATCH |
+| Opaque fitted artwork / invalid host export | OUTPUT_VALIDATION_FAILED / BACKGROUND_REMOVAL_OUTPUT_OPAQUE or BACKGROUND_REMOVAL_OUTPUT_INVALID |
+| Export checksum, padding, dimensions or source mismatch | OUTPUT_VALIDATION_FAILED / existing specific validation reason |
+
+Unclassified native failures remain processing failures; localized error text is
+not used to guess unsupported capability. Transport errors retain their meanings.
+The processing deadline remains **30 seconds**. Temporary documents close without
+saving, host auto-close remains registered if normal close fails, previous active
+documents are restored where feasible, and both private files are attempted for
+deletion. Cleanup failures cannot replace an earlier classified error. Cleanup-only
+failure prevents success; a host/filesystem failure may still require manual cleanup.
+
+**Production limitation — thin detached details can be lost:** native Photoshop
+Remove Background may remove whiskers, individual hairs, fur wisps, wires or
+similarly delicate edges along with the background. Live visual review on
+Photoshop 27.10 confirmed loss of very thin detached whiskers/fur strokes in the
+difficult fine-edge fixture. Passing alpha, checksum and dimension checks does
+not establish that those details survived.
+
+**Human visual approval remains mandatory:** automated alpha checks cannot verify
+that Photoshop retained the correct subject, fine edges, shadows or color. Inspect
+the actual staging PNG, especially delicate details, before approving it for
+production; a successful tool response is not production approval.
+No production promotion, arbitrary selection, crop/trim, replacement, generative
+fill or new batch tool is included.
+The v0.4 sequential batch workflow remains orchestration of individual calls.
+
+### v0.5 live Photoshop validation — 2026-09-29
+
+VERIFIED through the live Codex MCP integration on **Photoshop 27.10**, with visual
+review confirmed by the user. All six calls requested remove_background=true.
+Sources were in source_art/_inbox/ and candidates in source_art/_staging/; every
+destination was absent before its call and no existing file was overwritten.
+The first five cases used a 1024 x 1024 canvas with mode="preserve_size". The last
+case used mode="fit", a 384 x 384 canvas and default bicubic resampling.
+
+| Source PNG | Staging candidate | Verified live result |
+| --- | --- | --- |
+| bgremove_easy_plain_cat_1024.png | bgremove_easy_plain_cat_removed.png | Removal succeeded; visual result was good. |
+| bgremove_medium_pattern_cat_1024.png | bgremove_medium_pattern_cat_removed.png | Removal succeeded; visual result was good. |
+| bgremove_difficult_fine_edges_cat_1024.png | bgremove_difficult_fine_edges_cat_removed.png | Removal succeeded; visual review confirmed that very thin detached details such as whiskers/fur strokes can be lost. |
+| bgremove_existing_alpha_cat_1024.png | bgremove_existing_alpha_cat_removed.png | Existing-alpha RGBA removal succeeded; pre-existing transparency alone was not treated as success. |
+| bgremove_control_no_subject_1024.png | None (requested bgremove_control_no_subject_removed.png) | Native processing failed safely with PHOTOSHOP_PROCESSING_FAILED; no staging candidate was published. |
+| bgremove_easy_plain_cat_1024.png (384 x 384 fit) | bgremove_easy_plain_cat_removed_fit_384.png | Removal and bicubic normalization succeeded together. |
+
+All five successful responses reported RGBA8 output, verified dimensions,
+transparent pixels, unchanged source bytes, background_removal_completed=true,
+alpha_validation="background_removal_native_crc32" and human_approval_required=true.
+The no-subject control's safe native processing failure is the observed live
+result; it is not evidence of a live BACKGROUND_REMOVAL_EMPTY_SUBJECT diagnostic.
+
+These cases verify the v0.5 plugin integration and the stated outcomes, not
+universal segmentation quality. The Device/Cloud preference used was not recorded,
+so this record does not claim separate verification of both processing modes.
+The Device/Cloud disclosure above still applies: Lunitora adds no external network
+service; Photoshop follows its own Image Processing preference.
+
+### Historical Phase 2A live validation
+
 **Live Phase 2A processing through Codex is verified on 2026-09-29.** A real
 256 x 256 RGBA PNG from source_art/_inbox/phase2a_test.png produced the new
 512 x 512 source_art/_staging/phase2a_test_512.png candidate. The tool reported
@@ -336,13 +472,14 @@ successful transparency, padding and source preservation, without background
 removal. An identical second request returned DESTINATION_EXISTS without overwrite.
 The final validation record below distinguishes this live result from mock tests.
 
-Still verify same-size and odd canvas dimensions, restoration of an existing
-unsaved document, cancellation and temporary-file cleanup on the actual host.
-Alpha edges and profile/color-management behavior require visual review; alpha
-validation does not promise identical RGB values. Near-limit runtime/memory also
-needs a live test. This Phase 2A live record does not verify Phase 2B RGB conversion
-or fit resampling. Background removal, cropping, upscaling, a dedicated batch MCP
-tool and production promotion are not implemented.
+That Phase 2A run did not verify same-size or odd canvas dimensions, restoration
+of an existing unsaved document, cancellation, temporary-file cleanup or near-limit
+runtime/memory on the actual host. Alpha edges and profile/color-management
+behavior require visual review; alpha validation does not promise identical RGB
+values. This historical Phase 2A record predates Phase 2B RGB conversion,
+fit resampling and v0.5 background removal; current v0.5 live results are recorded
+above. Cropping, upscaling, a dedicated batch MCP tool and production promotion
+remain outside the implemented scope.
 
 ## Supported sequential batch workflow
 
@@ -535,6 +672,12 @@ instead of silently using nearest. Reload UXP and restart/reconnect the MCP serv
 after updating both sides. The wire reply contains png_base64, width_px, height_px,
 background_removal_requested and background_removal_completed, plus optional
 resampled_alpha_crc32 (an unsigned 32-bit integer) for bicubic RGB/RGBA downscales.
+Removal replies additionally require removal_evidence and resampled_alpha_crc32
+even when not resized or when using nearest. removal_evidence contains only the
+five bounded integers before_alpha_crc32, after_alpha_crc32, visible_pixels,
+removed_pixels and foreground_pixels. These fields are internal and are not
+returned as image payloads to MCP callers. Error replies may carry one allowlisted
+removal reason; arbitrary peer diagnostics and error text are never forwarded.
 Temporary native_diagnostics probes have been removed. Reload the UXP plugin and
 restart the Python server together; RGB bicubic now supplies the same required
 pre-canvas checksum as RGBA. Legacy replies remain valid for unscaled/nearest output.
@@ -556,7 +699,7 @@ compatible. Limits are inclusive and checked in both Python and UXP:
 The 1 KiB allowance covers either envelope, including four-digit dimensions and
 the maximum 64-character ID even when every character needs six JSON escape
 bytes. The boundary tests include both mode/resample and the maximum native alpha
-checksum in the response, and require metadata to remain within the same 1 KiB.
+checksum and removal evidence in the response, and require metadata to remain within the same 1 KiB.
 Limits count
 UTF-8 bytes, not JavaScript character count. WebSocket framing
 headers are separate from its message payload limit. A single unfragmented frame
@@ -650,6 +793,66 @@ DOCUMENT_TOO_LARGE and UNSUPPORTED_HOST. The server still initializes and lists
 all three tools when unpaired, disconnected or unable to bind the fixed port.
 
 ## Automated validation without Photoshop
+
+### v0.5 validation status after live processing — 2026-09-29
+
+VERIFIED: the complete Phase 1 + Phase 2A + Phase 2B + v0.5 automated suite
+passes after releasing the fixed localhost test port. The repository bridge was
+identified before being stopped, and a bind preflight confirmed port 43127 was
+free. Python unittest discovery ran **160 tests in 26.102 seconds: 0 failures,
+0 errors, 0 skips**.
+
+| Suite | Passed | Failures | Errors | Skips |
+| --- | ---: | ---: | ---: | ---: |
+| Python Phase 1 | 47 | 0 | 0 | 0 |
+| Python Phase 2A/2B | 76 | 0 | 0 | 0 |
+| Python validation diagnostics | 12 | 0 | 0 | 0 |
+| Python v0.5 background removal | 25 | 0 | 0 | 0 |
+| JavaScript Phase 1 plugin/panel | 53 | 0 | 0 | 0 |
+| JavaScript Phase 2 processing, including v0.5 | 104 | 0 | 0 | 0 |
+| Total tests/checks | **317** | **0** | **0** | **0** |
+
+All previously blocked integration tests executed, including authenticated
+MCP/WebSocket success and error classification, timeout/late-reply isolation,
+real stdio, reconnect, protocol/file size boundaries and Windows path protections.
+Segmentation remains deterministic and mocked. The suites also cover RGB/RGBA,
+removal thresholds, pre-existing alpha, empty subjects, padding-only transparency,
+evidence mismatches, destination races, fixed descriptors, cancellation and cleanup.
+Four additional validation commands pass: Python compilation (19 source files),
+pip check (no broken requirements), and syntax checks for both UXP JavaScript
+modules. No functionality change or new dependency was needed for this rerun.
+This clean run supersedes the earlier port-conflict attempt; no validation is
+deferred because of port 43127.
+
+All **14 repository/port audit checks pass**. The full current diff, including the
+untracked background-removal test file, was reviewed with no unintended changes
+found. Only this README changed during the post-live validation pass; the existing
+v0.5 implementation and tests were preserved. No credential literals or current
+local pairing-token values were found in commit candidates. All 22 ignore probes
+pass for .local, .venv, caches, logs, _inbox, _staging and live artifacts. The ten
+live source/candidate files are unchanged, no ignored files are already tracked,
+the index is unchanged and empty of staged changes, and git diff --check passes.
+Port 43127 is free after validation. Nothing was staged, committed or pushed.
+Audit scripts and logs remain under ignored .local/v05-live-validation-20260929-final/.
+
+VERIFIED live: the six Photoshop 27.10 cases recorded above, including RGB and
+existing-alpha RGBA removal, preserve_size, bicubic fit, safe no-subject failure
+without publication, and the fine-detail loss confirmed by human visual review.
+
+NOT EXECUTED in this automated rerun: additional live Photoshop requests, a
+separate Device-versus-Cloud comparison, real cancellation, active unsaved-document
+restoration/temporary-file cleanup inspection, or near-limit runtime/memory
+measurement. The selected six live cases were completed before this rerun.
+Godot/game tests are outside this toolkit validation.
+
+REQUIRES USER TEST before relying on those additional cases: an already-cut-out
+unchanged-alpha/no-op input; removal with nearest fit, partially transparent RGBA
+fit and odd padding; real cancellation and active-document restoration/cleanup;
+and near-limit performance within the unchanged 30-second deadline. Record and
+exercise the intended Device/Cloud preference without an automatic preference
+change. Every production candidate still requires human visual approval,
+especially for thin detached details; the completed six-case live validation
+does not remove that requirement.
 
 Run from the toolkit directory with no other bridge occupying port 43127:
 

@@ -238,13 +238,21 @@ async function dispatchRequest(request) {
       INVALID_DIMENSIONS: "Canvas dimensions must be integers from 1 through 2048.",
       CANVAS_TOO_SMALL: "Canvas would crop the source.",
       IMAGE_TOO_LARGE: "PNG exceeds the 24 MiB processing limit.",
-      BACKGROUND_REMOVAL_UNAVAILABLE: "Reliable offline background removal is not enabled.",
+      BACKGROUND_REMOVAL_UNAVAILABLE: "Native Photoshop background-removal capability is unavailable.",
+      OUTPUT_VALIDATION_FAILED: "The removal result failed alpha validation.",
+      PHOTOSHOP_CANCELLED: "Photoshop processing was cancelled.",
       BUSY: "A temporary image is already being processed.",
       PHOTOSHOP_PROCESSING_FAILED: "Photoshop could not process the temporary image."
     };
     const code = error && Object.prototype.hasOwnProperty.call(errors, error.code)
       ? error.code : "PHOTOSHOP_PROCESSING_FAILED";
     response.error = { code, message: errors[code] };
+    if (code === "OUTPUT_VALIDATION_FAILED" && ["BACKGROUND_REMOVAL_NO_OP",
+      "BACKGROUND_REMOVAL_EMPTY_SUBJECT", "BACKGROUND_REMOVAL_ALPHA_INCREASED",
+      "BACKGROUND_REMOVAL_EVIDENCE_MISMATCH", "BACKGROUND_REMOVAL_OUTPUT_OPAQUE",
+      "BACKGROUND_REMOVAL_OUTPUT_INVALID"].includes(error.reason)) {
+      response.error.reason = error.reason;
+    }
   }
   return response;
 }

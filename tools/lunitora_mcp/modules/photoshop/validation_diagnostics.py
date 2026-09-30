@@ -1,11 +1,12 @@
 """Failure-only, bounded scalar diagnostics; never include image data or peer text."""
 import zlib
 
-from .png_validation import PNG, fitted_size
+from .png_validation import PNG, fitted_size, REMOVAL_REASONS
 
 
 # Only locally authored validator messages can become public reason codes.
 CONDITIONS = {
+    **{reason: reason for reason in REMOVAL_REASONS},
     "Wrong output dimensions or missing RGBA channels.": "OUTPUT_DIMENSIONS_OR_RGBA",
     "Canvas would crop the source.": "CANVAS_CROPS_SOURCE",
     "Missing native resampled alpha checksum.": "NATIVE_ALPHA_CHECKSUM_MISSING",
@@ -24,7 +25,7 @@ def rectangle(left, top, right, bottom):
 
 
 def canvas_diagnostics(source: PNG, output: PNG | None, width: int, height: int,
-                       mode: str, resample: str, native_checksum: int | None) -> dict:
+                       mode: str, resample: str, native_checksum: int | None, *, removal: bool = False) -> dict:
     """Measure every check without changing verify_canvas's acceptance or first failure.
 
     Observed bounds describe nonzero/opaque alpha, not inferred artwork placement:
@@ -34,7 +35,7 @@ def canvas_diagnostics(source: PNG, output: PNG | None, width: int, height: int,
     aw, ah = fitted_size(source.width, source.height, width, height, mode)
     dx, dy = (width - aw) // 2, (height - ah) // 2
     resized = (aw, ah) != (source.width, source.height)
-    native_alpha = resized and resample == "bicubic"
+    native_alpha = removal or resized and resample == "bicubic"
     report = {
         "source": {"width_px": source.width, "height_px": source.height,
                    "color_type": "RGB" if source.color_type == 2 else "RGBA"},
@@ -47,7 +48,7 @@ def canvas_diagnostics(source: PNG, output: PNG | None, width: int, height: int,
         "dimensions_validation_failed": None,
         "padding_validation_failed": None, "alpha_validation_failed": None,
         "source_unchanged_validation_failed": None,
-        "alpha_validation": "photoshop_bicubic_crc32" if native_alpha else
+        "alpha_validation": "background_removal_native_crc32" if removal else "photoshop_bicubic_crc32" if native_alpha else
             "nearest_exact" if resized and resample == "nearest" else "source_exact",
         "artwork_alpha_min": None, "artwork_alpha_max": None,
         "artwork_partial_alpha_pixel_count": None,
