@@ -1,5 +1,5 @@
 """Two compatible read-only tools and one explicit staging-candidate operation."""
-from typing import Annotated
+from typing import Annotated, Literal
 import json
 
 from mcp.server import MCPServer
@@ -45,17 +45,22 @@ def register_tools(server: MCPServer, bridge: PhotoshopBridge) -> None:
     async def photoshop_process_image(
         source_relative_path: str, staging_relative_path: str,
         width_px: StrictInt, height_px: StrictInt, remove_background: StrictBool = False,
+        mode: Literal["preserve_size", "fit"] = "preserve_size",
+        resample: Literal["bicubic", "nearest"] = "bicubic",
     ) -> Annotated[CallToolResult, ProcessingResult]:
         """Create one transparent PNG candidate for human review, never a production asset.
 
         Select repository-relative source_art/_inbox/*.png and a new
-        source_art/_staging/*.png destination. Phase 2A accepts non-interlaced RGBA8
-        PNGs up to 24 MiB and canvases 1..2048 px. Preserve scale/padding: canvas
-        must be at least the source size. Background removal is currently unavailable.
+        source_art/_staging/*.png destination. Accepts non-interlaced RGB/RGBA8 PNGs
+        up to 24 MiB and source/canvas dimensions 1..2048 px. preserve_size requires
+        a canvas at least the source size; fit shrinks proportionally without
+        upscaling or cropping, then centers with transparent padding. Fit uses
+        native bicubic sampling by default; request nearest explicitly for pixel art.
+        Resample is unused unless fit actually shrinks. Background removal is unavailable.
         """
         try:
             data, elapsed = await processor.process(
-                source_relative_path, staging_relative_path, width_px, height_px, remove_background)
+                source_relative_path, staging_relative_path, width_px, height_px, remove_background, mode, resample)
             payload = envelope(data, elapsed_ms=elapsed)
         except BridgeError as error:
             payload = envelope(error=error)

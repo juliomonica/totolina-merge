@@ -232,7 +232,9 @@ async function dispatchRequest(request) {
   } catch (error) {
     const errors = {
       INVALID_MESSAGE: "Invalid processing request.",
-      INVALID_IMAGE: "Only bounded non-interlaced RGBA8 PNG is supported.",
+      INVALID_IMAGE: "Only bounded non-interlaced RGB/RGBA8 PNG is supported.",
+      INVALID_MODE: "Processing mode must be preserve_size or fit.",
+      INVALID_RESAMPLE: "Resample must be bicubic or nearest.",
       INVALID_DIMENSIONS: "Canvas dimensions must be integers from 1 through 2048.",
       CANVAS_TOO_SMALL: "Canvas would crop the source.",
       IMAGE_TOO_LARGE: "PNG exceeds the 24 MiB processing limit.",

@@ -1,4 +1,4 @@
-# Lunitora Photoshop MCP — Phase 2A staging slice
+# Lunitora Photoshop MCP — Phase 2B staging normalization
 
 Repository-controlled Photoshop bridge with two compatible read-only tools,
 photoshop_ping and photoshop_get_active_document, plus photoshop_process_image
@@ -168,21 +168,21 @@ Each machine uses its own paths.
     then repeat step 8. Keep the localhost permission and fixed endpoint; use
     the sanitized diagnostics described below for further investigation.
 
-## Phase 2A — one inbox image to one staging candidate
+## Phase 2B — normalize one inbox image into one staging candidate
 
 This is an opt-in Windows-only processing slice. The two Phase 1 tools keep their
-existing arguments, read-only annotations and response envelopes. A new tool and
-bridge operation, **photoshop_process_image**, opens a private temporary copy in
+existing arguments, read-only annotations and response envelopes. The existing
+**photoshop_process_image** tool opens a private temporary copy in
 Photoshop and exports a candidate. It never opens the source file in Photoshop,
 deletes or saves over that source, or writes into runtime assets/.
 Human review and approval remain mandatory; this tool cannot promote candidates.
 Follow [ART_GUIDE.md](../../source_art/ART_GUIDE.md) for staging review.
 
-1. Put one user-selected **non-interlaced, 8-bit RGBA PNG with transparency**
+1. Put one user-selected **non-interlaced, 8-bit RGB or RGBA PNG**
    in source_art/_inbox/. Input and exported PNG must each be at most **24 MiB
-   (25,165,824 bytes, inclusive)**. Canvases remain limited to 1..2048 px per axis;
-   the requested canvas must be at least as large as the source in both axes.
-   JPEG, indexed/RGB PNG, 16-bit PNG, APNG and PSD are outside this slice.
+   (25,165,824 bytes, inclusive)**. Source and canvas dimensions remain limited
+   to 1..2048 px per axis. JPEG, indexed/grayscale PNG, 16-bit PNG, interlaced PNG,
+   APNG, PNG tRNS color keys and PSD remain outside this slice.
 2. Reload the plugin in UXP Developer Tool. In this user's local Codex config,
    opt into the new tool by replacing only the existing enabled_tools line:
 
@@ -194,8 +194,9 @@ Follow [ART_GUIDE.md](../../source_art/ART_GUIDE.md) for staging review.
    Codex Desktop, open a new chat, call photoshop_ping, then pair/reconnect the
    Photoshop panel. The setup examples above deliberately enable inspection only.
 3. Ask Codex to process the selected source into a **new** staging filename,
-   providing integer canvas dimensions. Example arguments (replace the filenames
-   and choose a canvas at least as large as the source):
+   providing integer canvas dimensions. Use mode="fit" to shrink larger artwork
+   proportionally, or omit mode for the existing preserve_size behavior.
+   Fit defaults to resample="bicubic"; request "nearest" explicitly for pixel art:
 
    ~~~json
    {
@@ -203,7 +204,9 @@ Follow [ART_GUIDE.md](../../source_art/ART_GUIDE.md) for staging review.
      "staging_relative_path": "source_art/_staging/selected-candidate.png",
      "width_px": 384,
      "height_px": 384,
-     "remove_background": false
+     "remove_background": false,
+     "mode": "fit",
+     "resample": "bicubic"
    }
    ~~~
 
@@ -212,13 +215,61 @@ Follow [ART_GUIDE.md](../../source_art/ART_GUIDE.md) for staging review.
    **not an approved production asset**. This phase performs no runtime replacement.
    Existing files fail with DESTINATION_EXISTS; choose another name explicitly.
 
-Width and height must each be **1–2048 pixels** and no smaller than the source.
-Only centered canvas expansion (or the same canvas size) is supported: no
-resampling, stretching, cropping, flattening or automatic transparent trim.
-Artwork scale and existing padding remain intact. Python checks source alpha
-at the centered offset (any odd extra pixel goes to the right/bottom) and requires
-all added padding to be transparent. Smaller canvases return CANVAS_TOO_SMALL.
-An opaque imported Photoshop background layer is rejected.
+The optional mode parameter is an enum with default **preserve_size**:
+
+| Mode | Behavior |
+| --- | --- |
+| preserve_size | Retain original pixel dimensions; smaller canvases fail with CANVAS_TOO_SMALL. |
+| fit | Shrink only when necessary, proportionally, to fit the entire source within the canvas; never upscale. |
+
+Fit uses one scale factor, min(1, canvas_width/source_width,
+canvas_height/source_height), then rounds the resulting artwork dimensions to
+the nearest whole pixel (half-up, minimum one pixel). This preserves aspect ratio
+within unavoidable pixel rounding. The full source rectangle, including existing
+transparent margins, participates in the fit. There is no trim, crop, independent
+axis stretching or flattening. Offsets are floor((canvas - artwork) / 2), leaving
+any odd extra padding pixel on the right/bottom. The plugin first adds symmetric
+padding, then adds any odd extra pixel with a top-left canvas anchor.
+
+The optional resample enum is **bicubic | nearest**, defaulting to **bicubic**.
+It only affects fit when artwork actually shrinks; preserve_size, exact-size and
+smaller inputs do not call resizeImage. Both choices use Photoshop's native
+Document.resizeImage(width, height, undefined, ResampleMethod.BICUBIC or
+ResampleMethod.NEARESTNEIGHBOR). No custom raster resampler is implemented.
+Nearest can alias edges and lose fine detail; use it intentionally for pixel art.
+
+Python verifies exact source alpha for unscaled artwork, exact sampled source alpha
+for nearest (including full opacity for RGB), and zero alpha for every padding pixel.
+Bicubic can produce partial edge alpha even from opaque RGB artwork. Both RGB and
+RGBA downscales use the native alpha checksum. After the native resize and before
+padding/export, the plugin reads the private document through imaging.getPixels
+with applyAlpha=false, no targetSize, and 8-bit RGB components. It reconstructs
+any trimmed empty borders for a bounded CRC-32 over the artwork alpha bytes,
+then disposes the pixel buffer. Python independently decodes the exported PNG and
+requires the artwork alpha checksum to match before publishing. Missing/invalid
+checksums, changed alpha or opaque padding fail closed. No alpha is flattened or
+replaced with a matte. CRC-32 checks padding/export integrity, not authenticity or
+Adobe's interpolation kernel; the authenticated local plugin is trusted to perform
+the native resize. Original source bytes remain independently checked unchanged.
+
+The success field validation.alpha_validation distinguishes source_exact,
+nearest_exact, and photoshop_bicubic_crc32. source_alpha_preserved means the
+original/unscaled or selected resampled alpha survives padding/export; bicubic
+does not claim byte identity with source alpha or independent kernel validation.
+Visual review remains mandatory, and RGB/profile identity across Photoshop is
+not promised.
+
+RGB source pixels start fully opaque; native bicubic edge alpha is preserved.
+An imported RGB Background layer is
+duplicated into a regular pixel layer and the Background removed only in the
+private document before resizing, so added padding stays transparent. Unexpected
+Background layers on RGBA input remain rejected. Output is always RGBA8. If
+Photoshop encodes an opaque export as RGB, Python adds an opaque alpha channel
+without changing RGB pixel values or color profiles. It retains ancillary metadata
+and extends sBIT significant-bits metadata for the new alpha channel, then repeats
+PNG validation and enforces the 24 MiB publication limit. Exact-size
+opaque artwork can therefore have has_transparency=false while still being RGBA;
+the tool does not erase source pixels just to create transparency.
 
 Background removal is **not enabled**: a reliable offline implementation has
 not been established for this slice. remove_background defaults to false;
@@ -243,19 +294,22 @@ process creates the destination during processing. Write/readback failures mark
 the exclusive candidate for deletion before closing it. All candidates, input
 files, .local/, .venv/ and caches remain Git-ignored; never force-add them.
 
-The new tool advertises readOnlyHint=false, destructiveHint=false,
+The processing tool advertises readOnlyHint=false, destructiveHint=false,
 idempotentHint=false and openWorldHint=false. Its success result is:
 
 ~~~text
 {
   source_relative_path, staging_relative_path,
   width_px, height_px,
+  mode, resample, source_color_type, artwork_width_px, artwork_height_px,
+  offset_x_px, offset_y_px,
   background_removal_requested: false,
   background_removal_completed: false,
   validation: {
     format: "PNG", bit_depth: 8, color_type: "RGBA",
-    has_transparency: true, dimensions_verified: true,
-    source_alpha_preserved: true, padding_verified: true,
+    has_transparency: boolean, dimensions_verified: true,
+    source_alpha_preserved: true, alpha_validation,
+    padding_verified: true,
     source_unchanged: true, bytes_written, sha256,
     human_approval_required: true
   }
@@ -264,10 +318,14 @@ idempotentHint=false and openWorldHint=false. Its success result is:
 
 Failures use the existing structured error envelope (ok=false, result=null,
 isError=true). Processing errors include INVALID_PATH, PATH_UNSAFE,
-UNSUPPORTED_PLATFORM, SOURCE_NOT_FOUND, DESTINATION_EXISTS, INVALID_DIMENSIONS,
+UNSUPPORTED_PLATFORM, SOURCE_NOT_FOUND, DESTINATION_EXISTS, INVALID_DIMENSIONS, INVALID_MODE, INVALID_RESAMPLE,
 CANVAS_TOO_SMALL, IMAGE_TOO_LARGE, INVALID_IMAGE, BACKGROUND_REMOVAL_UNAVAILABLE,
 PHOTOSHOP_PROCESSING_FAILED, OUTPUT_VALIDATION_FAILED and STAGING_WRITE_FAILED.
 DISCONNECTED, PORT_IN_USE, TIMEOUT and BUSY retain their transport meanings.
+Invalid MCP mode/resample arguments are rejected by the SDK's enum schemas before
+the tool body; direct processor/wire validation uses INVALID_MODE/INVALID_RESAMPLE.
+Invalid arguments never contact Photoshop or publish a file. New public result fields are additive;
+Phase 1 tool schemas and the existing processing fields remain compatible.
 Only one processing call runs at a time. A timeout/disconnect cannot publish a
 late reply; Photoshop may still finish cleaning up its private temporary copy.
 
@@ -282,8 +340,9 @@ Still verify same-size and odd canvas dimensions, restoration of an existing
 unsaved document, cancellation and temporary-file cleanup on the actual host.
 Alpha edges and profile/color-management behavior require visual review; alpha
 validation does not promise identical RGB values. Near-limit runtime/memory also
-needs a live test. Background removal and smaller-canvas resizing, batching and
-production promotion are not implemented.
+needs a live test. This Phase 2A live record does not verify Phase 2B RGB conversion
+or fit resampling. Background removal, cropping, upscaling, batching and production
+promotion are not implemented.
 
 ## Files and local setup
 
@@ -353,8 +412,8 @@ antivirus or Windows ACL settings are changed.
 | WebSocket JSON message | 33,555,456 UTF-8 bytes; inspection remains 262,144 bytes |
 | Authentication message | 1,024 UTF-8 bytes |
 | Python authentication / request timeout | 5 seconds each; configurable 0.05–30 |
-| Phase 2A processing request timeout | 30 seconds; one processing call at a time |
-| Phase 2A input / output PNG | 24 MiB (25,165,824 bytes) each; canvas 1–2048 pixels per dimension |
+| Processing request timeout | 30 seconds; one processing call at a time |
+| Input / output PNG | 24 MiB (25,165,824 bytes) each; source/canvas 1–2048 pixels per dimension |
 | Plugin connect/authentication timeout | 10 seconds |
 | Accepted open WebSockets / authenticated session | 4 / 1 |
 | Pending requests | 16 |
@@ -382,9 +441,10 @@ in UDT before retrying the live test so the new manifest and client URL apply.
 
 No additional filesystem, clipboard, process launching, WebView or user-information
 permission is requested. Local token caching uses UXP secureStorage. The two
-inspection operations use DOM getters only. Phase 2A uses UXP's default private
-temporary storage and executeAsModal to open a copy, resize its canvas and export
-PNG. It closes that copy without saving and restores the previous active document;
+inspection operations use DOM getters only. Processing uses UXP's default private
+temporary storage and executeAsModal to open a copy, optionally convert an RGB
+Background and shrink the image, resize its canvas and export PNG. It closes that
+copy without saving and restores the previous active document;
 host auto-close registration also covers cancellation. No batchPlay or arbitrary
 Photoshop action descriptor is accepted.
 
@@ -419,8 +479,20 @@ unsupported protocol versions, inconsistent document data and unsupported
 operations are rejected. Allowed operations are exactly the three public tool names.
 
 Processing requests add one parameters object containing image_base64, width_px,
-height_px and remove_background. The reply contains png_base64, width_px, height_px,
-background_removal_requested and background_removal_completed. The byte fields
+height_px, remove_background and optional mode/resample. Omitted mode means preserve_size;
+omitted resample means bicubic. Existing calls need no new argument.
+Python omits both fields for preserve_size to retain the exact Phase 2A wire request. Fit
+always sends both mode and resample, including the default, and requires both the
+updated Python server and UXP plugin. Older plugins reject the additional field
+instead of silently using nearest. Reload UXP and restart/reconnect the MCP server
+after updating both sides. The wire reply contains png_base64, width_px, height_px,
+background_removal_requested and background_removal_completed, plus optional
+resampled_alpha_crc32 (an unsigned 32-bit integer) for bicubic RGB/RGBA downscales.
+Temporary native_diagnostics probes have been removed. Reload the UXP plugin and
+restart the Python server together; RGB bicubic now supplies the same required
+pre-canvas checksum as RGBA. Legacy replies remain valid for unscaled/nearest output.
+Bicubic RGB/RGBA
+downscales without a native checksum fail output validation. The byte fields
 use canonical base64; neither repository paths nor arbitrary host paths reach UXP.
 Python validates the returned PNG before writing it to staging and returns only
 the public metadata above. Protocol version 1 and the inspection schemas remain
@@ -436,9 +508,10 @@ compatible. Limits are inclusive and checked in both Python and UXP:
 
 The 1 KiB allowance covers either envelope, including four-digit dimensions and
 the maximum 64-character ID even when every character needs six JSON escape
-bytes: 561 metadata bytes for a request and 627 for a successful response, leaving
-463 and 397 bytes of headroom respectively. At the PNG limit those envelopes total
-33,554,993 and 33,555,059 bytes. Limits count UTF-8 bytes, not JavaScript character count. WebSocket framing
+bytes. The boundary tests include both mode/resample and the maximum native alpha
+checksum in the response, and require metadata to remain within the same 1 KiB.
+Limits count
+UTF-8 bytes, not JavaScript character count. WebSocket framing
 headers are separate from its message payload limit. A single unfragmented frame
 at the maximum has a 10-byte header (server) or 14-byte header (masked client).
 Compression remains disabled; each direction carries one image in one JSON
@@ -535,7 +608,7 @@ Run from the toolkit directory with no other bridge occupying port 43127:
 
 ~~~bash
 ./.venv/Scripts/python.exe -m compileall -q core modules tests
-./.venv/Scripts/python.exe -B -m unittest -v tests.test_phase1 tests.test_phase2
+./.venv/Scripts/python.exe -B -m unittest discover -v -s tests
 ./.venv/Scripts/python.exe -m pip check
 '/c/Program Files/nodejs/node.exe' --check bridges/photoshop_uxp/index.js
 '/c/Program Files/nodejs/node.exe' --check bridges/photoshop_uxp/processing.js
@@ -564,6 +637,13 @@ checks, independent alpha/padding validation, and new-tool calls through MCP plu
 an authenticated fake WebSocket peer. Its JavaScript suite runs the actual
 processing/dispatch modules with mocked Photoshop documents and private storage,
 covering canvas/export options, resource cleanup, cancellation and safe failures.
+Phase 2B adds RGB decoding/conversion, fit geometry, sampled-alpha verification,
+no-upscale/exact-size cases, explicit odd centering, enum/schema validation and
+cleanup failures during background conversion or image resizing. Resampling tests
+cover omitted/default bicubic, explicit bicubic/nearest, invalid enum values,
+legacy callers, native alpha capture/disposal, checksum validation and safe failure.
+The original
+Phase 1 tests and UXP getter/panel suite remain unchanged.
 
 Loopback tests must run in a normal Windows user context. The audit found the
 Codex offline sandbox blocks loopback; no firewall workaround is implemented.
@@ -705,6 +785,170 @@ exercise same-size/odd canvases, unsaved-document restoration, cancellation and
 temporary cleanup in Photoshop; and assess near-limit speed/memory against the
 30-second processing deadline. Human approval is still required before any
 separately authorized production promotion.
+
+## Phase 2B validation record — 2026-09-29
+
+This historical record covers the original nearest-only implementation. The
+resampling-quality update below supersedes its interpolation and live-test status.
+
+VERIFIED: the existing tool now accepts optional mode="preserve_size"|"fit",
+defaulting to preserve_size, and bounded RGB/RGBA8 sources. The complete suite
+passes **108 Python tests** (47 Phase 1 and 61 Phase 2) and **109 JavaScript
+checks** (53 getter/panel and 56 processing), with no failures, errors or skips.
+This adds 21 Python tests and 20 JavaScript checks to the merged Phase 2A suite.
+Cases include portrait/landscape fit, exact and smaller inputs, proportional
+pixel rounding, no upscale, odd centering, retained alpha values, RGB-to-RGBA
+output, profile/significant-bits metadata, invalid modes, SDK schemas, real MCP
+transport with fake peers, and cleanup of failed private-document operations.
+Phase 2 was rerun after the final RGB metadata correction.
+
+An additional **79 audit checks** pass: 16 Python and four JavaScript syntax
+checks, 30 locked dependency versions, pip check, 15 ignore paths, 10 security/
+scope checks, whitespace, and two checks on the untouched Phase 2A live candidate.
+The total is **296 distinct tests/checks, 0 failures, 0 errors and 0 skips**;
+parameterized subcases and repeated runs are not counted twice.
+
+The diff contains only the nine announced files: this README, UXP index.js and
+processing.js, Python png_validation.py/processing.py/protocol.py/tools.py, and
+test_phase2.py/test_processing.js. The manifest, authentication/configuration,
+transport, path_security.py, both ignore files, dependency lock, core server and
+Phase 1 test files are unchanged. The original two MCP function bodies are
+unchanged, and no new tool, dependency, background removal, batching, cropping,
+production promotion or Godot integration was added.
+
+No credential patterns were found in changed files; the actual local pairing
+token is absent from all 306 tracked working-tree files. No ignored files are
+tracked. Local credentials/environments/caches, inbox inputs and staging outputs
+remain ignored. The existing Phase 2A candidate's SHA-256 is unchanged. Audit
+scripts and logs remain under ignored .local. Nothing was staged or committed.
+
+NOT EXECUTED: live Photoshop Phase 2B RGB conversion or fit, live near-limit
+runtime/memory tests, fresh-workstation/other-host validation, or Godot tests.
+Automated UXP tests use mocks; they do not establish actual Photoshop sampling
+alignment, background-layer conversion or visual quality.
+
+REQUIRES USER TEST: reload the UXP plugin and restart the MCP server, reconnect,
+then use selected RGB and RGBA sources with fresh staging filenames. Verify fit
+for portrait/landscape images, no upscale for smaller images, exact-size opaque
+RGB-to-RGBA output, odd padding placement, partial/zero alpha, color/edge quality,
+unsaved-document restoration, cancellation and temporary cleanup. Confirm the
+host's nearest-neighbor sample alignment agrees with independent validation and
+that a repeated destination is rejected. Keep human review before any separately
+authorized production promotion. Limits remain 24 MiB per PNG, 2048 pixels per
+source/canvas axis and a 30-second processing request deadline.
+
+## Phase 2B resampling-quality update
+
+Before implementation, the current official Adobe UXP documentation was checked:
+Document.resizeImage is documented since Photoshop 23.0, and ResampleMethod
+BICUBIC/NEARESTNEIGHBOR since 22.5, covering the required Photoshop 27.10 host.
+The Imaging API documents getPixels, applyAlpha=false, trimmed sourceBounds,
+full-resolution reads without targetSize, getData({chunky:true}), and dispose().
+These native APIs preserve the existing private-document/modal architecture and
+require no additional manifest permissions or dependencies.
+
+The user verified the previous nearest-only portrait/landscape RGB fits, RGBA
+no-upscale and odd-centering cases live in Photoshop 27.10, but found degraded
+edges/detail during reduction. Bicubic is now the default for fit; explicit nearest
+retains the previous sampling behavior. The new bicubic path still requires live
+visual comparison and RGBA alpha/edge review after both endpoints are reloaded.
+In particular, confirm native alpha capture for partial/zero alpha and trimmed
+borders, cancellation/cleanup, and near-limit performance within the unchanged
+30-second deadline. Automated UXP mocks do not establish live visual quality.
+
+VERIFIED automated validation: **117 Python tests** (47 Phase 1, 70 Phase 2)
+and **120 JavaScript checks** (53 getter/panel, 67 processing), with no failures,
+errors or suite skips. Python completed in 24.895 seconds. The update adds nine
+Python tests and eleven JavaScript checks; parameterized subcases are not counted
+separately. The supplemental audit passed **96 checks**: 16 Python/four JavaScript
+syntax checks, 30 dependency pins, pip check, 24 ignore paths, 10 security/scope
+checks, whitespace and 10 existing-artifact checks. Total: **333 passed**.
+
+NOT EXECUTED: two historical alpha/source comparisons because phase2a_test.png
+and phase2b_rgb_test.png are no longer in the inbox. All six existing candidate
+hashes still match their prior live results. Thus 335 tests/checks were planned,
+333 passed, zero failed, and two supplemental checks were skipped. The new
+bicubic path was not run live; the four previously confirmed live Phase 2B cases
+used nearest. No Godot tests or other-host/fresh-workstation checks were run.
+
+The change remains confined to the same nine toolkit files. Security/ignore rules,
+manifest permissions, authentication, binding, source/staging locks, no-overwrite
+publication, dependencies and all size/deadline limits remain unchanged. No
+credential patterns were found in the changed files; the actual pairing token is
+absent from all 306 tracked files. Test artifacts and audit logs remain ignored.
+Nothing was staged, committed or pushed. REQUIRES USER TEST: reload/reconnect both
+endpoints and compare fresh bicubic/nearest candidates in Photoshop 27.10,
+including partially transparent RGBA and fine edges, before approving quality.
+
+## Phase 2B validation-failure diagnostics
+
+The instrumented live default-bicubic RGB portrait fit (941x1672 to 384x384)
+failed with OUTPUT_VALIDATION_FAILED / ARTWORK_ALPHA_MISMATCH. The expected
+216x384 artwork rectangle at (84,0) and nonzero-alpha bounds agreed. All 1,196
+partial-alpha pixels were on its edge, alpha ranged from 220 to 255, and padding
+passed. Native pre-canvas and exported artwork alpha CRC32 both equaled 233626159.
+The source was unchanged and no Background layer existed before/after resize or
+after canvas expansion. No failed candidate was published.
+
+Failures now include error.diagnostics with the original failed condition,
+expected/actual output dimensions, expected artwork rectangle, observed nonzero
+and fully opaque alpha bounds, exported/normalized color type, transparency,
+independent padding/alpha/source-unchanged failure flags, and bounded alpha counts
+and first mismatches. Null means evidence was unavailable. Observed alpha bounds
+are not claimed to locate artwork with transparent borders. Failed images are
+never published, and no tokens, Base64 payloads or pixel buffers are logged.
+
+RGB bicubic shrinking now uses the existing RGBA native-alpha validation path.
+The plugin captures resampled_alpha_crc32 once after resizeImage and before
+resizeCanvas/export, with the existing bounded Imaging API read and disposal.
+Missing/unreadable native evidence fails closed. Python independently checks
+output dimensions, the expected centered artwork rectangle, zero alpha everywhere
+outside it, matching native/exported artwork alpha CRC32, and unchanged source.
+Unscaled RGB and nearest remain exactly opaque; bicubic RGBA behavior is unchanged.
+Native resize, canvas expansion and export calls are unchanged; no edge alpha is
+forced to 255. The temporary Background/alpha-summary host probes and their wire
+field have been removed. Failure diagnostics retain expected/actual checksums,
+observed bounds, alpha extrema/counts and independent failure flags. Checksum
+validation cannot report individual native pixel mismatches without native pixels;
+those fields correctly remain null.
+
+Official Adobe documentation was rechecked:
+- [Document](https://developer.adobe.com/photoshop/uxp/ps_reference/classes/document/)
+  specifies resizeImage(width, height, resolution, resampleMethod, amount), and
+  resizeCanvas(width, height, anchor), with centered expansion by default.
+- [Constants](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/modules/constants)
+  lists ResampleMethod.BICUBIC/NEARESTNEIGHBOR for Document.resizeImage and
+  AnchorPosition.TOPLEFT. The current native calls match those signatures.
+- [Canvas behavior](https://helpx.adobe.com/photoshop/desktop/crop-resize-transform/resize-adjust-resolution/change-the-canvas-size.html)
+  distinguishes colored extension with a Background layer from transparency on
+  regular layers. The live reproduction ruled out a residual Background layer
+  and located the partial edge alpha before padding/export.
+
+Regression coverage uses a synthetic opaque RGB 941x1672 source with a 216x384
+native-alpha fixture and 1,196 partial edge pixels. Matching checksum passes;
+missing/invalid checksum, changed exported alpha, wrong dimensions, shifted
+artwork and nonzero padding fail. In-memory MCP checks require native proof before
+publishing. This fixture reproduces the observed geometry and alpha characteristics,
+not Photoshop's interpolation kernel or the exact live pixels.
+
+Validation of the fix: 94 Python tests pass, including all validator/diagnostic
+regressions and in-memory MCP publication checks. The full discovery run before
+the final in-memory regression ran 134 tests: 93 passed and 41 test methods were
+affected by the active bridge occupying 127.0.0.1:43127 (25 failure and 23 error
+records, including subtests). The final suite contains 135 tests; the 94 without
+those recorded port conflicts pass. The 41 transport/integration methods still
+require a clean rerun with that fixed port free; this is not a fully passing
+Python suite. No listener was stopped or endpoint changed. Both JavaScript suites
+pass 126 checks (53 plugin/panel and 73 processing). Syntax checks pass for 18
+Python and four JavaScript files, all 30 locked dependency versions match,
+pip check reports no broken requirements, and git diff --check passes.
+
+After automated validation, live verification still requires restarting the Python
+MCP server and reloading/reconnecting UXP. Re-run the existing 941x1672 RGB portrait,
+384x384 canvas, fit, default bicubic, no background removal, and a new absent staging
+filename. Require ok=true with alpha_validation=photoshop_bicubic_crc32, then
+visually review the candidate. Check bicubic RGBA and explicit nearest/preserve_size
+controls after reload. Automated mocks do not establish live Photoshop success.
 
 ## Manual UDT loading and pre-Codex live test procedure
 
@@ -862,6 +1106,10 @@ probe is a point-in-time observation, not proof that a port conflict caused an e
 - [websockets 17.1](https://pypi.org/project/websockets/17.1/)
 - [Adobe manifest v5](https://developer.adobe.com/photoshop/uxp/2022/guides/uxp-guide/uxp-misc/manifest-v5/)
 - [Photoshop Document DOM](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/classes/document/)
+- [Photoshop Layer DOM](https://developer.adobe.com/photoshop/uxp/ps_reference/classes/layer/)
+- [Photoshop resampling constants](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/modules/constants/)
+- [Photoshop Imaging API](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/media/imaging)
+- [PNG format and significant-bits metadata](https://www.w3.org/TR/png-3/#11sBIT)
 - [Photoshop modal execution and automatic document cleanup](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/media/executeasmodal/)
 - [UXP private temporary storage](https://developer.adobe.com/photoshop/uxp/2022/uxp/reference-js/Modules/uxp/Persistent%20File%20Storage/FileSystemProvider/)
 - [UXP secureStorage](https://developer.adobe.com/photoshop/uxp/2022/uxp/reference-js/Modules/uxp/Key-Value%20Storage/SecureStorage/)
