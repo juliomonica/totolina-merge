@@ -14,7 +14,8 @@ from websockets.exceptions import ConnectionClosed
 
 from core.config import Config, HOST, PORT, valid_token
 from .protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, PROTOCOL_VERSION,
-                       decode, encode, error_info, validate_response)
+                       PROCESS_OPERATION, decode, encode, error_info, validate_response,
+                       validate_processing_parameters)
 
 LOG = logging.getLogger("lunitora.bridge")
 MAX_CONNECTIONS = 4
@@ -143,9 +144,13 @@ class PhotoshopBridge:
             self._connections.discard(connection)
             self._fail_pending(connection)
 
-    async def request(self, operation: str) -> tuple[dict, float]:
+    async def request(self, operation: str, parameters: dict | None = None) -> tuple[dict, float]:
         if operation not in OPERATIONS:
             raise BridgeError("UNSUPPORTED_OPERATION")
+        if operation == PROCESS_OPERATION:
+            validate_processing_parameters(parameters)
+        elif parameters is not None:
+            raise BridgeError("INVALID_MESSAGE")
         self._diagnostic(f"MCP protocol request received: operation={operation}")
         if self.startup_error:
             raise self.startup_error
@@ -159,11 +164,15 @@ class PhotoshopBridge:
         self._pending[request_id] = Pending(connection, operation, future)
         started = perf_counter()
         try:
-            async with asyncio.timeout(self.config.request_timeout_seconds):
-                await connection.send(encode({
+            timeout = 30.0 if operation == PROCESS_OPERATION else self.config.request_timeout_seconds
+            async with asyncio.timeout(timeout):
+                request = {
                     "type": "request", "protocol_version": PROTOCOL_VERSION,
                     "id": request_id, "operation": operation,
-                }))
+                }
+                if parameters is not None:
+                    request["parameters"] = parameters
+                await connection.send(encode(request))
                 message = await future
             elapsed_ms = round((perf_counter() - started) * 1000, 3)
             if not message["ok"]:

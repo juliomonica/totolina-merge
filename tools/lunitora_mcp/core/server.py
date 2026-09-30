@@ -16,7 +16,7 @@ from mcp.server import MCPServer
 from core.config import Config, ConfigurationError, ROOT, load_config, load_token, setup_token
 from core.live_test_child import LiveTestChild
 from modules.photoshop.bridge import PhotoshopBridge
-from modules.photoshop.protocol import BRIDGE_VERSION, BridgeError, envelope
+from modules.photoshop.protocol import BRIDGE_VERSION, BridgeError, OPERATIONS, envelope
 from modules.photoshop.tools import register_tools
 
 
@@ -33,7 +33,8 @@ def create_server(config: Config, token: str | None, *, diagnostics: bool = Fals
 
     server = MCPServer(
         "Lunitora Photoshop", version=BRIDGE_VERSION, lifespan=lifespan, log_level="WARNING",
-        instructions="Only read-only Photoshop inspection is available. No editing, saving or export. "
+        instructions="Photoshop inspection plus one explicit inbox-to-staging PNG candidate operation. "
+                     "Never replace production assets. Candidates require human approval. "
                      "A disconnected host returns a bounded error; it does not disable tool discovery.",
     )
     register_tools(server, bridge)
@@ -61,7 +62,7 @@ async def _run_live_test(child: LiveTestChild, wait_seconds: float) -> int:
     async with Client(child, read_timeout_seconds=35) as client:
         child.phase = "tool discovery"
         tools = await client.list_tools()
-        if {tool.name for tool in tools.tools} != {"photoshop_ping", "photoshop_get_active_document"}:
+        if {tool.name for tool in tools.tools} != OPERATIONS:
             raise RuntimeError("Unexpected MCP tool registration.")
         child.phase = "live test"
         print(f"Waiting for Photoshop for up to {wait_seconds:g} seconds. "

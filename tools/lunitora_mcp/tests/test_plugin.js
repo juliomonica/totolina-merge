@@ -251,6 +251,7 @@ function panel(options = {}) {
     detail: () => elements["diagnostic-detail"].textContent,
     open(socket = sockets.at(-1)) { socket.readyState = 1; socket.onopen(); },
     message(data, socket = sockets.at(-1)) { return socket.onmessage({ data: JSON.stringify(data) }); },
+    rawMessage(data, socket = sockets.at(-1)) { return socket.onmessage({ data }); },
     assertSafe() {
       const output = logs.join("\n") + Object.values(elements).map(element => element.textContent).join("\n");
       assert.equal(output.includes(DIAGNOSTIC_TOKEN), false);
@@ -265,6 +266,30 @@ async function diagnosticTests() {
     await test();
     tests += 1;
     console.log("PASS " + name);
+  }
+  for (const [operation, limit] of [["photoshop_process_image", 33555456], ["photoshop_ping", 262144]]) {
+    await checkPanel(operation + " incoming UTF-8 message boundaries", async () => {
+      for (const size of [limit - 1, limit, limit + 1]) {
+        const ui = panel();
+        await ui.click(); ui.open();
+        await ui.message({ type: "auth_result", protocol_version: 1, ok: true, error: null });
+        const socket = ui.sockets.at(-1), before = socket.sent.length;
+        // Missing processing parameters yields a small error after the frame passes the size gate.
+        let raw = JSON.stringify({ type: "request", protocol_version: 1, id: "猫🐱", operation });
+        raw += " ".repeat(size - Buffer.byteLength(raw));
+        assert.equal(Buffer.byteLength(raw), size);
+        await ui.rawMessage(raw);
+        if (size <= limit) {
+          assert.equal(socket.readyState, 1);
+          assert.equal(socket.sent.length, before + 1);
+          assert.equal(socket.sent.at(-1).operation, operation);
+        } else {
+          assert.equal(socket.readyState, 3);
+          assert.equal(socket.sent.length, before);
+        }
+        ui.assertSafe();
+      }
+    });
   }
   await checkPanel("panel displays actual host and UXP runtime versions", async () => {
     const ui = panel({ environment: {

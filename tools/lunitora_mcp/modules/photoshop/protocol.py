@@ -3,14 +3,22 @@ from __future__ import annotations
 
 import json
 import math
+import base64
+import binascii
 from typing import NotRequired, TypedDict
+
+from .png_validation import MAX_IMAGE_BYTES
 
 PROTOCOL_VERSION = 1
 BRIDGE_VERSION = "0.1.0"
-MAX_PAYLOAD_BYTES = 262_144
+MAX_INSPECTION_BYTES = 262_144
+MAX_IMAGE_BASE64_BYTES = 4 * ((MAX_IMAGE_BYTES + 2) // 3)
+# One PNG per message, plus bounded JSON metadata (including escaped request IDs).
+MAX_PAYLOAD_BYTES = MAX_IMAGE_BASE64_BYTES + 1024
 MAX_LAYERS = 2000
 MAX_DEPTH = 64
-OPERATIONS = frozenset({"photoshop_ping", "photoshop_get_active_document"})
+PROCESS_OPERATION = "photoshop_process_image"
+OPERATIONS = frozenset({"photoshop_ping", "photoshop_get_active_document", PROCESS_OPERATION})
 ERROR_MESSAGES = {
     "UNPAIRED": "Run local setup and pair the Photoshop panel.",
     "PORT_IN_USE": "Cannot bind 127.0.0.1:43127. Stop the other listener; no alternate interface or port is used.",
@@ -20,11 +28,24 @@ ERROR_MESSAGES = {
     "AUTH_FAILED": "Pairing failed. Use the toolkit's local pairing token.",
     "INVALID_MESSAGE": "The peer sent an invalid bridge message.",
     "PAYLOAD_TOO_LARGE": "The bridge message exceeds the size limit.",
-    "UNSUPPORTED_OPERATION": "Only photoshop_ping and photoshop_get_active_document are permitted.",
+    "UNSUPPORTED_OPERATION": "Only the registered Photoshop operations are permitted.",
     "PHOTOSHOP_READ_FAILED": "Photoshop could not read the current document. Retry when the host is available.",
     "HOST_DETECTION_FAILED": "Could not detect valid Adobe host metadata from UXP. Reload the Photoshop plugin and retry.",
     "DOCUMENT_TOO_LARGE": "The document exceeds the layer, depth, or response-size limit; no partial result was returned.",
     "UNSUPPORTED_HOST": "This plugin requires Photoshop 27.10 or newer.",
+    "INVALID_PATH": "Use a PNG repository-relative path inside the required inbox or staging directory.",
+    "PATH_UNSAFE": "The path is linked, redirected, shared for writing, or otherwise unsafe.",
+    "UNSUPPORTED_PLATFORM": "Phase 2A path protection currently requires native Windows.",
+    "SOURCE_NOT_FOUND": "The selected inbox image does not exist.",
+    "DESTINATION_EXISTS": "The staging destination already exists; choose a new filename.",
+    "INVALID_DIMENSIONS": "Canvas width and height must be integers from 1 through 2048.",
+    "CANVAS_TOO_SMALL": "The requested canvas would crop the image; use its original size or a larger canvas.",
+    "IMAGE_TOO_LARGE": "Phase 2A input and output PNGs must each fit within 24 MiB.",
+    "INVALID_IMAGE": "Phase 2A requires a complete non-interlaced 8-bit RGBA PNG.",
+    "BACKGROUND_REMOVAL_UNAVAILABLE": "Reliable offline background removal is not enabled in Phase 2A.",
+    "PHOTOSHOP_PROCESSING_FAILED": "Photoshop could not process the temporary image; no candidate was published.",
+    "OUTPUT_VALIDATION_FAILED": "The exported PNG failed independent dimensions, alpha, or padding validation.",
+    "STAGING_WRITE_FAILED": "The candidate could not be published safely in staging.",
 }
 
 
@@ -95,6 +116,58 @@ class DocumentResult(Envelope):
     result: DocumentData | None
 
 
+class ProcessingValidation(TypedDict):
+    format: str
+    bit_depth: int
+    color_type: str
+    has_transparency: bool
+    dimensions_verified: bool
+    source_alpha_preserved: bool
+    padding_verified: bool
+    source_unchanged: bool
+    bytes_written: int
+    sha256: str
+    human_approval_required: bool
+
+
+class ProcessingData(TypedDict):
+    source_relative_path: str
+    staging_relative_path: str
+    width_px: int
+    height_px: int
+    background_removal_requested: bool
+    background_removal_completed: bool
+    validation: ProcessingValidation
+
+
+class ProcessingResult(Envelope):
+    result: ProcessingData | None
+
+
+def image_bytes(value: object) -> bytes:
+    if not isinstance(value, str) or not 0 < len(value) <= MAX_IMAGE_BASE64_BYTES:
+        raise BridgeError("INVALID_MESSAGE")
+    try:
+        data = base64.b64decode(value, validate=True)
+    except (ValueError, binascii.Error):
+        raise BridgeError("INVALID_MESSAGE") from None
+    if not 0 < len(data) <= MAX_IMAGE_BYTES or base64.b64encode(data).decode("ascii") != value:
+        raise BridgeError("INVALID_MESSAGE")
+    return data
+
+
+def validate_processing_parameters(data: dict) -> None:
+    if (not isinstance(data, dict)
+            or set(data) != {"image_base64", "width_px", "height_px", "remove_background"}):
+        raise BridgeError("INVALID_MESSAGE")
+    for key in ("width_px", "height_px"):
+        if type(data[key]) is not int or not 1 <= data[key] <= 2048:
+            raise BridgeError("INVALID_DIMENSIONS")
+    if type(data["remove_background"]) is not bool:
+        raise BridgeError("INVALID_MESSAGE")
+    image_bytes(data["image_base64"])
+
+
 def error_info(code: str) -> ErrorInfo:
     return {"code": code, "message": ERROR_MESSAGES[code]}
 
@@ -114,7 +187,8 @@ def envelope(result: dict | None = None, *, elapsed_ms: float | None = None,
 
 def encode(message: dict) -> str:
     raw = json.dumps(message, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-    if len(raw.encode("utf-8")) > MAX_PAYLOAD_BYTES:
+    limit = MAX_PAYLOAD_BYTES if message.get("operation") == PROCESS_OPERATION else MAX_INSPECTION_BYTES
+    if len(raw.encode("utf-8")) > limit:
         raise BridgeError("PAYLOAD_TOO_LARGE")
     return raw
 
@@ -142,6 +216,8 @@ def decode(raw: str | bytes) -> dict:
             or type(message.get("protocol_version")) is not int
             or message["protocol_version"] != PROTOCOL_VERSION):
         raise BridgeError("INVALID_MESSAGE")
+    if message.get("operation") != PROCESS_OPERATION and len(raw.encode("utf-8")) > MAX_INSPECTION_BYTES:
+        raise BridgeError("PAYLOAD_TOO_LARGE")
     return message
 
 
@@ -174,6 +250,16 @@ def validate_result(operation: str, data: dict) -> None:
     def identity(value: dict) -> None:
         require(type(value.get("id")) is int and isinstance(value.get("name"), str))
 
+    if operation == PROCESS_OPERATION:
+        require(set(data) == {"png_base64", "width_px", "height_px",
+                              "background_removal_requested", "background_removal_completed"})
+        image_bytes(data["png_base64"])
+        for field in ("width_px", "height_px"):
+            require(type(data[field]) is int and 1 <= data[field] <= 2048)
+        # Phase 2A fails explicitly for removal instead of guessing an action descriptor.
+        require(data["background_removal_requested"] is False)
+        require(data["background_removal_completed"] is False)
+        return
     if operation == "photoshop_ping":
         required = {"photoshop_version", "host_version", "uxp_version", "plugin_version"}
         require(set(data) in (required, required | {"host_name"}))
