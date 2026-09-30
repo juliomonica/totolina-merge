@@ -20,6 +20,7 @@ from .protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, PROTOCOL_VERS
 LOG = logging.getLogger("lunitora.bridge")
 MAX_CONNECTIONS = 4
 MAX_PENDING = 16
+CONNECTION_GRACE_SECONDS = 8.0
 
 
 @dataclass
@@ -39,6 +40,8 @@ class PhotoshopBridge:
         self._connections = set()
         self._pending: dict[str, Pending] = {}
         self.startup_error: BridgeError | None = None
+        self._connection_ready = asyncio.Event()
+        self._stopping = False
 
     def _diagnostic(self, message: str) -> None:
         # Callers supply fixed text and validated operation/error names only.
@@ -46,6 +49,7 @@ class PhotoshopBridge:
             print(f"[Lunitora bridge] {message}", file=sys.stderr, flush=True)
 
     async def start(self) -> None:
+        self._stopping = False
         if self._server is not None:
             return
         if not valid_token(self._token):
@@ -67,6 +71,8 @@ class PhotoshopBridge:
             self._diagnostic(f"Bridge listening on {HOST}:{PORT}")
 
     async def stop(self) -> None:
+        self._stopping = True
+        self._connection_ready.set()  # Wake waiting tools during shutdown.
         self._fail_pending(None)
         self._connection = None
         if self._server is not None:
@@ -102,6 +108,7 @@ class PhotoshopBridge:
                 # Publish only after auth_result: no request may precede authentication.
                 previous = self._connection
                 self._connection = connection
+                self._connection_ready.set()
                 authenticated = True
                 self._diagnostic("Authentication accepted")
                 if previous is not None:
@@ -141,6 +148,8 @@ class PhotoshopBridge:
             self._diagnostic("WebSocket connection closed")
             if self._connection is connection:
                 self._connection = None
+                if not self._stopping:
+                    self._connection_ready.clear()
             self._connections.discard(connection)
             self._fail_pending(connection)
 
@@ -154,6 +163,20 @@ class PhotoshopBridge:
         self._diagnostic(f"MCP protocol request received: operation={operation}")
         if self.startup_error:
             raise self.startup_error
+        started = perf_counter()
+        timeout = 30.0 if operation == PROCESS_OPERATION else self.config.request_timeout_seconds
+        remaining_timeout = timeout
+        # Diagnostic ping keeps its immediate DISCONNECTED behavior. Real calls
+        # allow the startup-loaded plugin to reconnect, within the same deadline.
+        if operation != "photoshop_ping" and self._connection is None and not self._stopping:
+            try:
+                async with asyncio.timeout(min(CONNECTION_GRACE_SECONDS, timeout)):
+                    while self._connection is None and not self._stopping:
+                        self._connection_ready.clear()
+                        await self._connection_ready.wait()
+            except TimeoutError:
+                raise BridgeError("DISCONNECTED") from None
+            remaining_timeout = max(0.0, timeout - (perf_counter() - started))
         connection = self._connection
         if connection is None:
             raise BridgeError("DISCONNECTED")
@@ -162,10 +185,8 @@ class PhotoshopBridge:
         request_id = uuid4().hex
         future = asyncio.get_running_loop().create_future()
         self._pending[request_id] = Pending(connection, operation, future)
-        started = perf_counter()
         try:
-            timeout = 30.0 if operation == PROCESS_OPERATION else self.config.request_timeout_seconds
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(remaining_timeout):
                 request = {
                     "type": "request", "protocol_version": PROTOCOL_VERSION,
                     "id": request_id, "operation": operation,

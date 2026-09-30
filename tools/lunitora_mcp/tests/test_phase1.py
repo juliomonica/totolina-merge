@@ -23,6 +23,7 @@ from core import config as config_module
 from core.config import Config, ConfigurationError, ENDPOINT, HOST, PORT, ROOT, load_config
 from core.server import create_server, live_test
 from modules.photoshop.bridge import PhotoshopBridge
+from modules.photoshop.png_validation import read_png
 from modules.photoshop.protocol import (BRIDGE_VERSION, BridgeError, MAX_PAYLOAD_BYTES, PROTOCOL_VERSION,
                                        decode, encode, envelope, validate_result, validate_response)
 from tests.fake_photoshop_client import ACTIVE_DOCUMENT, FakePhotoshopClient, NO_DOCUMENT, PING
@@ -139,9 +140,51 @@ class ProtocolTests(unittest.TestCase):
     def test_manifest_permission_and_version_contract(self):
         manifest = json.loads((ROOT / "bridges/photoshop_uxp/manifest.json").read_text())
         self.assertEqual(manifest["manifestVersion"], 5)
-        self.assertEqual(manifest["host"], {"app": "PS", "minVersion": "27.10.0", "data": {"apiVersion": 2}})
+        self.assertEqual(manifest["host"], {"app": "PS", "minVersion": "27.10.0", "data": {"apiVersion": 2, "loadEvent": "startup"}})
+        self.assertEqual(manifest["id"], "com.lunitora.photoshop.bridge")
         self.assertEqual(manifest["requiredPermissions"], {"network": {"domains": ["ws://localhost/"]}})
         self.assertEqual(ENDPOINT, "ws://localhost:43127")
+
+    def test_manifest_declares_plugin_packaging_icons(self):
+        manifest = json.loads((ROOT / "bridges/photoshop_uxp/manifest.json").read_text())
+        self.assertEqual(manifest.get("icons"), [{
+            "width": 24, "height": 24, "path": "icons/lunitora-plugin.png",
+            "scale": [1, 2], "theme": ["all"], "species": ["pluginList"],
+        }])
+
+    def test_manifest_declares_panel_presentation_icons(self):
+        manifest = json.loads((ROOT / "bridges/photoshop_uxp/manifest.json").read_text())
+        panels = [entry for entry in manifest["entrypoints"] if entry["type"] == "panel"]
+        self.assertEqual([panel["id"] for panel in panels], ["lunitora-photoshop"])
+        self.assertEqual(panels[0].get("icons"), [{
+            "width": 23, "height": 23, "path": "icons/lunitora-panel.png",
+            "scale": [1, 2], "theme": ["all"], "species": ["generic"],
+        }])
+
+    def test_package_contains_valid_pngs_for_every_declared_icon_density(self):
+        plugin_root = ROOT / "bridges/photoshop_uxp"
+        manifest = json.loads((plugin_root / "manifest.json").read_text())
+        icons = manifest["icons"] + [icon for entry in manifest["entrypoints"]
+                                    if entry["type"] == "panel" for icon in entry["icons"]]
+        declared_files = set()
+        for icon in icons:
+            logical_path = Path(icon["path"])
+            self.assertEqual(logical_path.parent.as_posix(), "icons")
+            self.assertEqual(logical_path.suffix, ".png")
+            self.assertNotIn("@", logical_path.name)
+            for scale in icon["scale"]:
+                asset = logical_path.with_name(f"{logical_path.stem}@{scale}x.png")
+                declared_files.add(asset.name)
+                with self.subTest(asset=asset.as_posix()):
+                    data = (plugin_root / asset).read_bytes()
+                    self.assertLessEqual(len(data), 1024 * 1024)
+                    image = read_png(data)  # Full decode, CRC, RGBA8 and non-interlacing checks.
+                    self.assertEqual((image.width, image.height),
+                                     (icon["width"] * scale, icon["height"] * scale))
+                    self.assertEqual(image.color_type, 6)
+                    self.assertTrue(image.has_transparency)
+                    self.assertIn(255, image.pixels[3::4], "Icon must contain visible artwork")
+        self.assertEqual({asset.name for asset in (plugin_root / "icons").iterdir()}, declared_files)
 
 
 class BridgeTests(unittest.IsolatedAsyncioTestCase):
