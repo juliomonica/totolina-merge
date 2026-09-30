@@ -15,7 +15,7 @@ from websockets.exceptions import ConnectionClosed
 from core.config import Config, HOST, PORT, valid_token
 from .protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, PROTOCOL_VERSION,
                        PROCESS_OPERATION, decode, encode, error_info, validate_response,
-                       validate_processing_parameters)
+                       validate_processing_parameters, peer_failure)
 
 LOG = logging.getLogger("lunitora.bridge")
 MAX_CONNECTIONS = 4
@@ -176,7 +176,7 @@ class PhotoshopBridge:
                 message = await future
             elapsed_ms = round((perf_counter() - started) * 1000, 3)
             if not message["ok"]:
-                raise BridgeError(message["error"]["code"], connected=True)
+                raise peer_failure(message["error"])
             return message["result"], elapsed_ms
         except TimeoutError:
             raise BridgeError("TIMEOUT") from None

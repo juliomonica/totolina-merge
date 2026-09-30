@@ -7,7 +7,7 @@ import base64
 import binascii
 from typing import NotRequired, TypedDict
 
-from .png_validation import MAX_IMAGE_BYTES
+from .png_validation import MAX_IMAGE_BYTES, REMOVAL_FIELDS, REMOVAL_REASONS
 
 PROTOCOL_VERSION = 1
 BRIDGE_VERSION = "0.1.0"
@@ -44,8 +44,9 @@ ERROR_MESSAGES = {
     "INVALID_IMAGE": "Processing requires a complete non-interlaced 8-bit RGB or RGBA PNG.",
     "INVALID_MODE": "Processing mode must be preserve_size or fit.",
     "INVALID_RESAMPLE": "Resample must be bicubic or nearest.",
-    "BACKGROUND_REMOVAL_UNAVAILABLE": "Reliable offline background removal is not enabled in Phase 2A.",
+    "BACKGROUND_REMOVAL_UNAVAILABLE": "The required native Photoshop background-removal capability is unavailable.",
     "PHOTOSHOP_PROCESSING_FAILED": "Photoshop could not process the temporary image; no candidate was published.",
+    "PHOTOSHOP_CANCELLED": "Photoshop processing was cancelled; no candidate was published.",
     "OUTPUT_VALIDATION_FAILED": "The exported PNG failed independent dimensions, alpha, or padding validation.",
     "STAGING_WRITE_FAILED": "The candidate could not be published safely in staging.",
 }
@@ -55,7 +56,7 @@ class BridgeError(Exception):
     def __init__(self, code: str, *, connected: bool = False, diagnostics: dict | None = None):
         self.code = code if code in ERROR_MESSAGES else "INVALID_MESSAGE"
         self.connected = connected
-        # Locally constructed validation measurements only; never attach peer errors.
+        # Locally constructed measurements/allowlisted reason codes, never raw peer errors.
         self.diagnostics = diagnostics if self.code == "OUTPUT_VALIDATION_FAILED" else None
         super().__init__(ERROR_MESSAGES[self.code])
 
@@ -192,6 +193,16 @@ def error_info(code: str) -> ErrorInfo:
     return {"code": code, "message": ERROR_MESSAGES[code]}
 
 
+def peer_failure(error: dict) -> BridgeError:
+    # Only a fixed reason enum crosses the bridge; never echo peer text/objects.
+    diagnostics = None
+    if error["code"] == "OUTPUT_VALIDATION_FAILED":
+        reason = error.get("reason")
+        diagnostics = {"failed_condition": reason if isinstance(reason, str) and reason in REMOVAL_REASONS
+                       else "NATIVE_OUTPUT_VALIDATION_FAILED"}
+    return BridgeError(error["code"], connected=True, diagnostics=diagnostics)
+
+
 def envelope(result: dict | None = None, *, elapsed_ms: float | None = None,
              error: BridgeError | None = None) -> dict:
     failure = error_info(error.code) if error else None
@@ -276,16 +287,24 @@ def validate_result(operation: str, data: dict) -> None:
     if operation == PROCESS_OPERATION:
         required = {"png_base64", "width_px", "height_px",
                     "background_removal_requested", "background_removal_completed"}
-        require(required <= set(data) <= required | {"resampled_alpha_crc32"})
+        require(required <= set(data) <= required | {"resampled_alpha_crc32", "removal_evidence"})
         if "resampled_alpha_crc32" in data:
             require(type(data["resampled_alpha_crc32"]) is int
                     and 0 <= data["resampled_alpha_crc32"] <= 0xffffffff)
         image_bytes(data["png_base64"])
         for field in ("width_px", "height_px"):
             require(type(data[field]) is int and 1 <= data[field] <= 2048)
-        # Phase 2A fails explicitly for removal instead of guessing an action descriptor.
-        require(data["background_removal_requested"] is False)
-        require(data["background_removal_completed"] is False)
+        require(type(data["background_removal_requested"]) is bool)
+        require(data["background_removal_completed"] is data["background_removal_requested"])
+        if data["background_removal_requested"]:
+            evidence = data.get("removal_evidence")
+            require(isinstance(evidence, dict) and set(evidence) == REMOVAL_FIELDS)
+            require(all(type(v) is int and 0 <= v <= 0xffffffff for v in evidence.values()))
+            require(all(evidence[key] <= 2048 * 2048 for key in
+                        ("visible_pixels", "removed_pixels", "foreground_pixels")))
+            require("resampled_alpha_crc32" in data)
+        else:
+            require("removal_evidence" not in data)
         return
     if operation == "photoshop_ping":
         required = {"photoshop_version", "host_version", "uxp_version", "plugin_version"}
