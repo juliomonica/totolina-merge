@@ -2,5 +2,6 @@
   "repositoryRoot": "D:\\Development\\totolina-merge",
   "desktopExe": "C:\\path\\to\\ChatGPT.exe",
   "photoshopExe": "C:\\Program Files\\Adobe\\Adobe Photoshop 2026\\Photoshop.exe",
-  "udtExe": "C:\\Program Files\\Adobe\\Adobe UXP Developer Tools\\Adobe UXP Developer Tools.exe"
+  "udtExe": "C:\\Program Files\\Adobe\\Adobe UXP Developer Tools\\Adobe UXP Developer Tools.exe",
+  "godotExe": "C:\\path\\to\\Godot_v4.7.2-stable_win64.exe"
 }

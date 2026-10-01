@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('art', 'art-refresh', 'art-dev', 'dev', 'dev-refresh')]
+    [ValidateSet('art', 'art-refresh', 'art-dev', 'dev', 'dev-refresh', 'godot', 'godot-refresh')]
     [string]$Mode,
     [switch]$Check
 )
@@ -9,8 +9,10 @@ try {
     $root = Get-RepositoryRoot
     $config = Read-LauncherConfig $root
     if ($Check) {
-        foreach ($key in @('desktopExe', 'photoshopExe', 'udtExe')) {
-            if ($config.$key) { Assert-Executable $config.$key $key }
+        foreach ($key in @('desktopExe', 'photoshopExe', 'udtExe', 'godotExe')) {
+            if ($config.$key -or ($key -eq 'godotExe' -and $Mode -in @('godot', 'godot-refresh'))) {
+                Assert-Executable $config.$key $key
+            }
         }
         $target = Get-DesktopLaunchTarget $config.desktopExe
         if ($target.Kind -eq 'Packaged') { Write-Host "Desktop activation: shell:AppsFolder\$($target.Aumid)" }

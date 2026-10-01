@@ -1,4 +1,4 @@
-param([string]$DesktopExe, [string]$PhotoshopExe, [string]$UdtExe)
+param([string]$DesktopExe, [string]$PhotoshopExe, [string]$UdtExe, [string]$GodotExe)
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 function Find-OneExecutable($Candidates, $Kind) {
@@ -40,19 +40,22 @@ try {
         if ($old -and $old.udtExe -and (Test-Path -LiteralPath $old.udtExe)) { $UdtExe = $old.udtExe }
         else { $UdtExe = Find-OneExecutable @((Join-Path $env:ProgramFiles 'Adobe/Adobe UXP Developer Tools/Adobe UXP Developer Tools.exe')) 'UDT' }
     }
-    $config = [ordered]@{ repositoryRoot = $root; desktopExe = $DesktopExe; photoshopExe = $PhotoshopExe; udtExe = $UdtExe }
+    # Godot has no fixed installation location. Only accept an explicit override
+    # or preserve the saved machine-local path; do not guess another executable.
+    if (-not $GodotExe -and $old) { $GodotExe = $old.godotExe }
+    $config = [ordered]@{ repositoryRoot = $root; desktopExe = $DesktopExe; photoshopExe = $PhotoshopExe; udtExe = $UdtExe; godotExe = $GodotExe }
     Assert-Executable $DesktopExe 'desktopExe'
-    foreach ($key in @('photoshopExe', 'udtExe')) {
+    foreach ($key in @('photoshopExe', 'udtExe', 'godotExe')) {
         if ($config[$key]) { Assert-Executable $config[$key] $key }
         else { Write-Host "$key not installed; workflows requiring it will explain how to configure it." }
     }
     $config | ConvertTo-Json | Set-Content -LiteralPath $local -Encoding UTF8
-    foreach ($mode in @('art', 'art-refresh', 'art-dev', 'dev', 'dev-refresh')) {
+    foreach ($mode in @('art', 'art-refresh', 'art-dev', 'dev', 'dev-refresh', 'godot', 'godot-refresh')) {
         $alias = '!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 ' + $mode
         & git -C $root config --local --replace-all "alias.$mode" $alias
         if ($LASTEXITCODE -ne 0) { throw "Could not install local alias $mode." }
     }
-    Write-Host 'Installed five repository-local aliases. Local paths saved; no global Git settings or MCP settings changed.'
+    Write-Host 'Installed seven repository-local aliases. Local paths saved; no global Git settings or MCP settings changed.'
     Write-Host 'Use Git Bash in this checkout. See tools/LUNITORA_COMMANDS.md for one-time plugin setup.'
 } catch {
     Write-Error $_ -ErrorAction Continue
