@@ -14,9 +14,10 @@ from mcp import Client
 
 from core.godot_server import create_server
 from modules.godot.config import Config, HOST, ROOT
-from modules.godot.protocol import BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, encode, envelope, validate_result
+from modules.godot.protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, READ_OPERATIONS,
+                                   WRITE_OPERATION, encode, envelope, validate_result)
 from modules.godot.tools import MAX_TOOL_RESULT_BYTES, MCP_ENVELOPE_RESERVE_BYTES, tool_result
-from tests.fake_godot_client import FakeGodotClient, ROOT_NODE, SAVED_SCENE, disposable_credential, ping
+from tests.fake_godot_client import FakeGodotClient, LAB_SCENE, ROOT_NODE, SAVED_SCENE, disposable_credential, ping
 
 
 def free_port() -> int:
@@ -55,7 +56,7 @@ def last_fitting_repeat(character: str) -> int:
 
 
 class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
-    async def test_only_three_tools_with_closed_empty_inputs_and_annotations(self):
+    async def test_only_four_tools_with_closed_empty_inputs_and_annotations(self):
         async with Client(create_server(Config(), disposable_credential(), port=0)) as client:
             listing = (await client.list_tools()).tools
             self.assertEqual({tool.name for tool in listing}, OPERATIONS)
@@ -63,9 +64,9 @@ class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(tool.input_schema["properties"], {})
                 self.assertFalse(tool.input_schema["additionalProperties"])
                 self.assertEqual(tool.input_schema["maxProperties"], 0)
-                self.assertTrue(tool.annotations.read_only_hint)
+                self.assertEqual(tool.annotations.read_only_hint, tool.name in READ_OPERATIONS)
                 self.assertFalse(tool.annotations.destructive_hint)
-                self.assertTrue(tool.annotations.idempotent_hint)
+                self.assertEqual(tool.annotations.idempotent_hint, tool.name in READ_OPERATIONS)
                 self.assertFalse(tool.annotations.open_world_hint)
                 self.assertFalse(tool.output_schema["additionalProperties"])
                 Draft202012Validator.check_schema(tool.output_schema)
@@ -99,15 +100,15 @@ class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
     async def test_inprocess_client_with_fake_authenticated_editor(self):
         credential, port = disposable_credential(), free_port()
         async with Client(create_server(Config(), credential, port=port)) as client:
-            async with FakeGodotClient(credential, port):
-                for operation in OPERATIONS:
+            async with FakeGodotClient(credential, port, scene=LAB_SCENE, nodes=[ROOT_NODE]):
+                for operation in (*READ_OPERATIONS, WRITE_OPERATION):
                     response = await client.call_tool(operation, {})
                     self.assertFalse(response.is_error)
                     self.assertTrue(response.structured_content["connected"])
 
     async def test_unavailable_and_conflicting_listeners_do_not_disable_discovery(self):
         async with Client(create_server(Config(), None, port=0)) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 3)
+            self.assertEqual(len((await client.list_tools()).tools), 4)
             response = await client.call_tool("godot_ping", {})
             self.assertEqual(response.structured_content["error"]["code"], "LOCAL_AUTH_UNSAFE")
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
@@ -115,7 +116,7 @@ class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
             occupied.listen(1)
             server = create_server(Config(), disposable_credential(), port=occupied.getsockname()[1])
             async with Client(server) as client:
-                self.assertEqual(len((await client.list_tools()).tools), 3)
+                self.assertEqual(len((await client.list_tools()).tools), 4)
                 response = await client.call_tool("godot_ping", {})
                 self.assertEqual(response.structured_content["error"]["code"], "PORT_IN_USE")
 
@@ -213,9 +214,10 @@ class GodotStdioTests(unittest.IsolatedAsyncioTestCase):
     async def test_raw_stdio_extra_null_missing_and_nonobjects_rejected_before_sdk(self):
         process = await self.child()
         await self.initialize(process)
-        params_cases = [{"name": "godot_ping", "arguments": arguments}
+        params_cases = [{"name": operation, "arguments": arguments}
+                        for operation in ("godot_ping", WRITE_OPERATION)
                         for arguments in ({"unexpected": True}, None, [], False, "")]
-        params_cases.append({"name": "godot_ping"})
+        params_cases.extend({"name": operation} for operation in ("godot_ping", WRITE_OPERATION))
         for request_id, params in enumerate(params_cases, 2):
             with self.subTest(request_id=request_id):
                 response = await self.exchange(process, request_id, "tools/call", params)
@@ -228,7 +230,7 @@ class GodotStdioTests(unittest.IsolatedAsyncioTestCase):
         process = await self.child(unsafe=True)
         await self.initialize(process)
         listing = await self.exchange(process, 2, "tools/list", {})
-        self.assertEqual(len(listing["result"]["tools"]), 3)
+        self.assertEqual(len(listing["result"]["tools"]), 4)
         response = await self.exchange(process, 3, "tools/call", {"name": "godot_ping", "arguments": {}})
         self.assertEqual(response["result"]["structuredContent"]["error"]["code"], "LOCAL_AUTH_UNSAFE")
         await self.assert_clean_shutdown(process)

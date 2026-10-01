@@ -1,4 +1,4 @@
-"""Exactly three read-only tools; enforce empty input before SDK argument coercion."""
+"""Three metadata reads and one fixed lab write; exact empty public inputs."""
 from __future__ import annotations
 
 from typing import Annotated
@@ -8,7 +8,7 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
 from .bridge import GodotBridge
 from .protocol import (BridgeError, EditorStateResult, MAX_PAYLOAD_BYTES, OPERATIONS, PingResult,
-                       SceneInspectionResult, encode, envelope)
+                       RigLabResult, SceneInspectionResult, WRITE_OPERATION, encode, envelope, validate_result)
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False, "maxProperties": 0}
 # The text block and structured content both contain the metadata for MCP client
@@ -79,11 +79,30 @@ async def exact_empty_arguments(ctx, call_next):
 
 
 async def call_bridge(bridge: GodotBridge, operation: str) -> CallToolResult:
+    dispatched = False
     try:
         data, elapsed_ms = await bridge.request(operation, {})
-        return tool_result(envelope(data, elapsed_ms=elapsed_ms))
+        dispatched = True
+        if operation == WRITE_OPERATION:
+            validate_result(operation, data)
+        result = tool_result(envelope(data, elapsed_ms=elapsed_ms))
+        if operation == WRITE_OPERATION and not result.structured_content["ok"]:
+            bridge.retain_unknown_write()
+            return tool_result(envelope(error=BridgeError("WRITE_OUTCOME_UNKNOWN", connected=True)))
+        return result
     except BridgeError as error:
+        if dispatched and operation == WRITE_OPERATION:
+            bridge.retain_unknown_write()
+            error = BridgeError("WRITE_OUTCOME_UNKNOWN", connected=True)
         return tool_result(envelope(error=error))
+    except Exception:
+        if operation != WRITE_OPERATION:
+            raise
+        if dispatched:
+            bridge.retain_unknown_write()
+        # Never claim failed/no mutation after a successful dispatch whose MCP
+        # serialization or validation failed. Do not echo arbitrary exceptions.
+        return tool_result(envelope(error=BridgeError("WRITE_OUTCOME_UNKNOWN", connected=True)))
 
 
 def register_tools(server: GodotMCPServer, bridge: GodotBridge) -> None:
@@ -105,3 +124,11 @@ def register_tools(server: GodotMCPServer, bridge: GodotBridge) -> None:
     async def godot_inspect_scene() -> Annotated[CallToolResult, SceneInspectionResult]:
         """Read bounded current-scene node metadata and animation names; no tracks, images or script data."""
         return await call_bridge(bridge, "godot_inspect_scene")
+
+    write_annotations = ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                        idempotent_hint=False, open_world_hint=False)
+
+    @server.tool(annotations=write_annotations)
+    async def godot_create_rig_lab() -> Annotated[CallToolResult, RigLabResult]:
+        """Create exactly seven fixed lab scaffold nodes in one undo action, only in the approved open lab. Never saves, plays, replaces or edits production scenes. Unknown outcomes require a fresh read and review; never retry automatically."""
+        return await call_bridge(bridge, WRITE_OPERATION)

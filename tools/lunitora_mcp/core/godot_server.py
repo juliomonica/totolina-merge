@@ -1,4 +1,4 @@
-"""Run the separate read-only Godot MCP using the toolkit's locked environment."""
+"""Run Godot metadata reads and one fixed undoable lab scaffold operation."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -25,8 +25,10 @@ def create_server(config: Config, credential: Credential | None, *,
 
     server = GodotMCPServer(
         "Lunitora Godot", version=BRIDGE_VERSION, lifespan=lifespan, log_level="WARNING",
-        instructions="Exactly three strictly read-only Godot editor operations. Each takes exactly {}. "
-                     "No node/resource/selection/playback/project-settings/save/undo modifications exist. "
+        instructions="Three read-only Godot metadata tools and godot_create_rig_lab; each takes exactly {}. "
+                     "The write only adds its fixed scaffold to the exact open, saved lab through one editor undo action. "
+                     "No generic property/method/script/resource APIs, saving, playback or production writes exist. "
+                     "Unknown write outcomes require a fresh editor read and human review; never retry automatically. "
                      "Tool discovery remains available when the editor or local bridge is unavailable.",
     )
     register_tools(server, bridge)

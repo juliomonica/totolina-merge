@@ -22,6 +22,8 @@ import zipfile
 
 ADDON = "addons/lunitora_godot/"
 EXCLUSION = ADDON + "*"
+ADDON_SCRIPT_CONTROLS = ("plugin.gd", "bridge_client.gd", "inspection.gd", "rig_lab.gd")
+ADDON_SCENE_CONTROLS = ("labs/totolina_rig_lab.tscn",)
 ERROR_PATTERN = re.compile(r"(?im)(?:^\s*(?:SCRIPT ERROR:|ERROR:)|FATAL|CrashHandler)")
 RESOURCE = '[gd_resource type="Resource" format=3]\n\n[resource]\n'
 
@@ -70,12 +72,33 @@ def run_engine(command: list[str], log: Path, env: dict[str, str], timeout: int)
         raise RuntimeError(f"Godot export failed (exit {result}); inspect {log}")
 
 
-def verify_zip(path: Path, *, excluded: bool, full_project: bool = False) -> dict[str, int | bool]:
+def verify_resource_control(package: zipfile.ZipFile, normalized_entries: dict[str, str], relative: str) -> str:
+    """Require a real source resource or its exported artifact, following remaps."""
+    source = ADDON + relative
+    if source in normalized_entries:
+        return source
+    remap = source + ".remap"
+    if remap in normalized_entries:
+        data = package.read(normalized_entries[remap]).decode("utf-8", errors="strict")
+        targets = re.findall(r'(?m)^path="res://([^"]+)"$', data)
+        if len(targets) != 1 or targets[0] not in normalized_entries:
+            raise RuntimeError(f"Positive addon remap has no unique packaged target: {relative}")
+        return targets[0]
+    compiled = str(Path(source).with_suffix(".gdc" if source.endswith(".gd") else ".scn")).replace("\\", "/")
+    if compiled in normalized_entries:
+        return compiled
+    raise RuntimeError(f"Positive actual addon-resource control is absent: {relative}")
+
+
+def verify_zip(path: Path, *, excluded: bool, full_project: bool = False) -> dict[str, object]:
     with zipfile.ZipFile(path) as package:
         entries = package.namelist()
         if len(entries) != len(set(entries)):
             raise RuntimeError("Duplicate package entries")
-        normalized = [entry.removeprefix("res://").lstrip("/") for entry in entries]
+        normalized_entries = {entry.removeprefix("res://").lstrip("/"): entry for entry in entries}
+        if len(normalized_entries) != len(entries):
+            raise RuntimeError("Duplicate normalized package entries")
+        normalized = list(normalized_entries)
         if not any(entry.startswith("keep.tres") for entry in normalized):
             raise RuntimeError("Positive runtime-resource control is absent")
         if full_project and not any(entry in ("scenes/menu/main_menu.tscn", "scenes/menu/main_menu.tscn.remap") for entry in normalized):
@@ -85,31 +108,34 @@ def verify_zip(path: Path, *, excluded: bool, full_project: bool = False) -> dic
             raise RuntimeError("Local credential fixture leaked into a package")
         if excluded and addon_entries:
             raise RuntimeError("Addon resources or remaps remain in the excluded package")
+        actual_controls: dict[str, str] = {}
         if not excluded:
             if not any(entry.startswith(ADDON + "export_probe.tres") for entry in addon_entries):
                 raise RuntimeError("Positive addon-resource control is absent")
             if not any(entry.startswith(ADDON + "nested/export_probe.tres") for entry in addon_entries):
                 raise RuntimeError("Nested positive addon-resource control is absent")
-            for script in ("plugin.gd", "bridge_client.gd", "inspection.gd"):
-                if not any(entry in (ADDON + script, ADDON + script + ".remap") or
-                           entry == ADDON + script[:-3] + ".gdc" for entry in addon_entries):
-                    raise RuntimeError(f"Positive addon-script control is absent: {script}")
+            for resource in (*ADDON_SCRIPT_CONTROLS, *ADDON_SCENE_CONTROLS):
+                actual_controls[resource] = verify_resource_control(package, normalized_entries, resource)
         # An exported .remap may lead to bytecode under .godot/exported rather
         # than the source folder. The excluded package must have no artifact
         # targeted by any addon remap in its positive-control package; checked
         # by compare_packages below.
-        return {"entries": len(entries), "addon_entries": len(addon_entries), "excluded": excluded}
+        return {"entries": len(entries), "addon_entries": len(addon_entries), "excluded": excluded,
+                "actual_addon_resource_controls": actual_controls}
 
 
 def compare_packages(excluded_path: Path, control_path: Path) -> int:
     targets: set[str] = set()
     with zipfile.ZipFile(control_path) as control:
+        control_names = {entry.removeprefix("res://").lstrip("/") for entry in control.namelist()}
         for entry in control.namelist():
             normalized = entry.removeprefix("res://").lstrip("/")
             if normalized.startswith(ADDON) and normalized.endswith(".remap"):
                 remap = control.read(entry).decode("utf-8", errors="strict")
                 for match in re.finditer(r'(?m)^path="res://([^"]+)"$', remap):
                     targets.add(match.group(1))
+        if not targets.issubset(control_names):
+            raise RuntimeError("Positive addon remap target is absent from its control package")
     with zipfile.ZipFile(excluded_path) as excluded:
         names = {entry.removeprefix("res://").lstrip("/") for entry in excluded.namelist()}
         if targets & names:
@@ -158,8 +184,8 @@ def main() -> None:
         parser.error("Godot not found; pass --godot /absolute/path/to/Godot")
     repository = Path(__file__).resolve().parents[2]
     addon = repository / ADDON
-    if not all((addon / filename).is_file() for filename in ("plugin.cfg", "plugin.gd", "bridge_client.gd", "inspection.gd")):
-        parser.error("The v0.1 addon must exist before package validation")
+    if not all((addon / filename).is_file() for filename in ("plugin.cfg", *ADDON_SCRIPT_CONTROLS, *ADDON_SCENE_CONTROLS)):
+        parser.error("The v0.2 addon helper and actual rig-lab fixture must exist before package validation")
     if args.artifacts_dir:
         artifacts = args.artifacts_dir.resolve()
         if artifacts.is_relative_to(repository) and not artifacts.is_relative_to(repository / ".godot"):
@@ -195,6 +221,13 @@ def main() -> None:
     preset_path = project / "export_presets.cfg"
     preset_path.write_bytes(source_bytes)
     env = dict(os.environ)
+    # Godot's exporter uses a fixed tmpproject.binary under the OS temp root.
+    # Keep it private to this run so parallel editor/export fixtures cannot
+    # collide or inherit another test process's temporary-file permissions.
+    native_temp = artifacts / "native-temp"
+    native_temp.mkdir()
+    for name in ("TEMP", "TMP", "TMPDIR"):
+        env[name] = str(native_temp)
     if os.name == "nt":
         env["APPDATA"] = str(artifacts / "userdata")
         env["LOCALAPPDATA"] = str(artifacts / "cache")
@@ -212,7 +245,10 @@ def main() -> None:
         run_engine(base + ["--editor", "--import", "--quit"], artifacts / "import.log", env, args.timeout)
     finally:
         settings.write_bytes(original_settings)
-    report: dict[str, object] = {"godot_executable": str(Path(engine).resolve()), "fixture": "isolated working-tree runtime project" if args.full_project else "isolated native exporter", "presets": {}}
+    report: dict[str, object] = {"godot_executable": str(Path(engine).resolve()),
+                               "native_temp_directory": str(native_temp),
+                               "fixture": "isolated working-tree runtime project" if args.full_project else "isolated native exporter",
+                               "presets": {}}
     for name, (section, body) in presets.items():
         without = without_addon_exclusion(source, section, body)
         preset_path.write_bytes(source_bytes)

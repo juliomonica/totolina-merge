@@ -4,7 +4,7 @@
 **Current game:** Totolina Merge  
 **Engine:** Godot 4.7.2  
 **Platforms:** Android + iOS  
-**Status:** Architecture agreement before MCP implementation  
+**Status:** Godot v0.2 fixed rig-lab scaffold; broader animation capabilities remain a roadmap
 **Purpose:** Source of truth for how Lunitora will automate art preparation, character rigging, animation, VFX, and development workflows through one extensible MCP toolkit.
 
 ---
@@ -28,6 +28,37 @@ The user should eventually be able to ask Codex things such as:
 - Later: add sound, haptics, camera effects, remote iOS builds, and other capabilities.
 
 The MCP is an automation layer. It does not replace human art direction.
+
+The current Godot implementation exposes three read-only metadata operations
+and one fixed writer, `godot_create_rig_lab({})`. The writer is restricted to
+`res://addons/lunitora_godot/labs/totolina_rig_lab.tscn` with the native,
+script-free `TotolinaRigLab` Node2D root. It creates seven owned nodes under
+`TotolinaRigV2`: `Meshes/TestMesh` (Polygon2D), a `Skeleton2D` with `Root/Tip`
+Bone2D nodes, and an empty `AnimationPlayer`. The exact mesh color is
+`Color(0.25, 0.5, 1.0, 1.0)`; fixed geometry, rest poses and two bone-weight
+arrays provide a minimal synthetic binding fixture. No current Totolina art is
+replaced, no animation is authored or played, and no scene is automatically saved.
+
+Creation uses a fresh authenticated editor-state barrier and one synchronous,
+non-reentrant native Undo/Redo action. It verifies the generated recipe,
+ownership, current scene/session, dirty state and scene-history change after
+commit. A possibly sent write cannot be retried while its outcome is unresolved;
+later compatible reads establish execution ordering, not semantic success.
+The editor's bounded write-ID ledger survives socket reconnection and Python
+owner restart, rejects replay and stops admitting writes at its limit. If an
+action began but verification failed, the writer reports uncertainty and faults
+the editor session rather than performing automatic repair. Bridge/plugin
+version is 0.2.0; the authenticated protocol remains 1. See the current
+[Godot implementation and acceptance guide](../tools/lunitora_mcp/GODOT_README.md).
+
+The broader plan below is a roadmap, including reusable animation beyond the
+current artwork: native skeletal rigs where articulation helps, AnimationPlayer
+for timelines, Tween for small transitions, AnimatedSprite2D for frame animation,
+and lightweight UI/environment/VFX components. Each capability is added only
+when a concrete use and its anti-regression checks are established under
+[ANIMATION_GUIDELINES.md](ANIMATION_GUIDELINES.md). The historical Godot v0.1
+milestone delivered inspection only; the lists below do not imply general rig,
+animation, controller or VFX authoring is already available.
 
 ---
 
@@ -656,7 +687,7 @@ No premature complexity.
 
 # 15. VFX Module
 
-MCP v0.1 should support basic VFX used by Totolina Merge.
+A later VFX module should support basic effects used by Totolina Merge.
 
 Initial targets:
 
@@ -795,7 +826,14 @@ Walk/run/jump can follow after the core rig is proven.
 
 ---
 
-# 20. MCP v0.1 Scope
+# 20. Original roadmap scope — historical planning
+
+This list records the original broad architecture target, not the current tool
+allowlist. Godot v0.1 implemented inspection only; v0.2 adds the single fixed
+rig-lab scaffold described above. General animation/VFX authoring, production
+character migration, batch rig editing and controller creation remain future
+work. Current Photoshop capabilities are documented separately in the toolkit
+README.
 
 ## Included
 
@@ -1068,7 +1106,7 @@ Add only when justified:
 
 The toolkit is successful when it reduces manual repetitive work without reducing control or introducing maintenance burden.
 
-For v0.1, success means:
+The original longer-term success target was:
 
 - wife can drop one or many source images into an inbox
 - Codex can prepare them through Photoshop
@@ -1112,7 +1150,24 @@ These decisions are considered agreed unless a real implementation problem prove
 
 # 27. Immediate Next Step
 
-Start **Phase 1: MCP Core + Photoshop connection**.
+v0.2 technical and live acceptance is complete. Bridge/plugin `0.2.0` was verified
+in the real checkout; `godot_create_rig_lab({})` succeeded exactly once. Native
+Undo removed the complete scaffold and restored the previously clean scene to
+clean; Redo restored it. Manual Save and scene close/reopen proved persistence,
+with AnimationPlayer remaining empty. The lab was restored to the intended empty
+native root, retaining normal Godot-authored `uid` / `unique_id` metadata.
+Targeted native rig and export exclusion/control checks passed against that
+normalized baseline. Executable iOS export/device behavior remains
+**NOT VALIDATED / REQUIRES MAC/iOS**.
+
+Review and commit the accepted v0.2 milestone before proposing small reusable
+animation-authoring operations. Production Totolina migration remains a
+separately reviewed change. Follow the [current Godot guide](../tools/lunitora_mcp/GODOT_README.md)
+for the acceptance record, setup and remaining device/visual validation.
+
+## Historical first milestone — Photoshop Phase 1
+
+The original first step was **Phase 1: MCP Core + Photoshop connection**.
 
 The first implementation milestone is deliberately small:
 

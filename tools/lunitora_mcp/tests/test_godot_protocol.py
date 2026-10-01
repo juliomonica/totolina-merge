@@ -6,7 +6,7 @@ import unittest
 from pydantic import TypeAdapter
 
 from modules.godot.protocol import (BridgeError, EditorStateResult, MAX_PAYLOAD_BYTES,
-                                   PingResult, SceneInspectionResult, decode, encode,
+                                   PingResult, RigLabResult, SceneInspectionResult, WRITE_OPERATION, decode, encode,
                                    envelope, proof, validate_authenticate, validate_hello,
                                    validate_response, validate_result, validate_scene)
 from tests.fake_godot_client import (NO_SCENE, ROOT_NODE, SAVED_SCENE, UNNAMED_SCENE,
@@ -26,7 +26,8 @@ class GodotProtocolTests(unittest.TestCase):
     def test_all_success_and_failure_contracts_validate(self):
         for operation, result_type in (("godot_ping", PingResult),
                                        ("godot_get_editor_state", EditorStateResult),
-                                       ("godot_inspect_scene", SceneInspectionResult)):
+                                       ("godot_inspect_scene", SceneInspectionResult),
+                                       (WRITE_OPERATION, RigLabResult)):
             with self.subTest(operation=operation):
                 data = result_for(operation, self.credential, NO_SCENE, [], [])
                 validate_result(operation, data)

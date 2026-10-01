@@ -1,6 +1,17 @@
 # Lunitora Photoshop MCP — v0.6 operator convenience
 
-Separate read-only Godot editor bridge: [Godot Animation MCP v0.1 setup](GODOT_README.md).
+Separate Godot profile: [Godot Animation MCP v0.2 setup and rig lab](GODOT_README.md).
+Its three metadata tools remain read-only. `godot_create_rig_lab({})` adds one
+fixed seven-node scaffold only in the dedicated `TotolinaRigLab` scene, with one
+native Undo/Redo action and no autosave. The blue test mesh uses exact
+`Color(0.25, 0.5, 1.0, 1.0)` and two fixed bones; the AnimationPlayer is empty.
+The writer binds requests to fresh editor-session reads, rejects re-entry and
+duplicate write IDs, verifies scene/history after committing, and fails closed
+when the outcome is uncertain. Bridge/plugin version is 0.2.0, protocol remains
+1, and Codex owns its separate port 43128 stdio process. The Godot guide records
+the broader reusable animation roadmap and separates historical v0.1 evidence
+from current v0.2 acceptance. Photoshop implementation and port 43127 remain
+independent.
 
 Repository-controlled Photoshop bridge with two compatible read-only tools,
 photoshop_ping and photoshop_get_active_document, plus photoshop_process_image
