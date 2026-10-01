@@ -15,7 +15,7 @@ from mcp import Client
 from core.godot_server import create_server
 from modules.godot.config import Config, HOST, ROOT
 from modules.godot.protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, READ_OPERATIONS,
-                                   WRITE_OPERATION, encode, envelope, validate_result)
+                                   WRITE_OPERATION, WRITE_OPERATIONS, ANIMATION_WRITE_OPERATION, encode, envelope, validate_result)
 from modules.godot.tools import MAX_TOOL_RESULT_BYTES, MCP_ENVELOPE_RESERVE_BYTES, tool_result
 from tests.fake_godot_client import FakeGodotClient, LAB_SCENE, ROOT_NODE, SAVED_SCENE, disposable_credential, ping
 
@@ -56,7 +56,7 @@ def last_fitting_repeat(character: str) -> int:
 
 
 class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
-    async def test_only_four_tools_with_closed_empty_inputs_and_annotations(self):
+    async def test_only_five_tools_with_closed_empty_inputs_and_annotations(self):
         async with Client(create_server(Config(), disposable_credential(), port=0)) as client:
             listing = (await client.list_tools()).tools
             self.assertEqual({tool.name for tool in listing}, OPERATIONS)
@@ -101,14 +101,14 @@ class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
         credential, port = disposable_credential(), free_port()
         async with Client(create_server(Config(), credential, port=port)) as client:
             async with FakeGodotClient(credential, port, scene=LAB_SCENE, nodes=[ROOT_NODE]):
-                for operation in (*READ_OPERATIONS, WRITE_OPERATION):
+                for operation in (*READ_OPERATIONS, WRITE_OPERATION, ANIMATION_WRITE_OPERATION):
                     response = await client.call_tool(operation, {})
                     self.assertFalse(response.is_error)
                     self.assertTrue(response.structured_content["connected"])
 
     async def test_unavailable_and_conflicting_listeners_do_not_disable_discovery(self):
         async with Client(create_server(Config(), None, port=0)) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 4)
+            self.assertEqual(len((await client.list_tools()).tools), 5)
             response = await client.call_tool("godot_ping", {})
             self.assertEqual(response.structured_content["error"]["code"], "LOCAL_AUTH_UNSAFE")
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
@@ -116,7 +116,7 @@ class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
             occupied.listen(1)
             server = create_server(Config(), disposable_credential(), port=occupied.getsockname()[1])
             async with Client(server) as client:
-                self.assertEqual(len((await client.list_tools()).tools), 4)
+                self.assertEqual(len((await client.list_tools()).tools), 5)
                 response = await client.call_tool("godot_ping", {})
                 self.assertEqual(response.structured_content["error"]["code"], "PORT_IN_USE")
 
@@ -215,9 +215,9 @@ class GodotStdioTests(unittest.IsolatedAsyncioTestCase):
         process = await self.child()
         await self.initialize(process)
         params_cases = [{"name": operation, "arguments": arguments}
-                        for operation in ("godot_ping", WRITE_OPERATION)
+                        for operation in ("godot_ping", *WRITE_OPERATIONS)
                         for arguments in ({"unexpected": True}, None, [], False, "")]
-        params_cases.extend({"name": operation} for operation in ("godot_ping", WRITE_OPERATION))
+        params_cases.extend({"name": operation} for operation in ("godot_ping", *WRITE_OPERATIONS))
         for request_id, params in enumerate(params_cases, 2):
             with self.subTest(request_id=request_id):
                 response = await self.exchange(process, request_id, "tools/call", params)
@@ -230,7 +230,7 @@ class GodotStdioTests(unittest.IsolatedAsyncioTestCase):
         process = await self.child(unsafe=True)
         await self.initialize(process)
         listing = await self.exchange(process, 2, "tools/list", {})
-        self.assertEqual(len(listing["result"]["tools"]), 4)
+        self.assertEqual(len(listing["result"]["tools"]), 5)
         response = await self.exchange(process, 3, "tools/call", {"name": "godot_ping", "arguments": {}})
         self.assertEqual(response["result"]["structuredContent"]["error"]["code"], "LOCAL_AUTH_UNSAFE")
         await self.assert_clean_shutdown(process)

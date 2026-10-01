@@ -1,18 +1,18 @@
-# Lunitora Godot Animation MCP v0.2
+# Lunitora Godot Animation MCP v0.3
 
 This editor bridge exposes the three existing metadata tools, `godot_ping`,
-`godot_get_editor_state`, and `godot_inspect_scene`, plus the fixed lab operation
-`godot_create_rig_lab`. All four tools accept exactly `{}`; extra fields are
-rejected. Bridge and editor-plugin versions are **0.2.0**; the authenticated
+`godot_get_editor_state`, and `godot_inspect_scene`, plus two fixed lab operations:
+`godot_create_rig_lab` and `godot_create_rig_lab_animation`. All five accept exactly
+`{}`; extra fields are rejected. Bridge and editor-plugin versions are **0.3.0**; the authenticated
 transport protocol remains **1**. The Codex-owned Python stdio server listens on **127.0.0.1:43128**;
 Godot's `WebSocketPeer` connects from the enabled editor plugin. Photoshop's
 server, implementation, and **43127** port are separate. The Godot and Photoshop
 profiles share the existing `tools/operator_launcher` implementation.
 
-The three inspection operations retain their read-only behavior. The new writer
-adds only the seven-node scaffold described below to the dedicated rig lab, using
-one native editor Undo/Redo action. It never saves the lab, changes production
-scenes or artwork, creates animation clips, or starts animation playback.
+The three inspection operations retain their read-only behavior. The rig operation
+creates the seven-node scaffold; the separate animation operation requires that
+unchanged fixture and adds one synthetic clip in one native editor action. Neither
+saves the lab, changes production scenes/artwork, or starts animation playback.
 Inspection reads the current edited scene through public editor APIs and does
 not instantiate production scenes or inspect arbitrary script properties.
 
@@ -46,7 +46,7 @@ args = ['-B', '-m', 'core.godot_server']
 cwd = 'D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp'
 startup_timeout_sec = 15
 tool_timeout_sec = 10
-enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene', 'godot_create_rig_lab']
+enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene', 'godot_create_rig_lab', 'godot_create_rig_lab_animation']
 ```
 
 On this PC the user configuration is `C:\Users\julio\.codex\config.toml`.
@@ -246,13 +246,73 @@ cannot be verified, the editor writer is faulted for that session and reports
 `WRITE_OUTCOME_UNKNOWN`; it does not undo, save, or attempt another action as an
 automatic repair.
 
-Animation authoring follows only after this scaffold and its editor history are
-proven. The roadmap includes reusable rigs and AnimationPlayer, Tween,
+The separate v0.3 fixture operation below proves native animation-resource
+creation. The roadmap includes reusable rigs and AnimationPlayer, Tween,
 AnimatedSprite2D, and lightweight effects for other characters, UI, and worlds,
 following [ANIMATION_GUIDELINES.md](../../docs/ANIMATION_GUIDELINES.md). It must
 remain useful beyond the current Totolina artwork. Production migration,
-deformation polish, animation clips, playback controls, and general node/resource
+deformation polish, general animation editing, playback controls, and general node/resource
 editing are separate future capabilities.
+
+## Fixed rig-lab animation v0.3
+
+`godot_create_rig_lab_animation({})` requires the exact v0.2 rig at rest in the
+dedicated lab. The native, script-free player must resolve `root_node = ..` to
+`TotolinaRigV2`, retain native playback defaults and have no libraries (including
+an empty global library), animations, assignment, autoplay, active playback or
+queue. Modified rigs, production scenes and conflicting player state reject
+before action creation, preserving dirty state and redo history.
+
+The detached global library `&""` contains only `bend_tip`: length `1.0`, step
+`0.125`, `LOOP_NONE`, one enabled, non-imported `TYPE_VALUE` track at
+`Skeleton2D/Root/Tip:rotation`, `INTERPOLATION_LINEAR_ANGLE`, `UPDATE_CONTINUOUS`,
+loop wrap disabled, transitions `1.0`. Float keys are `0.0 → 0.0`,
+`0.5 → 0.3490658503988659`, `1.0 → 0.0`. Detached interpolation at `0.25`/`0.75`
+must match ten degrees within `1e-6` radians. There are no markers, RESET,
+autoplay or extra resources/tracks; the writer never seeks the live player.
+
+The one action `Lunitora: Create Rig Lab Animation` attaches the prepared library
+to the existing player. Undo removes it; Redo reattaches the same resource
+instances. Native bound Variant arguments retain the RefCounted resources;
+there are no node-only do/undo references, plugin lifetime cache, explicit
+resource frees or external `.tres` files. Final admission, action registration,
+commit, complete resource/player/scene/history verification and writer epilogue
+are synchronous. `RIG_LAB_ANIMATION_BUILD_FAILED` applies only before action
+creation; uncertain post-action state becomes `WRITE_OUTCOME_UNKNOWN` and faults
+both writers. Never automatically retry, Undo or repair that result. Both writers
+share the non-evicting 128-ID editor-session ledger, guard and transport fence;
+terminal settlement correlates operation, ID, connection and editor session.
+
+AnimationPlayer-editor safety behavior is verified specifically against Godot
+**4.7.2**. Admission inspects the target's `animation_list_changed`,
+`current_animation_changed`, `animation_finished` and `caches_cleared`
+connections. Godot's native `AnimationPlayerEditor` receiver is identifiable;
+unclassified relevant observers also reject as a temporary **lab-only** limit.
+`LAB_ANIMATION_EDITOR_BUSY` rejects attachment. `LAB_ANIMATION_EDITOR_SETTLING`
+requires an initial quiet normal plugin process observation and a strictly later
+stable normal process pass. Scene/root/player/session replacement and selection,
+inspector or scene changes invalidate the observation. Same-pass recursion cannot
+mature it. This normal process barrier settles copied deferred callbacks; a
+disappearing connection or a bare `process_frame` await alone is insufficient.
+The writer never disconnects callbacks or changes editor UI.
+
+**Recovery:** unpin the AnimationPlayer, switch the bottom panel away from
+Animation (for example to Output), manually save if needed, close/reopen the lab
+and keep Animation hidden. Unpinning or selecting the root alone does not detach
+Godot 4.7.2's editor. Do not automatically retry a rejected request.
+
+The strict unassigned/stopped/rest-pose Undo/Redo guarantee requires the proven
+detached and settled conditions throughout the controlled cycle. Attaching the native
+AnimationPlayer editor after Undo can make ordinary Redo select/assign the clip
+and seek after deferred editor frames. Native Undo/Redo remains unmodified.
+General animation capabilities must support appropriate Godot-native techniques
+beyond current artwork; missing source pieces should be reported explicitly.
+This fixture does not define production character architecture.
+
+The APIs and lifetime wiring follow the official
+[Godot 4.7 Animation documentation](https://docs.godotengine.org/en/4.7/classes/class_animation.html),
+[EditorUndoRedoManager documentation](https://docs.godotengine.org/en/4.7/classes/class_editorundoredomanager.html)
+and [4.7.2 AnimationPlayer editor source](https://github.com/godotengine/godot/blob/4.7.2-stable/editor/animation/animation_player_editor_plugin.cpp).
 
 ## Validation commands
 
@@ -277,16 +337,25 @@ with the installed Godot 4.7.2 executable and use isolated project copies;
 synthetic fixtures are not production rigs.
 
 ```powershell
-& ./tools/lunitora_mcp/.venv/Scripts/python.exe -B ./tests/godot_mcp/run_native_validation.py --godot 'D:/Development/Tools/Godot/4.7.2/Godot_v4.7.2-stable_win64_console.exe'
+& ./tools/lunitora_mcp/.venv/Scripts/python.exe -B ./tests/godot_mcp/run_native_validation.py --godot 'D:/Development/Tools/Godot/4.7.2/Godot_v4.7.2-stable_win64_console.exe' --timeout 120
 ```
 
 This runner copies only the addon and fixtures into a disposable project,
 enables the plugin there, checks actual editor startup/import/parsing, and
 requires exactly 56 successful native inspection/security checks. A second,
 test-only EditorPlugin then exercises the rig writer and actual editor Undo/Redo
-commands in that copy; its check count is reported separately. Neither controller
-nor fixture hooks are added to the production plugin. Logs and editor data
+commands in that copy; a separate real graphical Windows editor exercises the
+v0.3 admission, deterministic animation, native history/lifetime, save-point,
+persistence and fault matrix. Public registered MCP tests also exercise actual
+authenticated transport and graphical frames. Controllers and their callback
+overrides exist only in disposable copies. Logs and editor data
 remain in the printed temporary artifact directory.
+
+Windows graphical transport fixtures start the editor before acquiring test
+credential directory pins: Godot's startup replacement save of `project.godot`
+conflicts with those existing security pins. The fixture then reacquires the same
+protected project credential and authenticates before any MCP operation. This
+bootstrap changes no production security or machine configuration.
 
 The export gate executes Godot's real Android and iOS **data-package** exporters
 using the exact repository presets in an isolated runtime-resource copy. It verifies
@@ -299,9 +368,12 @@ Each native process receives private `TEMP`, `TMP`, and `TMPDIR` paths under its
 artifact directory, keeping Godot's `tmpproject.binary` separate from parallel
 fixtures. Strict engine-error detection remains enabled.
 Then it removes only the addon exclusion in each disposable preset as a positive
-control and requires the actual `rig_lab.gd` helper and
+control and requires the actual `rig_lab.gd` and `animation_writer.gd` helpers and
 `labs/totolina_rig_lab.tscn` fixture, existing addon scripts, and nested resources
-to appear. Each positive remap must point to a packaged artifact, including
+to appear. `--authored-lab-scene` accepts a retained actual public-writer native
+Save/Reopen artifact; only the disposable lab copy is replaced. The positive
+packages are then loaded natively to verify the complete inline rig/animation
+recipe. Each positive remap must point to a packaged artifact, including
 compiled scripts/scenes outside the addon folder; all those targets must be
 absent from the excluded package. A runtime
 resource must appear in every package, and local credential probes must not.
@@ -349,10 +421,10 @@ Rendered animation quality remains **REQUIRES USER REVIEW** unless the user has
 reviewed it. Mobile behavior remains **REQUIRES ANDROID DEVICE** or
 **REQUIRES MAC/iOS**; desktop and ZIP tests do not establish device acceptance.
 
-The historical v0.1 implementation contained inspection only. The current v0.2
-adds the fixed lab scaffold above; animation playback/authoring, general resource
-writes, production migration, new operator aliases, staging, commits, and pushes
-remain outside its scope.
+The historical v0.1 implementation contained inspection only. v0.2 added the
+fixed lab scaffold; v0.3 adds only its separate fixed animation operation.
+General animation editing/playback controls, generic resource writes, production
+migration and new operator aliases remain outside this milestone.
 
 ## Historical implementation file manifest — v0.1
 
@@ -457,7 +529,7 @@ around tool calls. Run the live Photoshop tools concurrently for operator
 acceptance. Graphical captures remain **REQUIRES USER REVIEW** for subjective
 presentation quality; mobile behavior requires the relevant devices.
 
-## Current v0.2 regression and package record — 2026-09-30
+## Accepted v0.2 regression and package record — 2026-09-30
 
 The independent regression and export run used actual Godot
 `4.7.2.stable.official.ed1daf0bf` and preserved all **224** baseline tracked
@@ -537,3 +609,51 @@ data exports with exclusion/positive controls; 224 production/lab hashes and all
 352 repository file hashes remained unchanged. Executable iOS export/device
 behavior remains **NOT VALIDATED / REQUIRES MAC/iOS**; the executable iOS template
 is missing.
+
+## v0.3 automated acceptance — 2026-10-01
+
+**VERIFIED:** Godot `4.7.2.stable.official.ed1daf0bf`, bridge/plugin `0.3.0`,
+protocol `1`. All 155 Godot Python tests passed: 130 protocol/schema/transport
+unit tests and 25 native transport/safety/public-writer tests, including three
+real Windows graphical public-tool cases. The native runner passed 56 inspection,
+442 v0.2 rig and 603 graphical animation assertions (1,101 total). Safe Create,
+native Undo/Redo after editor frames, exact resource identity/disposal, clean and
+dirty save points, disposable manual Save/Reopen, observer/queued-callback
+settlement, replay/reconnect/session ordering and shared post-action faults were
+verified. The entered-writer local cleanup edge was source reviewed; that exact
+synchronous replacement callback was not separately fault-injected.
+
+Attaching the native animation editor between Undo and Redo assigned `bend_tip`
+after normal Redo frames: current animation remained empty, playback stopped and
+Tip rotation `0`. This characterizes normal editor behavior outside the controlled
+detached acceptance conditions; MCP does not intercept native history.
+
+Regressions passed: 171 Photoshop Python tests, 165 UXP checks, 82 launcher
+checks, two Kitchen runner tests, and the final Kitchen baseline (13 headless
+plus 12 graphical suites; 11,044 checks). Four Android/iOS resource packages
+passed exclusion/positive controls, with 140 native checks of the actual saved
+public-writer inline rig/animation loaded from the controls. Both exclusion packs
+contained zero addon entries and excluded all eight compiled/remap targets per
+platform. Twelve addon source files matched final Kitchen/export/current copies;
+230 production/config/resource hashes and the accepted empty lab were preserved.
+The lab remains the 111-byte Godot-authored baseline shown above, with both UID
+metadata fields intact and no generated rig or animation. New script `.uid`
+files are intentional; test artifacts remain outside Git.
+
+Windows test startup/file-publication issues were corrected in disposable test
+support; final runs had zero failures. Machine-local configuration and credentials
+were not edited. **NOT EXECUTED:** executable exports/device
+behavior. **NOT VALIDATED / REQUIRES MAC/iOS:** executable iOS export/device
+behavior; the iOS template is still missing. No production, project-settings,
+export-preset, Photoshop or launcher implementation changed.
+
+**VERIFIED — real-checkout v0.3 live acceptance:** bridge/plugin `0.3.0`,
+prerequisite v0.2 rig creation and exactly one successful
+`godot_create_rig_lab_animation({})` produced the exact `bend_tip` fixture above.
+Native Undo removed only the animation, preserving the unsaved rig and dirty
+scene; native Redo restored it. Manual Save and scene close/reopen verified
+persistence. The user visually verified smooth bending and return to rest.
+Final manual subtree deletion and Save restored the existing 111-byte empty
+Godot-authored lab byte-for-byte, retaining `uid` / `unique_id`; no serialized
+or Git-visible live-test residue remained. The controlled cycle kept the
+AnimationPlayer editor detached and settled; the safety limitations above remain.

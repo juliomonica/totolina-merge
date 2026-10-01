@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -19,6 +20,7 @@ import tempfile
 
 EXPECTED_CHECKS = 56
 MINIMUM_RIG_EDITOR_CHECKS = 200
+MINIMUM_ANIMATION_EDITOR_CHECKS = 200
 ANSI_PATTERN = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 ERROR_PATTERN = re.compile(
     r"(?:\bSCRIPT ERROR:|\bERROR:|Assertion failed|AssertionError|"
@@ -27,12 +29,15 @@ ERROR_PATTERN = re.compile(
 )
 SUMMARY_PATTERN = re.compile(r"^GODOT_MCP_INSPECTION_CHECKS=(\d+) FAILURES=(\d+)$", re.MULTILINE)
 RIG_SUMMARY_PATTERN = re.compile(r"^GODOT_MCP_RIG_EDITOR_CHECKS=(\d+) FAILURES=(\d+)$", re.MULTILINE)
+ANIMATION_SUMMARY_PATTERN = re.compile(r"^GODOT_MCP_ANIMATION_EDITOR_CHECKS=(\d+) FAILURES=(\d+)$", re.MULTILINE)
 ADDON_FILES = (
     "plugin.cfg", "plugin.gd", "plugin.gd.uid", "bridge_client.gd",
     "bridge_client.gd.uid", "inspection.gd", "inspection.gd.uid", "rig_lab.gd", "rig_lab.gd.uid",
+    "animation_writer.gd", "animation_writer.gd.uid",
 )
 FIXTURE_FILES = ("inspection_validation.gd", "inspection_validation.gd.uid",
-                 "rig_lab_validation.gd", "rig_lab_validation.gd.uid")
+                 "rig_lab_validation.gd", "rig_lab_validation.gd.uid",
+                 "animation_lab_validation.gd", "animation_lab_validation.gd.uid")
 LAB_PATH = "addons/lunitora_godot/labs/totolina_rig_lab.tscn"
 
 
@@ -92,6 +97,8 @@ def main() -> int:
             shutil.copy2(repository / "addons" / "lunitora_godot" / filename, addon / filename)
         for filename in FIXTURE_FILES:
             shutil.copy2(repository / "tests" / "godot_mcp" / filename, fixtures / filename)
+        manifest = {filename: hashlib.sha256((addon / filename).read_bytes()).hexdigest() for filename in ADDON_FILES}
+        (artifacts / "addon-source-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         lab = project / LAB_PATH
         lab.parent.mkdir(parents=True)
         lab.write_text('[gd_scene format=3]\n\n'
@@ -199,6 +206,41 @@ def main() -> int:
             rig_checks += int(gate_summaries[0][0])
             print(f"PASS native editor {label} rejection: {gate_summaries[0][0]} checks", flush=True)
         print(f"GODOT_MCP_RIG_EDITOR_TOTAL_CHECKS={rig_checks} FAILURES=0", flush=True)
+        # This hook exists only in the disposable copy. Acceptance callbacks run
+        # inside the production plugin's actual normal-process admission scope.
+        lab.write_text('[gd_scene format=3]\n\n[node name="TotolinaRigLab" type="Node2D"]\n', encoding="utf-8")
+        (addon / "native_animation_plugin.gd").write_text(
+            '@tool\nextends "res://addons/lunitora_godot/plugin.gd"\n'
+            'func _poll_editor_commands() -> void:\n'
+            '    for controller in get_tree().root.find_children("*", "EditorPlugin", true, false):\n'
+            '        var script: Script = controller.get_script()\n'
+            '        if script != null and script.resource_path == "res://tests/godot_mcp/animation_lab_validation.gd":\n'
+            '            controller._normal_process_tick()\n'
+            '    super._poll_editor_commands()\n', encoding="utf-8")
+        (addon / "plugin.cfg").write_text('[plugin]\nname="Isolated animation writer"\n'
+            'description="Disposable test hook"\nauthor="Lunitora tests"\nversion="0.3.0"\n'
+            'script="native_animation_plugin.gd"\n', encoding="utf-8")
+        animation_controller = project / "addons" / "animation_lab_validation"
+        animation_controller.mkdir()
+        (animation_controller / "plugin.cfg").write_text('[plugin]\nname="Isolated animation editor acceptance"\n'
+            'description="Test-only native editor controller"\nauthor="Lunitora tests"\nversion="1"\n'
+            'script="../../tests/godot_mcp/animation_lab_validation.gd"\n', encoding="utf-8")
+        settings = project_settings.read_text(encoding="utf-8").replace(
+            '"res://addons/rig_lab_validation/plugin.cfg"', '"res://addons/animation_lab_validation/plugin.cfg"')
+        project_settings.write_text(settings, encoding="utf-8")
+        animation_log = artifacts / "animation-editor-engine.log"
+        animation_output = checked_run(
+            [str(engine), "--path", str(project), "--log-file", str(animation_log),
+             "--editor", f"res://{LAB_PATH}", "--", "animation-native"],
+            environment=environment, capture_path=artifacts / "animation-editor.log",
+            engine_log=animation_log, timeout=args.timeout,
+        )
+        animation_summaries = ANIMATION_SUMMARY_PATTERN.findall(animation_output)
+        if (len(animation_summaries) != 1 or animation_summaries[0][1] != "0"
+                or int(animation_summaries[0][0]) < MINIMUM_ANIMATION_EDITOR_CHECKS):
+            raise RuntimeError(f"Expected at least {MINIMUM_ANIMATION_EDITOR_CHECKS} native animation checks and zero failures; see {animation_log}")
+        print(f"GODOT_MCP_ANIMATION_EDITOR_CHECKS={animation_summaries[0][0]} FAILURES=0", flush=True)
+        print(f"SAVED_ANIMATION_EXPORT_CONTROL: {lab}", flush=True)
         if production_snapshot(repository) != before_snapshot:
             raise RuntimeError("Production scenes/resources or the real lab changed during isolated validation")
         print(f"PASS {len(before_snapshot)} production/lab file hashes unchanged", flush=True)

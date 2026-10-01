@@ -11,6 +11,7 @@ import asyncio
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import tempfile
 import unittest
@@ -91,6 +92,7 @@ LAB_PATH = "addons/lunitora_godot/labs/totolina_rig_lab.tscn"
 
 class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
     editor_mode = False
+    graphical_editor = False
     editor_control = EDITOR_CONTROL
 
     def control_values(self):
@@ -120,14 +122,16 @@ class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
         shutil.copy2(source / "inspection.gd", addon / "inspection.gd")
         shutil.copy2(source / "inspection.gd.uid", addon / "inspection.gd.uid")
         if self.editor_mode:
-            for filename in ("plugin.gd", "rig_lab.gd"):
+            for filename in ("plugin.gd", "rig_lab.gd", "animation_writer.gd"):
+                if not (source / filename).is_file():
+                    continue
                 shutil.copy2(source / filename, addon / filename)
                 shutil.copy2(source / (filename + ".uid"), addon / (filename + ".uid"))
             (addon / "native_editor_transport.gd").write_text(
                 self.editor_control.format(**self.control_values()), encoding="utf-8")
             (addon / "native_editor_transport.gd.uid").write_text("uid://dlghwo7gnmklj\n", encoding="utf-8")
             (addon / "plugin.cfg").write_text('[plugin]\nname="Native writer transport fixture"\n'
-                'description="Disposable native test only"\nauthor="tests"\nversion="0.2.0"\n'
+                'description="Disposable native test only"\nauthor="tests"\nversion="0.3.0"\n'
                 'script="native_editor_transport.gd"\n', encoding="utf-8")
             lab = self.project / LAB_PATH
             lab.parent.mkdir(parents=True)
@@ -155,12 +159,49 @@ class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
         process_temp.mkdir()
         for variable in ("TEMP", "TMP", "TMPDIR"):
             environment[variable] = str(process_temp)
+        if self.graphical_editor:
+            # The graphical editor's normal startup replaces project.godot.
+            # Credential's Windows ancestor pins intentionally forbid that
+            # replacement. Bootstrap this disposable editor before acquiring
+            # the active owner pins; no MCP listener or tool call is active here.
+            await self.bridge.stop()
+            self.assertIsNone(self.bridge._server)
+            self.assertIsNone(self.bridge._connection)
+            with socket.socket() as unavailable:
+                unavailable.settimeout(0.25)
+                self.assertNotEqual(unavailable.connect_ex(("127.0.0.1", self.port)), 0)
+            bootstrap_identity = (self.credential.project_path, self.credential.project_id)
+            bootstrap_secret = self.credential.secret
+            self.credential.close()
+            importer = await asyncio.create_subprocess_exec(str(GODOT_EXECUTABLE), "--headless",
+                "--path", str(self.project), "--editor", "--import", "--quit", env=environment,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            imported_out, imported_err = await asyncio.wait_for(importer.communicate(), 30)
+            self.assertEqual(importer.returncode, 0)
+            self.assertNotIn(b"SCRIPT ERROR", imported_out + imported_err)
+            self.assertNotIn(b"ERROR:", imported_out + imported_err)
         mode = ["--editor", f"res://{LAB_PATH}"] if self.editor_mode else ["--script", "res://native_bridge.gd"]
-        self.process = await asyncio.create_subprocess_exec(str(GODOT_EXECUTABLE), "--headless",
+        display = [] if self.graphical_editor else ["--headless"]
+        self.process = await asyncio.create_subprocess_exec(str(GODOT_EXECUTABLE), *display,
             "--path", str(self.project), *mode, "--max-fps", "60", env=environment,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addAsyncCleanup(self.finish_child)
+        if self.graphical_editor:
+            await self.graphical_ready()
+            self.credential = ensure_credential(self.project)
+            self.assertEqual((self.credential.project_path, self.credential.project_id), bootstrap_identity)
+            self.assertTrue(self.credential.secret == bootstrap_secret, "Disposable credential changed during startup.")
+            self.assertIsNotNone(self.credential._pins)
+            self.addCleanup(self.credential.close)
+            self.bridge = GodotBridge(Config(request_timeout_seconds=5), self.credential, port=self.port)
+            await self.bridge.start()
+            self.assertIsNone(self.bridge.startup_error)
+            self.addAsyncCleanup(self.bridge.stop)
         await self.wait_connected()
+
+    async def graphical_ready(self):
+        """A graphical subclass must positively observe startup before pinning."""
+        raise NotImplementedError("Graphical acceptance requires a native readiness observer.")
 
     async def finish_child(self):
         if self.process.returncode is None:

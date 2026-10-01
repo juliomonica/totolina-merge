@@ -1,4 +1,4 @@
-"""Three metadata reads and one fixed lab write; exact empty public inputs."""
+"""Three metadata reads and two fixed lab writes; exact empty public inputs."""
 from __future__ import annotations
 
 from typing import Annotated
@@ -8,7 +8,8 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
 from .bridge import GodotBridge
 from .protocol import (BridgeError, EditorStateResult, MAX_PAYLOAD_BYTES, OPERATIONS, PingResult,
-                       RigLabResult, SceneInspectionResult, WRITE_OPERATION, encode, envelope, validate_result)
+                       RigLabResult, RigLabAnimationResult, SceneInspectionResult, WRITE_OPERATION,
+                       ANIMATION_WRITE_OPERATION, WRITE_OPERATIONS, encode, envelope, validate_result)
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False, "maxProperties": 0}
 # The text block and structured content both contain the metadata for MCP client
@@ -83,20 +84,20 @@ async def call_bridge(bridge: GodotBridge, operation: str) -> CallToolResult:
     try:
         data, elapsed_ms = await bridge.request(operation, {})
         dispatched = True
-        if operation == WRITE_OPERATION:
+        if operation in WRITE_OPERATIONS:
             validate_result(operation, data)
         result = tool_result(envelope(data, elapsed_ms=elapsed_ms))
-        if operation == WRITE_OPERATION and not result.structured_content["ok"]:
+        if operation in WRITE_OPERATIONS and not result.structured_content["ok"]:
             bridge.retain_unknown_write()
             return tool_result(envelope(error=BridgeError("WRITE_OUTCOME_UNKNOWN", connected=True)))
         return result
     except BridgeError as error:
-        if dispatched and operation == WRITE_OPERATION:
+        if dispatched and operation in WRITE_OPERATIONS:
             bridge.retain_unknown_write()
             error = BridgeError("WRITE_OUTCOME_UNKNOWN", connected=True)
         return tool_result(envelope(error=error))
     except Exception:
-        if operation != WRITE_OPERATION:
+        if operation not in WRITE_OPERATIONS:
             raise
         if dispatched:
             bridge.retain_unknown_write()
@@ -132,3 +133,8 @@ def register_tools(server: GodotMCPServer, bridge: GodotBridge) -> None:
     async def godot_create_rig_lab() -> Annotated[CallToolResult, RigLabResult]:
         """Create exactly seven fixed lab scaffold nodes in one undo action, only in the approved open lab. Never saves, plays, replaces or edits production scenes. Unknown outcomes require a fresh read and review; never retry automatically."""
         return await call_bridge(bridge, WRITE_OPERATION)
+
+    @server.tool(annotations=write_annotations)
+    async def godot_create_rig_lab_animation() -> Annotated[CallToolResult, RigLabAnimationResult]:
+        """Add the fixed bend_tip animation in one undo action to the exact existing lab rig with a detached, settled animation editor. Never creates a rig, saves, selects, plays or writes production scenes. Unknown outcomes require a fresh read and review; never retry automatically."""
+        return await call_bridge(bridge, ANIMATION_WRITE_OPERATION)

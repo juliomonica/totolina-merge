@@ -1,6 +1,8 @@
 @tool
 extends RefCounted
-## One fixed, editor-session-owned writer. No saving or deferred mutation.
+## Two fixed operations share one editor-session writer. No automatic saving.
+
+const AnimationWriter = preload("res://addons/lunitora_godot/animation_writer.gd")
 
 const LAB_PATH := "res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"
 const ROOT_NAME := "TotolinaRigLab"
@@ -24,6 +26,10 @@ var _active := false
 var _faulted := false
 var _retired := false
 var _action_started := false
+var _animation_quiet_frame := -1
+var _animation_process_frame := -1
+var _in_editor_process := false
+var _animation_observation: Dictionary = {}
 
 
 func _init(session_id: String) -> void:
@@ -33,10 +39,21 @@ func _init(session_id: String) -> void:
 func retire() -> void:
 	# Transport shutdown must not free nodes retained by native editor history.
 	_retired = true
+	invalidate_animation_admission()
 
 
 func create(scene_root: Node, undo_redo: EditorUndoRedoManager,
 		expected_session_id: String, request_id: String, command_origin := false) -> Dictionary:
+	return _run_write(scene_root, undo_redo, expected_session_id, request_id, command_origin, false)
+
+
+func create_animation(scene_root: Node, undo_redo: EditorUndoRedoManager,
+		expected_session_id: String, request_id: String, command_origin := false) -> Dictionary:
+	return _run_write(scene_root, undo_redo, expected_session_id, request_id, command_origin, true)
+
+
+func _run_write(scene_root: Node, undo_redo: EditorUndoRedoManager,
+		expected_session_id: String, request_id: String, command_origin: bool, animation: bool) -> Dictionary:
 	if not command_origin or not _hex_id(request_id):
 		return _failure("INVALID_REQUEST", "The writer requires an authenticated editor command.")
 	if _retired or expected_session_id != _session_id:
@@ -58,10 +75,12 @@ func create(scene_root: Node, undo_redo: EditorUndoRedoManager,
 	_action_started = false
 	# A single outer epilogue owns the flag. Inner controlled failures return to
 	# here, including validation/verification and fixed response construction.
-	var value: Variant = _create_guarded(scene_root, undo_redo, expected_session_id)
+	var value: Variant = _create_animation_guarded(scene_root, undo_redo, expected_session_id) if animation else _create_guarded(scene_root, undo_redo, expected_session_id)
 	var result: Dictionary
-	if not value is Dictionary or not _valid_result(value):
-		result = _failure("WRITE_OUTCOME_UNKNOWN" if _action_started else "RIG_LAB_BUILD_FAILED",
+	var valid := value is Dictionary and (_valid_animation_result(value) if animation else _valid_result(value))
+	if not valid:
+		var build_error := "RIG_LAB_ANIMATION_BUILD_FAILED" if animation else "RIG_LAB_BUILD_FAILED"
+		result = _failure("WRITE_OUTCOME_UNKNOWN" if _action_started else build_error,
 			"The write could not produce a verified response.")
 	else:
 		result = value
@@ -132,14 +151,21 @@ func _success_data() -> Dictionary:
 
 
 func _gate(root: Node, expected_session_id: String) -> Dictionary:
+	var result := _root_gate(root, expected_session_id)
+	if not result.ok:
+		return result
+	if root.has_node(NodePath(RIG_NAME)):
+		return _failure("LAB_ALREADY_CREATED", "The lab already contains TotolinaRigV2.")
+	return {"ok": true, "result": {}, "error": null}
+
+
+func _root_gate(root: Node, expected_session_id: String) -> Dictionary:
 	if _retired or expected_session_id != _session_id:
 		return _failure("INVALID_MESSAGE", "The write belongs to a retired editor session.")
 	if not is_instance_valid(root) or root != EditorInterface.get_edited_scene_root() or root.scene_file_path != LAB_PATH:
 		return _failure("LAB_SCENE_REQUIRED", "Open the dedicated saved Totolina rig lab scene.")
 	if root.name != ROOT_NAME or root.get_class() != "Node2D" or root.get_script() != null:
 		return _failure("LAB_ROOT_MISMATCH", "The lab root must be the native script-free TotolinaRigLab Node2D.")
-	if root.has_node(NodePath(RIG_NAME)):
-		return _failure("LAB_ALREADY_CREATED", "The lab already contains TotolinaRigV2.")
 	return {"ok": true, "result": {}, "error": null}
 
 
@@ -208,7 +234,7 @@ func _verify_after_action(root: Node, rig: Node, before: Dictionary,
 		and EditorInterface.get_unsaved_scenes().has(LAB_PATH)
 
 
-func _verify_recipe(rig: Node, owner_root: Node) -> bool:
+func _verify_recipe(rig: Node, owner_root: Node, empty_player := true) -> bool:
 	if not is_instance_valid(rig) or rig.name != RIG_NAME:
 		return false
 	var stack: Array[Node] = [rig]
@@ -240,6 +266,8 @@ func _verify_recipe(rig: Node, owner_root: Node) -> bool:
 		if bone.transform != pose or bone.rest != pose or bone.get_length() != 64.0 or bone.get_bone_angle() != 0.0 or bone.get_autocalculate_length_and_angle():
 			return false
 	var player: AnimationPlayer = rig.get_node("AnimationPlayer")
+	if not empty_player:
+		return true
 	return player.get_animation_library_list().is_empty() and player.get_animation_list().is_empty() \
 		and not player.has_animation_library(&"") and not player.has_animation(&"RESET") \
 		and player.autoplay == &"" and player.assigned_animation == &"" \
@@ -249,6 +277,180 @@ func _verify_recipe(rig: Node, owner_root: Node) -> bool:
 func _vertices() -> PackedVector2Array:
 	return PackedVector2Array([Vector2(0, -12), Vector2(64, -12), Vector2(128, -12),
 		Vector2(128, 12), Vector2(64, 12), Vector2(0, 12)])
+
+
+func invalidate_animation_admission() -> void:
+	_animation_quiet_frame = -1
+	_animation_observation = {}
+
+
+func begin_editor_process(scene_root: Node, frame: int) -> void:
+	# Only the plugin's normal process pass supplies this context. Re-entry and
+	# same-frame polling cannot turn a first quiet sample into a later sample.
+	if _in_editor_process:
+		return
+	_in_editor_process = true
+	_animation_process_frame = frame
+	var observation := _animation_signature(scene_root)
+	if observation.is_empty():
+		invalidate_animation_admission()
+	elif observation != _animation_observation:
+		_animation_observation = observation
+		_animation_quiet_frame = frame
+
+
+func end_editor_process() -> void:
+	_in_editor_process = false
+
+
+func _animation_signature(root: Node) -> Dictionary:
+	if not _root_gate(root, _session_id).ok:
+		return {}
+	var rig := root.get_node_or_null(NodePath(RIG_NAME))
+	if rig == null or not _verify_recipe(rig, root, false):
+		return {}
+	var player: AnimationPlayer = rig.get_node("AnimationPlayer")
+	if not AnimationWriter.observers(player).is_empty():
+		return {}
+	var inspected := EditorInterface.get_inspector().get_edited_object()
+	var selected: Array = []
+	for node in EditorInterface.get_selection().get_selected_nodes():
+		selected.append(node.get_instance_id())
+	return {"session": _session_id, "root": root.get_instance_id(),
+		"rig": rig.get_instance_id(), "player": player.get_instance_id(),
+		"scene": root.scene_file_path, "state": AnimationWriter.scene_state(root, player),
+		"player_state": AnimationWriter.player_state(player),
+		"libraries": player.get_animation_library_list(), "animations": player.get_animation_list(),
+		"selected": selected, "inspected": inspected.get_instance_id() if is_instance_valid(inspected) else 0}
+
+
+func _animation_gate(root: Node, expected_session_id: String) -> Dictionary:
+	var gate := _root_gate(root, expected_session_id)
+	if not gate.ok:
+		return gate
+	var rig := root.get_node_or_null(NodePath(RIG_NAME))
+	if rig == null:
+		return _failure("LAB_RIG_REQUIRED", "Create the v0.2 rig fixture first.")
+	if not _verify_recipe(rig, root, false):
+		return _failure("LAB_RIG_MISMATCH", "The lab must contain the exact native v0.2 rig fixture at rest.")
+	var player: AnimationPlayer = rig.get_node("AnimationPlayer")
+	var tip: Bone2D = rig.get_node("Skeleton2D/Root/Tip")
+	if player.root_node != NodePath("..") or player.get_node_or_null(player.root_node) != rig or rig.get_node_or_null(NodePath("Skeleton2D/Root/Tip")) != tip:
+		return _failure("LAB_RIG_MISMATCH", "The animation root and target must resolve to the exact rig and Tip bone.")
+	if not AnimationWriter.observers(player).is_empty():
+		invalidate_animation_admission()
+		return _failure("LAB_ANIMATION_EDITOR_BUSY", "AnimationPlayer editor or an unclassified observer is attached. Unpin, switch away from Animation, save manually if needed, then close/reopen the lab with that panel hidden.")
+	if player.has_animation(AnimationWriter.NAME):
+		return _failure("LAB_ANIMATION_ALREADY_CREATED", "The lab already contains bend_tip.")
+	if not player.get_animation_library_list().is_empty() or not player.get_animation_list().is_empty() or not AnimationWriter.pristine(player):
+		return _failure("LAB_ANIMATION_CONFLICT", "The player must have no libraries, animations, assignment, playback or queue and retain native playback defaults.")
+	if not _in_editor_process or _animation_process_frame != Engine.get_process_frames() or _animation_quiet_frame < 0 or _animation_process_frame <= _animation_quiet_frame or _animation_signature(root) != _animation_observation:
+		return _failure("LAB_ANIMATION_EDITOR_SETTLING", "The lab requires two stable normal editor process observations; wait for editor settlement before a fresh request.")
+	return {"ok": true, "result": {}, "error": null}
+
+
+func _prepare_animation() -> AnimationLibrary:
+	return AnimationWriter.prepare()
+
+
+func _verify_animation_recipe(library: AnimationLibrary) -> String:
+	return AnimationWriter.verify(library)
+
+
+func _create_animation_guarded(root: Node, undo_redo: EditorUndoRedoManager,
+		expected_session_id: String) -> Dictionary:
+	var gate := _animation_gate(root, expected_session_id)
+	if not gate.ok:
+		return gate
+	var library := _prepare_animation()
+	if library == null or not _verify_animation_recipe(library).is_empty():
+		return _failure("RIG_LAB_ANIMATION_BUILD_FAILED", "Detached animation preparation failed.")
+	var history_id := undo_redo.get_object_history_id(root)
+	var history := undo_redo.get_history_undo_redo(history_id) if history_id > 0 else null
+	if history == null:
+		return _failure("RIG_LAB_ANIMATION_BUILD_FAILED", "The lab has no available editor scene history.")
+	var rig := root.get_node(NodePath(RIG_NAME))
+	var player: AnimationPlayer = rig.get_node("AnimationPlayer")
+	var tip: Bone2D = rig.get_node("Skeleton2D/Root/Tip")
+	var before := {
+		"history_id": history_id, "history": history, "version": history.get_version(),
+		"current": history.get_current_action(), "count": history.get_history_count(),
+		"max_steps": history.get_max_steps(), "session": _session_id,
+		"root_id": root.get_instance_id(), "rig_id": rig.get_instance_id(),
+		"player_id": player.get_instance_id(), "tip_id": tip.get_instance_id(),
+		"scene_state": AnimationWriter.scene_state(root, player),
+		"player_state": AnimationWriter.player_state(player),
+		"animation": library.get_animation(AnimationWriter.NAME),
+	}
+	# Everything from this final check through the shared outer epilogue is
+	# synchronous. The boundary is create_action, not commit_action.
+	gate = _animation_gate(root, expected_session_id)
+	if not gate.ok or undo_redo.is_committing_action():
+		return gate if not gate.ok else _failure("WRITE_BUSY", "The editor undo manager is committing an action.")
+	_action_started = true
+	undo_redo.create_action(AnimationWriter.ACTION_NAME, UndoRedo.MERGE_DISABLE, root, false, true)
+	# Bound Variant arguments in native UndoRedo retain these RefCounted
+	# resources. Do NOT register node-only do/undo references or free them.
+	undo_redo.add_do_method(player, &"add_animation_library", &"", library)
+	undo_redo.add_undo_method(player, &"remove_animation_library", &"")
+	undo_redo.commit_action(true)
+	if not _verify_animation_after_action(root, rig, player, tip, library, before, undo_redo):
+		return _failure("WRITE_OUTCOME_UNKNOWN", "Post-action animation verification failed; inspect scene and history.")
+	return {"ok": true, "result": _animation_success_data(), "error": null}
+
+
+func _verify_animation_after_action(root: Node, rig: Node, player: AnimationPlayer,
+		tip: Bone2D, library: AnimationLibrary, before: Dictionary,
+		undo_redo: EditorUndoRedoManager) -> bool:
+	if not _root_gate(root, before.session).ok or undo_redo.is_committing_action():
+		return false
+	for pair in [[root, before.root_id], [rig, before.rig_id], [player, before.player_id], [tip, before.tip_id]]:
+		if not is_instance_valid(pair[0]) or pair[0].get_instance_id() != pair[1]:
+			return false
+	if root.get_node_or_null(NodePath(RIG_NAME)) != rig or not _verify_recipe(rig, root, false):
+		return false
+	if player.root_node != NodePath("..") or player.get_node_or_null(player.root_node) != rig or rig.get_node_or_null(NodePath("Skeleton2D/Root/Tip")) != tip:
+		return false
+	var libraries := player.get_animation_library_list()
+	var names := player.get_animation_list()
+	if libraries.size() != 1 or libraries[0] != &"" or names.size() != 1 or names[0] != AnimationWriter.NAME:
+		return false
+	if player.get_animation_library(&"") != library or player.get_animation(AnimationWriter.NAME) != before.animation or not _verify_animation_recipe(library).is_empty():
+		return false
+	if not AnimationWriter.observers(player).is_empty() or not AnimationWriter.pristine(player) or AnimationWriter.player_state(player) != before.player_state or AnimationWriter.scene_state(root, player) != before.scene_state:
+		return false
+	if undo_redo.get_object_history_id(root) != before.history_id:
+		return false
+	var history: UndoRedo = before.history
+	if not is_instance_valid(history):
+		return false
+	var count: int = before.current + 2
+	if before.max_steps > 0:
+		count = mini(count, before.max_steps)
+	return history.get_version() == before.version + 1 and history.get_history_count() == count \
+		and history.get_current_action() == count - 1 \
+		and history.get_current_action_name() == AnimationWriter.ACTION_NAME \
+		and not history.has_redo() and EditorInterface.get_unsaved_scenes().has(LAB_PATH)
+
+
+func _animation_success_data() -> Dictionary:
+	return {"editor_session_id": _session_id, "project_path": _canonical_project_path(),
+		"scene_path": LAB_PATH, "root_name": ROOT_NAME,
+		"animation_player_path": "TotolinaRigV2/AnimationPlayer", "library_name": "",
+		"animation_name": "bend_tip", "animation_key": "bend_tip", "length_seconds": 1.0,
+		"track_count": 1, "key_count": 3, "undo_action_name": AnimationWriter.ACTION_NAME,
+		"undo_actions_added": 1, "save_state": "saved_dirty", "auto_saved": false, "read_only": false}
+
+
+func _valid_animation_result(value: Dictionary) -> bool:
+	if value.size() != 3 or not value.get("ok") is bool or not value.has("result") or not value.has("error"):
+		return false
+	if not value.get("ok", false):
+		return _valid_result(value)
+	return value.size() == 3 and value.has("error") and value.error == null \
+		and value.get("result") is Dictionary and value.result == _animation_success_data() \
+		and typeof(value.result.track_count) == TYPE_INT and typeof(value.result.key_count) == TYPE_INT \
+		and typeof(value.result.undo_actions_added) == TYPE_INT and typeof(value.result.length_seconds) == TYPE_FLOAT
 
 
 func _triangles() -> Array:
