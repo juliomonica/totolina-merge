@@ -1,5 +1,7 @@
 # Lunitora Photoshop MCP — v0.6 operator convenience
 
+Separate read-only Godot editor bridge: [Godot Animation MCP v0.1 setup](GODOT_README.md).
+
 Repository-controlled Photoshop bridge with two compatible read-only tools,
 photoshop_ping and photoshop_get_active_document, plus photoshop_process_image
 for one explicitly selected inbox image and one staging candidate.
