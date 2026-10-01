@@ -11,7 +11,7 @@ const MAX_JSON_DEPTH := 16
 const MAX_STRING_BYTES := 4096
 const CONNECT_TIMEOUT_MS := 5000
 const MAX_RETRY_MS := 8000
-const OPERATIONS := ["godot_ping", "godot_get_editor_state", "godot_inspect_scene"]
+const OPERATIONS := ["godot_ping", "godot_get_editor_state", "godot_inspect_scene", "godot_create_rig_lab"]
 
 enum Stage { STOPPED, CONNECTING, CHALLENGE, READY_PROOF, AUTHENTICATED }
 
@@ -27,6 +27,7 @@ var _deadline_ms := 0
 var _retry_at_ms := 0
 var _retry_delay_ms := 250
 var _recent_requests: Array[String] = []
+var _polling := false
 
 
 func start(dispatch: Callable) -> void:
@@ -42,6 +43,16 @@ func stop() -> void:
 
 
 func poll() -> void:
+	# A native tree/history callback must not recursively consume a read barrier
+	# while its preceding write is still executing in this command pump.
+	if _polling:
+		return
+	_polling = true
+	_poll_once()
+	_polling = false
+
+
+func _poll_once() -> void:
 	if _stage == Stage.STOPPED:
 		return
 	var now := Time.get_ticks_msec()
@@ -180,20 +191,32 @@ func _accept(message: Dictionary) -> bool:
 		return true
 	if _stage != Stage.AUTHENTICATED:
 		return false
-	if not _keys(message, ["type", "protocol_version", "id", "operation", "params"]) or message.type != "request":
+	var write: bool = message.get("operation") == "godot_create_rig_lab"
+	var keys := ["type", "protocol_version", "id", "operation", "params"]
+	if write:
+		keys.append("editor_session_id")
+	if not _keys(message, keys) or message.type != "request":
 		return false
 	if not _hex(message.id, 32) or not message.operation is String or not message.params is Dictionary:
 		return false
-	if _recent_requests.has(message.id):
-		return false
-	_recent_requests.append(message.id)
-	if _recent_requests.size() > 128:
-		_recent_requests.pop_front()
+	if write:
+		if not message.editor_session_id is String or message.editor_session_id.is_empty():
+			return false
+	else:
+		if _recent_requests.has(message.id):
+			return false
+		_recent_requests.append(message.id)
+		if _recent_requests.size() > 128:
+			_recent_requests.pop_front()
 	var result: Dictionary
 	if not message.params.is_empty():
 		result = _failure("INVALID_REQUEST", "Request parameters must be empty.")
 	elif not OPERATIONS.has(message.operation):
 		result = _failure("UNSUPPORTED_OPERATION", "Operation is not supported.")
+	elif write:
+		# No queued callback: the expected session travels with this packet all
+		# the way to final validation. Replay protection belongs to the writer.
+		result = _dispatch.call(message.operation, message.params, message.id, message.editor_session_id, true)
 	else:
 		result = _dispatch.call(message.operation, message.params)
 	var response := {
@@ -201,10 +224,13 @@ func _accept(message: Dictionary) -> bool:
 		"operation": message.operation, "ok": result.ok,
 		"result": result.result, "error": result.error,
 	}
+	if write:
+		response["editor_session_id"] = message.editor_session_id
 	if JSON.stringify(response).to_utf8_buffer().size() > MAX_FRAME_BYTES:
 		response.ok = false
 		response.result = null
-		response.error = {"code": "RESPONSE_TOO_LARGE", "message": "Editor response exceeds the size limit."}
+		response.error = {"code": "WRITE_OUTCOME_UNKNOWN" if write else "RESPONSE_TOO_LARGE",
+			"message": "Editor response exceeds the size limit."}
 	return _send(response)
 
 
@@ -223,6 +249,10 @@ func _send(message: Dictionary) -> bool:
 
 
 func _retry(now: int) -> void:
+	# stop() may run synchronously from an editor callback during dispatch.
+	# A failed response must not revive that retired command pump.
+	if _stage == Stage.STOPPED:
+		return
 	_clear_connection()
 	_stage = Stage.CONNECTING
 	_retry_at_ms = now + _retry_delay_ms

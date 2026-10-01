@@ -11,8 +11,9 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 from modules.godot.config import Credential, HOST
-from modules.godot.protocol import (BRIDGE_VERSION, MAX_PAYLOAD_BYTES, PROTOCOL_VERSION,
-                                   decode, encode, is_hex, proof)
+from modules.godot.protocol import (BRIDGE_VERSION, LAB_ROOT_NAME, LAB_SCENE_PATH, MAX_PAYLOAD_BYTES,
+                                   PROTOCOL_VERSION, RIG_ROOT_NAME, UNDO_ACTION_NAME, WRITE_OPERATION,
+                                   decode, encode, error_info, is_hex, proof)
 
 NO_SCENE = {"exists": False, "path": None, "root_name": None, "has_saved_path": False,
             "save_state": "no_scene", "dirty_changes": None, "dirty_reason": "no_scene"}
@@ -23,6 +24,7 @@ UNNAMED_SCENE = {"exists": True, "path": None, "root_name": "Root", "has_saved_p
                  "save_state": "new_unsaved", "dirty_changes": None, "dirty_reason": "unnamed_scene"}
 ROOT_NODE = {"path": ".", "parent_path": None, "type": "Node2D", "child_count": 0,
              "kind": None, "animations": None}
+LAB_SCENE = dict(SAVED_SCENE, path=LAB_SCENE_PATH, root_name=LAB_ROOT_NAME)
 
 
 def disposable_credential() -> Credential:
@@ -41,19 +43,35 @@ def result_for(operation: str, credential: Credential, scene: dict, nodes: list,
     if operation == "godot_get_editor_state":
         return {**ping(credential), "scene": deepcopy(scene), "selected_nodes": {
             "total_count": len(selection), "nodes": deepcopy(selection[:128]), "truncated": len(selection) > 128}}
+    if operation == WRITE_OPERATION:
+        return rig_lab_result(credential)
     return {"editor_session_id": "disposable-editor-session", "scene": deepcopy(scene), "nodes": deepcopy(nodes)}
+
+
+def rig_lab_result(credential: Credential, session_id="disposable-editor-session") -> dict:
+    return {"editor_session_id": session_id, "project_path": credential.project_path,
+            "scene_path": LAB_SCENE_PATH, "root_name": LAB_ROOT_NAME, "created_root": RIG_ROOT_NAME,
+            "created_node_count": 7, "undo_action_name": UNDO_ACTION_NAME, "undo_actions_added": 1,
+            "save_state": "saved_dirty", "auto_saved": False, "read_only": False}
 
 
 class FakeGodotClient:
     def __init__(self, credential: Credential, port: int, *, scene: dict | None = None,
                  nodes: list | None = None, selection: list | None = None,
-                 delay: float = 0, ignore: bool = False, mutate=None):
+                 delay: float = 0, ignore: bool = False, mutate=None,
+                 write_delay: float = 0, ignore_write_reply: bool = False, session_id="disposable-editor-session"):
         self.credential = credential
         self.port = port
         self.scene = deepcopy(scene if scene is not None else NO_SCENE)
         self.nodes = deepcopy(nodes if nodes is not None else [])
         self.selection = deepcopy(selection if selection is not None else [])
         self.delay, self.ignore, self.mutate = delay, ignore, mutate
+        self.write_delay, self.ignore_write_reply = write_delay, ignore_write_reply
+        self.session_id = session_id
+        self.write_ids = set()
+        self.created = False
+        self.write_faulted = False
+        self.applied_writes = 0
         self.requests = []
         self.socket = self.reader = None
         self.client_nonce = None
@@ -87,22 +105,56 @@ class FakeGodotClient:
         return self
 
     async def _read(self):
+        socket = self.socket
         try:
-            async for raw in self.socket:
+            async for raw in socket:
                 request = decode(raw)
                 self.requests.append(request)
                 self.request_received.set()
                 if self.ignore:
                     continue
-                if self.delay:
-                    await asyncio.sleep(self.delay)
+                delay = self.write_delay if request["operation"] == WRITE_OPERATION else self.delay
+                if delay:
+                    await asyncio.sleep(delay)
+                # A replacement peer cannot consume buffered packets from the
+                # retired socket; mirror the editor's synchronous retirement.
+                if socket is not self.socket or socket.close_code is not None:
+                    break
                 response = {"type": "response", "protocol_version": PROTOCOL_VERSION,
                             "id": request["id"], "operation": request["operation"], "ok": True,
                             "result": result_for(request["operation"], self.credential,
                                                  self.scene, self.nodes, self.selection), "error": None}
+                response["result"]["editor_session_id"] = self.session_id
+                if request["operation"] == WRITE_OPERATION:
+                    response["editor_session_id"] = self.session_id
+                    code = None
+                    if request.get("editor_session_id") != self.session_id:
+                        code = "INVALID_MESSAGE"
+                    elif self.write_faulted:
+                        code = "WRITE_OUTCOME_UNKNOWN"
+                    elif request["id"] in self.write_ids:
+                        code = "WRITE_REPLAY_REJECTED"
+                    elif len(self.write_ids) >= 128:
+                        code = "SESSION_WRITE_LIMIT"
+                    else:
+                        self.write_ids.add(request["id"])
+                        if self.scene["path"] != LAB_SCENE_PATH:
+                            code = "LAB_SCENE_REQUIRED"
+                        elif self.scene["root_name"] != LAB_ROOT_NAME:
+                            code = "LAB_ROOT_MISMATCH"
+                        elif self.created:
+                            code = "LAB_ALREADY_CREATED"
+                        else:
+                            self.created = True
+                            self.applied_writes += 1
+                            self.scene.update(save_state="saved_dirty", dirty_changes=True)
+                    if code is not None:
+                        response.update(ok=False, result=None, error=error_info(code))
+                    if self.ignore_write_reply:
+                        continue
                 if self.mutate:
                     self.mutate(response)
-                await self.socket.send(encode(response))
+                await socket.send(encode(response))
         except ConnectionClosed:
             pass
 

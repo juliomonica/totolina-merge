@@ -1,4 +1,4 @@
-"""One Codex-owned IPv4 listener, one mutually authenticated read-only editor."""
+"""One authenticated editor; reads stay concurrent and one lab write is fenced."""
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +16,8 @@ from websockets.asyncio.connection import Connection
 from websockets.exceptions import ConnectionClosed
 
 from .config import Config, Credential, HOST, PORT
-from .protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, PROTOCOL_VERSION,
+from .protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, PROTOCOL_VERSION, READ_OPERATIONS,
+                       WRITE_OPERATION,
                        decode, encode, error_info, proof, validate_authenticate,
                        validate_hello, validate_response)
 
@@ -33,6 +34,17 @@ class Pending:
     connection: ServerConnection
     operation: str
     future: asyncio.Future
+    sequence: int = 0
+
+
+@dataclass
+class UnresolvedWrite:
+    request_id: str
+    connection: ServerConnection
+    session_id: str
+    sequence: int = 0
+    possibly_sent: bool = False
+    send_completed: bool = False
 
 
 class _BoundedConnection(ServerConnection):
@@ -73,6 +85,12 @@ class GodotBridge:
         self._transports = set()
         self._pending: dict[str, Pending] = {}
         self._session_id: str | None = None
+        self._send_lock = asyncio.Lock()
+        self._send_sequence = 0
+        self._write_active = False
+        # At most one tombstone, no queued writes or persistent recovery storage.
+        self._unresolved_write: UnresolvedWrite | None = None
+        self._last_write_receipt: UnresolvedWrite | None = None
         self._nonce_order = deque()
         self._nonces = set()
         self.startup_error = startup_error
@@ -168,8 +186,23 @@ class GodotBridge:
                 message = decode(raw)
                 validate_response(message)
                 pending = self._pending.get(message["id"])
-                # Late or duplicate replies cannot satisfy a different request.
+                unresolved = self._unresolved_write
+                writer = message["operation"] == WRITE_OPERATION
+                # A terminal writer reply must match its original socket, ID and
+                # target session. Replay rejection cannot settle original work.
+                if writer:
+                    if (unresolved is None or message["id"] != unresolved.request_id
+                            or unresolved.connection is not connection):
+                        continue
+                    if message["editor_session_id"] != unresolved.session_id:
+                        raise BridgeError("INVALID_MESSAGE", connected=True)
+                    if message["ok"] and message["result"]["project_path"] != self._credential.project_path:
+                        raise BridgeError("PROJECT_MISMATCH", connected=True)
+                settles_writer = writer and (message["ok"] or
+                    message["error"]["code"] != "WRITE_REPLAY_REJECTED")
                 if pending is None:
+                    if settles_writer:
+                        self._unresolved_write = None
                     continue
                 if pending.connection is not connection or message["operation"] != pending.operation:
                     raise BridgeError("INVALID_MESSAGE", connected=True)
@@ -181,6 +214,10 @@ class GodotBridge:
                     if self._session_id is not None and session_id != self._session_id:
                         raise BridgeError("INVALID_MESSAGE", connected=True)
                     self._session_id = session_id
+                    if not writer:
+                        self._settle_from_read(pending, data)
+                if settles_writer:
+                    self._unresolved_write = None
                 if not pending.future.done():
                     pending.future.set_result(message)
         except (TimeoutError, BridgeError) as error:
@@ -213,21 +250,121 @@ class GodotBridge:
             raise BridgeError("INVALID_REQUEST")
         if self.startup_error:
             raise self.startup_error
+        if operation == WRITE_OPERATION:
+            return await self._request_write()
+        return await self._exchange(operation)
+
+    def _settle_from_read(self, pending: Pending, data: dict) -> None:
+        unresolved = self._unresolved_write
+        if unresolved is None:
+            return
+        if pending.connection is unresolved.connection:
+            # FIFO peer consumption and synchronous dispatch make a later read
+            # reply a temporal fence. It says nothing about semantic success.
+            if (unresolved.send_completed and pending.sequence > unresolved.sequence
+                    and data["editor_session_id"] == unresolved.session_id):
+                self._unresolved_write = None
+        elif (pending.connection is self._connection
+              and pending.operation in {"godot_ping", "godot_get_editor_state"}
+              and data["editor_session_id"] == unresolved.session_id):
+            # Godot discards its old peer before connecting a replacement. A
+            # compatible fresh reply therefore proves old work now incapable.
+            self._unresolved_write = None
+
+    def retain_unknown_write(self) -> None:
+        # The editor reply may be valid while constructing the public MCP result
+        # fails. Preserve that request's admission fence until a separate read.
+        if self._last_write_receipt is not None and self._unresolved_write is None:
+            self._unresolved_write = self._last_write_receipt
+
+    async def _retire(self, connection: ServerConnection) -> None:
+        if self._connection is connection:
+            self._connection = None
+            self._session_id = None
+        # Closing Python alone isn't settlement. Keep the tombstone until the
+        # editor sends a fresh read from its replacement peer.
+        await connection.close(1008, "WRITE_OUTCOME_UNKNOWN")
+
+    async def _request_write(self) -> tuple[dict, float]:
+        if self._write_active or self._unresolved_write is not None:
+            raise BridgeError("WRITE_BUSY", connected=self._connection is not None)
         connection = self._connection
+        if connection is None:
+            raise BridgeError("DISCONNECTED")
+        self._write_active = True
+        self._last_write_receipt = None
+        started = perf_counter()
+        try:
+            # Required on EVERY call, including first connection/Python restart.
+            # No cached read, automatic write retry, or replacement-socket send.
+            data, _ = await self._exchange("godot_get_editor_state", connection=connection)
+            if self._connection is not connection:
+                raise BridgeError("DISCONNECTED")
+            unresolved = UnresolvedWrite(secrets.token_hex(16), connection, data["editor_session_id"])
+            self._unresolved_write = unresolved
+            try:
+                result, _ = await self._exchange(WRITE_OPERATION, connection=connection, writer=unresolved)
+                self._last_write_receipt = unresolved
+                return result, round((perf_counter() - started) * 1000, 3)
+            except asyncio.CancelledError:
+                if unresolved.possibly_sent:
+                    if not unresolved.send_completed:
+                        await asyncio.shield(self._retire(connection))
+                    # Report uncertainty to any caller which still awaits us.
+                    raise BridgeError("WRITE_OUTCOME_UNKNOWN", connected=self._connection is connection) from None
+                self._unresolved_write = None
+                raise
+            except Exception as error:
+                if unresolved.possibly_sent:
+                    if not unresolved.send_completed:
+                        await self._retire(connection)
+                    if (not isinstance(error, BridgeError) or error.code not in
+                            {"LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED",
+                             "RIG_LAB_BUILD_FAILED", "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT",
+                             "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY"}):
+                        raise BridgeError("WRITE_OUTCOME_UNKNOWN", connected=self._connection is connection) from None
+                else:
+                    self._unresolved_write = None
+                raise
+        except BridgeError as error:
+            if error.code == "BUSY":
+                raise BridgeError("WRITE_BUSY", connected=error.connected) from None
+            raise
+        finally:
+            self._write_active = False
+
+    async def _exchange(self, operation: str, *, connection: ServerConnection | None = None,
+                        writer: UnresolvedWrite | None = None) -> tuple[dict, float]:
+        connection = connection if connection is not None else self._connection
         if connection is None:
             raise BridgeError("DISCONNECTED")
         if len(self._pending) >= MAX_PENDING:
             raise BridgeError("BUSY", connected=True)
         started = perf_counter()
-        request_id = secrets.token_hex(16)
+        request_id = writer.request_id if writer is not None else secrets.token_hex(16)
         future = asyncio.get_running_loop().create_future()
-        self._pending[request_id] = Pending(connection, operation, future)
+        pending = Pending(connection, operation, future)
+        self._pending[request_id] = pending
         try:
             async with asyncio.timeout(self.config.request_timeout_seconds):
-                await connection.send(encode({
+                message = {
                     "type": "request", "protocol_version": PROTOCOL_VERSION,
                     "id": request_id, "operation": operation, "params": {},
-                }))
+                }
+                if writer is not None:
+                    message["editor_session_id"] = writer.session_id
+                encoded = encode(message)
+                async with self._send_lock:
+                    if self._connection is not connection:
+                        raise BridgeError("DISCONNECTED")
+                    self._send_sequence += 1
+                    pending.sequence = self._send_sequence
+                    if writer is not None:
+                        writer.sequence = pending.sequence
+                        writer.possibly_sent = True
+                    await connection.send(encoded)
+                    if writer is not None:
+                        writer.send_completed = True
                 message = await future
             elapsed_ms = round((perf_counter() - started) * 1000, 3)
             if not message["ok"]:

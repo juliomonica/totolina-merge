@@ -1,4 +1,4 @@
-"""Closed v1 wire and result contracts. No editor mutations exist in this protocol."""
+"""Closed v1 wire contracts: metadata reads and one fixed, undoable lab write."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from pydantic import Field, with_config
 from typing_extensions import TypedDict
 
 PROTOCOL_VERSION = 1
-BRIDGE_VERSION = "0.1.0"
+BRIDGE_VERSION = "0.2.0"
 MAX_PAYLOAD_BYTES = 256 * 1024
 MAX_STRING_BYTES = 4096
 MAX_NODES = 2000
@@ -20,7 +20,16 @@ MAX_DEPTH = 64
 MAX_SELECTED = 128
 MAX_PLAYER_ANIMATIONS = 128
 MAX_ANIMATIONS = 512
-OPERATIONS = frozenset({"godot_ping", "godot_get_editor_state", "godot_inspect_scene"})
+WRITE_OPERATION = "godot_create_rig_lab"
+READ_OPERATIONS = frozenset({"godot_ping", "godot_get_editor_state", "godot_inspect_scene"})
+OPERATIONS = READ_OPERATIONS | {WRITE_OPERATION}
+LAB_SCENE_PATH = "res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"
+LAB_ROOT_NAME = "TotolinaRigLab"
+RIG_ROOT_NAME = "TotolinaRigV2"
+UNDO_ACTION_NAME = "Lunitora: Create Totolina Rig Lab Scaffold"
+WRITE_ERRORS = frozenset({"LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED",
+                          "RIG_LAB_BUILD_FAILED", "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT",
+                          "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY", "INVALID_REQUEST", "INVALID_MESSAGE"})
 ERROR_MESSAGES = {
     "DISCONNECTED": "Godot editor is disconnected. Open this project with the editor plugin enabled.",
     "TIMEOUT": "Godot did not reply before the request deadline.",
@@ -33,16 +42,26 @@ ERROR_MESSAGES = {
     "UNSUPPORTED_HOST": "This editor plugin requires Godot 4.7.",
     "INVALID_REQUEST": "Each Godot tool accepts exactly an empty object.",
     "INVALID_MESSAGE": "The peer sent an invalid bridge message.",
-    "UNSUPPORTED_OPERATION": "Only the three registered read-only Godot operations are permitted.",
+    "UNSUPPORTED_OPERATION": "Only registered Godot operations are permitted; no generic editing API exists.",
     "SCENE_TOO_LARGE": "The scene exceeds bounded inspection limits; no partial result was returned.",
     "RESPONSE_TOO_LARGE": "The encoded bridge response exceeds the size limit.",
     "INSPECTION_FAILED": "Godot could not inspect current editor metadata.",
+    "LAB_SCENE_REQUIRED": "Open the saved Totolina rig lab scene before creating its scaffold.",
+    "LAB_ROOT_MISMATCH": "The rig lab root must be the exact native, script-free local Node2D.",
+    "LAB_ALREADY_CREATED": "The reserved TotolinaRigV2 subtree already exists; nothing was replaced.",
+    "RIG_LAB_BUILD_FAILED": "Detached rig lab preparation failed before starting an undo action.",
+    "WRITE_REPLAY_REJECTED": "This write request ID was already seen; this does not identify its original outcome.",
+    "SESSION_WRITE_LIMIT": "This editor session has reached its bounded write request limit.",
+    "WRITE_OUTCOME_UNKNOWN": "The write outcome is unknown. Do not retry automatically; obtain a fresh editor read and review the lab.",
+    "WRITE_BUSY": "A write is active or awaiting temporal settlement. Obtain a fresh editor read before another write.",
 }
 ErrorCode = Literal[
     "DISCONNECTED", "TIMEOUT", "BUSY", "PORT_IN_USE", "EDITOR_BUSY", "AUTH_FAILED",
     "LOCAL_AUTH_UNSAFE", "PROJECT_MISMATCH", "UNSUPPORTED_HOST", "INVALID_REQUEST",
     "INVALID_MESSAGE", "UNSUPPORTED_OPERATION", "SCENE_TOO_LARGE", "RESPONSE_TOO_LARGE",
     "INSPECTION_FAILED",
+    "LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED", "RIG_LAB_BUILD_FAILED",
+    "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT", "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY",
 ]
 BoundedString = Annotated[str, Field(max_length=MAX_STRING_BYTES)]
 NonEmptyString = Annotated[str, Field(min_length=1, max_length=MAX_STRING_BYTES)]
@@ -67,7 +86,7 @@ class PingData(TypedDict):
     godot_version: NonEmptyString
     project_path: NonEmptyString
     project_name: BoundedString
-    plugin_version: Literal["0.1.0"]
+    plugin_version: Literal["0.2.0"]
     editor_session_id: NonEmptyString
     read_only: Literal[True]
 
@@ -131,7 +150,7 @@ class Envelope(TypedDict):
     ok: bool
     connected: bool
     protocol_version: Literal[1]
-    bridge_version: Literal["0.1.0"]
+    bridge_version: Literal["0.2.0"]
     round_trip_ms: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None
     error: ErrorInfo | None
 
@@ -149,6 +168,26 @@ class EditorStateResult(Envelope):
 @with_config(extra="forbid")
 class SceneInspectionResult(Envelope):
     result: SceneInspectionData | None
+
+
+@with_config(extra="forbid")
+class RigLabData(TypedDict):
+    editor_session_id: NonEmptyString
+    project_path: NonEmptyString
+    scene_path: Literal["res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"]
+    root_name: Literal["TotolinaRigLab"]
+    created_root: Literal["TotolinaRigV2"]
+    created_node_count: Annotated[int, Field(strict=True, ge=7, le=7)]
+    undo_action_name: Literal["Lunitora: Create Totolina Rig Lab Scaffold"]
+    undo_actions_added: Annotated[int, Field(strict=True, ge=1, le=1)]
+    save_state: Literal["saved_dirty"]
+    auto_saved: Literal[False]
+    read_only: Literal[False]
+
+
+@with_config(extra="forbid")
+class RigLabResult(Envelope):
+    result: RigLabData | None
 
 
 def error_info(code: str) -> ErrorInfo:
@@ -295,6 +334,16 @@ def validate_result(operation: str, data: dict) -> None:
             _fields(node, {"path", "type"})
             require(_path(node["path"]) and _string(node["type"]) and node["path"] not in seen)
             seen.add(node["path"])
+    elif operation == WRITE_OPERATION:
+        _fields(data, {"editor_session_id", "project_path", "scene_path", "root_name", "created_root",
+                       "created_node_count", "undo_action_name", "undo_actions_added", "save_state",
+                       "auto_saved", "read_only"})
+        require(_string(data["editor_session_id"]) and _string(data["project_path"]))
+        require(data["scene_path"] == LAB_SCENE_PATH and data["root_name"] == LAB_ROOT_NAME
+                and data["created_root"] == RIG_ROOT_NAME and data["undo_action_name"] == UNDO_ACTION_NAME)
+        require(type(data["created_node_count"]) is int and data["created_node_count"] == 7
+                and type(data["undo_actions_added"]) is int and data["undo_actions_added"] == 1)
+        require(data["save_state"] == "saved_dirty" and data["auto_saved"] is False and data["read_only"] is False)
     else:
         _fields(data, {"editor_session_id", "scene", "nodes"})
         require(_string(data["editor_session_id"]))
@@ -344,16 +393,25 @@ def validate_result(operation: str, data: dict) -> None:
 
 
 def validate_response(message: dict) -> None:
-    _fields(message, {"type", "protocol_version", "id", "operation", "ok", "result", "error"})
+    fields = {"type", "protocol_version", "id", "operation", "ok", "result", "error"}
+    if message.get("operation") == WRITE_OPERATION:
+        fields.add("editor_session_id")
+    _fields(message, fields)
     require(type(message["protocol_version"]) is int and message["protocol_version"] == PROTOCOL_VERSION
             and message["type"] == "response" and is_hex(message["id"], 32)
             and type(message["operation"]) is str and type(message["ok"]) is bool)
     require(message["operation"] in OPERATIONS, "UNSUPPORTED_OPERATION")
+    if message["operation"] == WRITE_OPERATION:
+        require(_string(message["editor_session_id"]))
     if message["ok"]:
         require(message["error"] is None)
         validate_result(message["operation"], message["result"])
+        if message["operation"] == WRITE_OPERATION:
+            require(message["result"]["editor_session_id"] == message["editor_session_id"])
     else:
         require(message["result"] is None)
         _fields(message["error"], {"code", "message"})
         require(type(message["error"]["code"]) is str and message["error"]["code"] in ERROR_MESSAGES
                 and _string(message["error"]["message"], empty=True))
+        if message["operation"] == WRITE_OPERATION:
+            require(message["error"]["code"] in WRITE_ERRORS)

@@ -1,18 +1,20 @@
-# Lunitora Godot Animation MCP v0.1
+# Lunitora Godot Animation MCP v0.2
 
-This editor bridge exposes exactly three metadata tools: `godot_ping`,
-`godot_get_editor_state`, and `godot_inspect_scene`. Every tool accepts exactly
-`{}`. The Codex-owned Python stdio server listens on **127.0.0.1:43128**;
+This editor bridge exposes the three existing metadata tools, `godot_ping`,
+`godot_get_editor_state`, and `godot_inspect_scene`, plus the fixed lab operation
+`godot_create_rig_lab`. All four tools accept exactly `{}`; extra fields are
+rejected. Bridge and editor-plugin versions are **0.2.0**; the authenticated
+transport protocol remains **1**. The Codex-owned Python stdio server listens on **127.0.0.1:43128**;
 Godot's `WebSocketPeer` connects from the enabled editor plugin. Photoshop's
 server, implementation, and **43127** port are separate. The Godot and Photoshop
 profiles share the existing `tools/operator_launcher` implementation.
 
-The v0.1 editor operation allowlist contains no writes. It cannot change nodes,
-resources, selection, animation playback, project settings, or undo/redo history;
-it cannot create, delete, reparent, or save anything. Inspection reads the current
-edited scene through public editor APIs. It does not instantiate production
-scenes or inspect arbitrary script properties. Nothing in this bridge replaces
-the existing Totolina presentation or gameplay architecture.
+The three inspection operations retain their read-only behavior. The new writer
+adds only the seven-node scaffold described below to the dedicated rig lab, using
+one native editor Undo/Redo action. It never saves the lab, changes production
+scenes or artwork, creates animation clips, or starts animation playback.
+Inspection reads the current edited scene through public editor APIs and does
+not instantiate production scenes or inspect arbitrary script properties.
 
 ## New-computer setup
 
@@ -44,7 +46,7 @@ args = ['-B', '-m', 'core.godot_server']
 cwd = 'D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp'
 startup_timeout_sec = 15
 tool_timeout_sec = 10
-enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene']
+enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene', 'godot_create_rig_lab']
 ```
 
 On this PC the user configuration is `C:\Users\julio\.codex\config.toml`.
@@ -156,6 +158,9 @@ a fresh authenticated editor reply, rather than a cached connection flag.
 - `godot_get_editor_state`: the ping metadata, scene save state, and selection.
 - `godot_inspect_scene`: scene state and bounded node metadata, including safely
   available animation names.
+- `godot_create_rig_lab`: the verified fixed lab scaffold, one undo action, and
+  `saved_dirty`, `auto_saved=false`, `read_only=false` on success. Metadata reads
+  still report `read_only=true`; this field describes the individual operation.
 
 The limits are **2,000 nodes**, **depth 64**, **128 selected-node entries**,
 **128 animation names per player**, **512 names overall**, **256 KiB per encoded
@@ -181,6 +186,73 @@ Disconnects fail pending requests, which are never silently replayed on reconnec
 Malformed, oversized, stale,
 wrong-project, unauthenticated, or unsupported messages are rejected. Python's
 stdout carries MCP only; diagnostics belong on stderr and never include secrets.
+
+## Fixed rig-lab scaffold v0.2
+
+Open the saved, native, script-free `TotolinaRigLab` (`Node2D`) seed scene at
+`res://addons/lunitora_godot/labs/totolina_rig_lab.tscn` in the editor. If the seed
+is absent in a new setup, create and save that empty native root manually first.
+Keep the lab open and call `godot_create_rig_lab` with `{}`. The operation rejects other scenes,
+the wrong root name/class or a scripted root, and an existing `TotolinaRigV2`.
+It appends exactly these seven native, script-free nodes; every generated node
+has the lab root as its owner:
+
+```text
+TotolinaRigLab (existing Node2D)
+└─ TotolinaRigV2 (Node2D)
+   ├─ Meshes (Node2D)
+   │  └─ TestMesh (Polygon2D)
+   ├─ Skeleton2D (Skeleton2D)
+   │  └─ Root (Bone2D)
+   │     └─ Tip (Bone2D)
+   └─ AnimationPlayer (AnimationPlayer)
+```
+
+`TestMesh` has exact `Color(0.25, 0.5, 1.0, 1.0)`, no texture, six fixed vertices
+forming a 128 × 24 rectangle, and four fixed triangles. Its skeleton path is
+`../../Skeleton2D`; the `Root` and `Root/Tip` weights are respectively
+`[1, 0.5, 0, 0, 0.5, 1]` and `[0, 0.5, 1, 1, 0.5, 0]`. Both bones have fixed
+64-pixel lengths/rest poses, with `Tip` offset by `(64, 0)`. The AnimationPlayer
+is empty: no libraries, clips, tracks, RESET animation, autoplay, or playback.
+This fixture proves basic native rig wiring; it does not establish a production
+character or an approved animation.
+
+The writer validates and builds the detached scaffold before starting the
+single action `Lunitora: Create Totolina Rig Lab Scaffold`. It validates the lab
+again immediately before action creation, commits synchronously without awaits
+or deferred mutation, and then verifies the exact node recipe, owners, current
+scene/session, dirty state, and native scene-history change. `commit_action()`
+is not treated as a transaction or proof of success. Successful creation leaves
+the lab dirty; save only when the user chooses. Native editor Undo removes the
+whole subtree, and Redo restores it. Existing production resources remain outside
+the writer's allowed scene.
+
+Every write first obtains a fresh editor-state reply on the same authenticated
+connection and binds its request to that editor session. Writes are
+non-reentrant. A possibly sent write blocks another write until a matching reply
+or a compatible later authenticated read establishes an ordering barrier. Such a
+read proves that the older request cannot still execute; it does not prove the
+semantic write outcome. Partial send, disconnect, timeout, or response-validation
+uncertainty therefore requires scene/history inspection rather than retrying the
+write. No write is replayed automatically on reconnect.
+
+The editor keeps a separate bounded session ledger of admitted write IDs,
+independent of the reconnectable read-response cache. Duplicate write IDs are
+rejected rather than served from a cached success; reconnecting or restarting
+the Python owner does not erase this ledger. After 128 admitted IDs the session
+rejects more writes. Re-entry, a committing undo action, retired sessions, and
+failed post-action verification fail closed. If an action began and its outcome
+cannot be verified, the editor writer is faulted for that session and reports
+`WRITE_OUTCOME_UNKNOWN`; it does not undo, save, or attempt another action as an
+automatic repair.
+
+Animation authoring follows only after this scaffold and its editor history are
+proven. The roadmap includes reusable rigs and AnimationPlayer, Tween,
+AnimatedSprite2D, and lightweight effects for other characters, UI, and worlds,
+following [ANIMATION_GUIDELINES.md](../../docs/ANIMATION_GUIDELINES.md). It must
+remain useful beyond the current Totolina artwork. Production migration,
+deformation polish, animation clips, playback controls, and general node/resource
+editing are separate future capabilities.
 
 ## Validation commands
 
@@ -208,9 +280,12 @@ synthetic fixtures are not production rigs.
 & ./tools/lunitora_mcp/.venv/Scripts/python.exe -B ./tests/godot_mcp/run_native_validation.py --godot 'D:/Development/Tools/Godot/4.7.2/Godot_v4.7.2-stable_win64_console.exe'
 ```
 
-This runner copies only the addon and fixture into a disposable project, enables
-the plugin there, checks actual editor startup/import/parsing, and requires
-exactly 56 successful native inspection/security checks. Logs and editor data
+This runner copies only the addon and fixtures into a disposable project,
+enables the plugin there, checks actual editor startup/import/parsing, and
+requires exactly 56 successful native inspection/security checks. A second,
+test-only EditorPlugin then exercises the rig writer and actual editor Undo/Redo
+commands in that copy; its check count is reported separately. Neither controller
+nor fixture hooks are added to the production plugin. Logs and editor data
 remain in the printed temporary artifact directory.
 
 The export gate executes Godot's real Android and iOS **data-package** exporters
@@ -220,8 +295,15 @@ The snapshot includes tracked and new nonignored runtime files, refuses redirect
 resource paths, and omits local credentials, virtual environments, caches, and
 source artwork. The initial CSV import uses the existing Kitchen runner's
 translation bootstrap; actual project settings are restored for every export.
+Each native process receives private `TEMP`, `TMP`, and `TMPDIR` paths under its
+artifact directory, keeping Godot's `tmpproject.binary` separate from parallel
+fixtures. Strict engine-error detection remains enabled.
 Then it removes only the addon exclusion in each disposable preset as a positive
-control and requires the addon scripts and nested resources to appear. A runtime
+control and requires the actual `rig_lab.gd` helper and
+`labs/totolina_rig_lab.tscn` fixture, existing addon scripts, and nested resources
+to appear. Each positive remap must point to a packaged artifact, including
+compiled scripts/scenes outside the addon folder; all those targets must be
+absent from the excluded package. A runtime
 resource must appear in every package, and local credential probes must not.
 
 ```powershell
@@ -242,13 +324,22 @@ gates described in [tests/README.md](../../tests/README.md):
 & ./tools/lunitora_mcp/.venv/Scripts/python.exe -B tests/run_kitchen_regressions.py --godot 'D:/Development/Tools/Godot/4.7.2/Godot_v4.7.2-stable_win64_console.exe' --graphical
 ```
 
-For final acceptance, call the three tools through **Codex with this project open
+For final acceptance, call the metadata tools through **Codex with this project open
 in the actual Godot editor**. Check both startup orders, restart, close/reopen,
 plugin disable/enable, no scene, saved/dirty/unnamed tabs, selections, and scene
 switching. Compare scene/resource files, selection, dirty state, and undo history
 before/after read-only calls. Keep Photoshop available during the live check.
 These checks must be reported separately from fake-peer, SDK stdio, and headless
 fixture tests.
+
+For the v0.2 writer, use the dedicated seed lab through the actual Codex-owned
+connection, verify exactly seven generated nodes, one native undo action and
+unchanged lab-file bytes, then use the editor's Undo and Redo commands. A second
+creation must refuse an existing rig. Check the empty AnimationPlayer, exact
+color/weights/rest poses, ownership, scene-switch rejection, and recovery after
+connection uncertainty. Never start a manual server on live port 43128 for this
+acceptance. These editor checks and human visual review remain separate from
+disposable native fixtures and export ZIP evidence.
 
 ## Validation status language
 
@@ -258,13 +349,14 @@ Rendered animation quality remains **REQUIRES USER REVIEW** unless the user has
 reviewed it. Mobile behavior remains **REQUIRES ANDROID DEVICE** or
 **REQUIRES MAC/iOS**; desktop and ZIP tests do not establish device acceptance.
 
-No TotolinaRigV2, node rigging, animation playback/authoring, resource writes,
-production migration, new operator aliases, Git staging, commits, or pushes are
-part of v0.1.
+The historical v0.1 implementation contained inspection only. The current v0.2
+adds the fixed lab scaffold above; animation playback/authoring, general resource
+writes, production migration, new operator aliases, staging, commits, and pushes
+remain outside its scope.
 
-## Implementation file manifest
+## Historical implementation file manifest — v0.1
 
-The implementation modifies exactly these three previously tracked files:
+The original v0.1 implementation modified these three previously tracked files:
 
 ```text
 export_presets.cfg                  Android/iOS addon exclusions only
@@ -272,7 +364,7 @@ project.godot                       New editor plugin enablement only
 tools/lunitora_mcp/README.md         Link to this Godot guide only
 ```
 
-It creates these 25 Git-visible files:
+It created these 25 Git-visible files:
 
 ```text
 addons/lunitora_godot/bridge_client.gd
@@ -308,10 +400,12 @@ automatic `.local/godot-auth.json`. Ignored `.godot/` and temporary directories
 hold editor imports, isolated test copies, logs, screenshots, and export ZIPs.
 These local files are not part of the Git change set. All previous user
 configuration entries are preserved; no Photoshop MCP entry is modified.
-The toolkit lock and production scenes, scripts, resources, and assets are
-preserved.
+The toolkit lock and production scenes, scripts, resources, and assets were
+preserved. Current v0.2 adds `addons/lunitora_godot/rig_lab.gd` and its UID plus
+the dedicated lab seed scene, extends only the Godot operation allowlist and
+validation support, and preserves the existing launcher and Photoshop profiles.
 
-## Recorded validation — 2026-09-30
+## Historical recorded validation — v0.1, 2026-09-30
 
 This is the historical v0.1 implementation record. Current launcher acceptance
 is recorded in [Repository-local Godot launcher v0.7](#repository-local-godot-launcher-v07);
@@ -340,7 +434,7 @@ Both final excluded mobile ZIPs contain **277 entries and zero addon entries**.
 Each positive control contains **287 entries and eight addon entries**. Five
 compiled resource targets identified through addon remaps are absent from each
 excluded ZIP. The runtime main scene and resource control are present, and local
-credential probes are absent. All seven current addon files matched the tested
+credential probes are absent. All seven v0.1 addon files matched the tested
 export snapshot byte-for-byte. This is physical package evidence, rather than
 an exclusion-string check.
 
@@ -362,3 +456,84 @@ close/reopen, plugin disable/enable, and unchanged selection/dirty/undo state
 around tool calls. Run the live Photoshop tools concurrently for operator
 acceptance. Graphical captures remain **REQUIRES USER REVIEW** for subjective
 presentation quality; mobile behavior requires the relevant devices.
+
+## Current v0.2 regression and package record — 2026-09-30
+
+The independent regression and export run used actual Godot
+`4.7.2.stable.official.ed1daf0bf` and preserved all **224** baseline tracked
+production/config resource hashes. `project.godot` and `export_presets.cfg`
+remained byte-for-byte unchanged. Before live acceptance, the dedicated lab
+remained its initial empty native seed; that run's SHA256 was
+`6F54A20542FE4530AD592FC873AB739D2322BE5B275836ABABBD8A077DFD9ADF`.
+
+| VERIFIED gate | Executed result |
+| --- | --- |
+| Complete Godot MCP Python discovery | 116 tests passed in 52.937 seconds, zero failures/skips: 100 configuration/authentication/protocol/bridge/MCP tests and 16 actual native transport tests. |
+| Existing Photoshop Python | 171 tests passed in 38.036 seconds; zero failures/skips. |
+| Existing Photoshop UXP | 165 checks passed: 61 plugin/panel and 104 processing. |
+| Existing launcher | 82 safety/workflow checks passed: 43 original and 39 Godot; no real applications started or stopped. |
+| Kitchen runner self-tests | 2 tests passed. |
+| Full Kitchen gate | 25 suites / 11,044 checks passed: 13 headless / 4,732 and 12 graphical / 6,312; zero failures and clean native import. |
+| Full-project Android/iOS data exports | Four native ZIP exports passed, zero skipped: two exclusions and two positive controls. |
+| Export source fidelity | All 10 current addon/helper/seed files matched the tested export snapshot. |
+| Current isolated native editor acceptance | 56 retained inspection checks and 442 rig-editor checks passed; zero failures. |
+| Actual native client transport | 16 tests passed: 9 bridge/writer cases and 7 ordered-settlement, old-peer, session/ledger, fault and reentrant-poll/shutdown safety cases. |
+
+Each excluded ZIP contains **279 entries and zero addon entries**. Each positive
+control contains **293 entries and 11 addon entries**, including the actual
+compiled `rig_lab.gdc` and the lab scene's compiled `.scn` target. All **seven**
+compiled resource targets reached by addon remaps are absent from each excluded
+ZIP. The runtime main scene and resource control are present; local credential
+probes are absent. These are physical-package checks with the actual helper and
+scene, rather than preset-string checks or synthetic placeholders alone.
+
+Evidence remains in the local temporary directory
+`C:\Users\julio\AppData\Local\Temp\lunitora-godot-v02-regressions-5847612491b54ad58c779b666fac9376`:
+`photoshop-python-retry.log`, `uxp-plugin.log`, `uxp-processing.log`,
+`launcher-base.log`, `launcher-godot.log`, `kitchen-runner-unit-retry.log`,
+`kitchen-retry-runner.log`, `kitchen-retry/` logs/captures,
+`production-baseline-hashes.json`, and `exports-final-verified/` with the four
+final-source ZIPs, exporter logs, private native temporary storage and
+`report.json`. Earlier export attempts remain in `exports/`, `exports-final/`
+and `exports-final-retry/`; the final verified run exercises the persistent
+temporary-path isolation. Initial sandbox attempts were retained separately;
+the clean Windows-permission retries above are the passing results. The native
+editor acceptance was rerun with private process-temporary paths; final evidence
+is at `C:\Users\julio\AppData\Local\Temp\lunitora-godot-native-y_cstvh9`.
+Complete final Python discovery is recorded in
+`C:\Users\julio\AppData\Local\Temp\lunitora-godot-v02-final-320d184fa1ce4a9a8862448f1d304658\godot-python-all.log`.
+Per-case native safety logs and evidence are retained in the ignored
+`tools/lunitora_mcp/.local/native-safety-logs/` directory.
+
+The automated runs above cover unchanged-workflow regressions and physical
+export exclusion; live acceptance is recorded below. Automated checks do not
+establish human rig/animation approval or device behavior.
+**NOT EXECUTED in this package run:** APK/IPA creation, signing, executable iOS
+export, Android hardware, Mac/iOS/Xcode and device behavior. Successful iOS data
+ZIP export does not establish an installed iOS executable template or build.
+Captures remain **REQUIRES USER REVIEW** for subjective presentation quality.
+
+**VERIFIED — live v0.2 acceptance:** bridge/plugin `0.2.0` was verified in the
+real checkout. `godot_create_rig_lab({})` succeeded exactly once, creating the
+seven-node scaffold in one editor action without saving. Normal Godot Undo
+removed the complete scaffold and returned the previously clean scene to clean;
+Redo restored it. Manual Save followed by scene close/reopen verified persistence.
+AnimationPlayer remained empty. No unrelated scene/resource files changed.
+
+The user restored and saved the lab as its intended empty-root baseline. Normal
+Godot-authored scene/node identity metadata is retained; it is not test residue:
+
+```ini
+[gd_scene format=3 uid="uid://dbai77g0q7plj"]
+
+[node name="TotolinaRigLab" type="Node2D" unique_id=1866938083]
+```
+
+The accepted file is 111 bytes. The writer gates on scene/root semantics, not
+file size, literal bytes or absence of identity metadata. Targeted checks against
+this normalized baseline passed: 33 Python/native transport tests (seven exact
+baseline copies), 56 inspection plus 442 native rig checks, and four Android/iOS
+data exports with exclusion/positive controls; 224 production/lab hashes and all
+352 repository file hashes remained unchanged. Executable iOS export/device
+behavior remains **NOT VALIDATED / REQUIRES MAC/iOS**; the executable iOS template
+is missing.
