@@ -9,6 +9,12 @@ function Test-SamePath($Left, $Right) {
         [IO.Path]::GetFullPath($Right).TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Test-AbsoluteLocalPath($Path) {
+    # IsPathRooted also accepts D:relative and \current-drive paths on Windows.
+    # Neither proves an absolute path without another process's working directory.
+    return $Path -and $Path -match '^[A-Za-z]:[\\/]'
+}
+
 function Get-RepositoryRoot {
     $expected = [IO.Path]::GetFullPath((Join-Path $script:LauncherDirectory '../..'))
     $root = & git -C $expected rev-parse --show-toplevel
@@ -26,11 +32,19 @@ function Get-RepositoryRoot {
 
 function Assert-Executable($Path, $Kind) {
     if (-not $Path) { throw "$Kind is not configured. Run tools/operator_launcher/setup.ps1 with an explicit override." }
-    if (-not [IO.Path]::IsPathRooted($Path) -or $Path -match '^\\\\' -or
+    if (-not (Test-AbsoluteLocalPath $Path) -or
         -not (Test-Path -LiteralPath $Path -PathType Leaf) -or [IO.Path]::GetExtension($Path) -ine '.exe') {
         throw "$Kind must be an existing absolute local .exe path. Run setup again after application updates."
     }
     $item = Get-Item -LiteralPath $Path
+    if ($Kind -eq 'godotExe') {
+        if ($item.Name -notmatch '^Godot(?:_[A-Za-z0-9._-]+)?\.exe$' -or
+            $item.VersionInfo.ProductName -cne 'Godot Engine' -or
+            $item.VersionInfo.ProductVersion -cnotmatch '^4\.7\.2\.stable\.official(?:\.[A-Za-z0-9]+)?$') {
+            throw 'godotExe must identify itself as the official Godot Engine 4.7.2 stable editor.'
+        }
+        return
+    }
     $names = switch ($Kind) {
         'desktopExe' { @('ChatGPT.exe', 'Codex.exe') }
         'photoshopExe' { @('Photoshop.exe') }
@@ -48,10 +62,13 @@ function Read-LauncherConfig($Root) {
     if (-not (Test-Path -LiteralPath $path)) { throw 'First run setup.ps1 from Git Bash. See tools/LUNITORA_COMMANDS.md.' }
     $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
     $keys = @($config.PSObject.Properties.Name)
-    if (@($keys | Where-Object { $_ -notin @('repositoryRoot', 'desktopExe', 'photoshopExe', 'udtExe') }).Count -or $keys.Count -ne 4) {
-        throw 'Local configuration must contain only repositoryRoot, desktopExe, photoshopExe and udtExe.'
+    $required = @('repositoryRoot', 'desktopExe', 'photoshopExe', 'udtExe')
+    if (@($keys | Where-Object { $_ -notin ($required + 'godotExe') }).Count -or
+        @($required | Where-Object { $_ -notin $keys }).Count) {
+        throw 'Local configuration requires repositoryRoot, desktopExe, photoshopExe and udtExe; godotExe is optional.'
     }
     if (-not (Test-SamePath $Root $config.repositoryRoot)) { throw 'Local configuration belongs to a different checkout. Run setup here.' }
+    if ('godotExe' -notin $keys) { $config | Add-Member NoteProperty godotExe $null }
     return $config
 }
 
@@ -135,13 +152,20 @@ function Wait-ForExit($Snapshots, [int]$Seconds) {
     } while ($true)
 }
 
-function Close-Desktop($Path) {
+function Close-Desktop($Path, $KeepOpenPath = $null) {
     $all = @(Get-LauncherProcesses)
     $desktop = @(Get-DesktopProcesses $all $Path)
     if (-not $desktop.Count) { return @() }
     $owned = @(Get-OwnedDescendants $all $desktop)
     if ($owned.Count -and $PID -in @($owned.ProcessId)) {
         throw 'Run refresh from an external Git Bash window, after desktop work finishes. It cannot close its own parent session.'
+    }
+    # An editor started by Desktop can be a descendant. Preserve its entire tree,
+    # regardless of project arguments: any open editor may have unsaved work.
+    $protected = @(Get-DesktopProcesses $all $KeepOpenPath)
+    if ($protected.Count) {
+        $protected += @(Get-OwnedDescendants $all $protected)
+        $owned = @($owned | Where-Object { $_.ProcessId -notin @($protected.ProcessId) })
     }
     Write-Host 'Closing ChatGPT/Codex Desktop (active desktop work will stop)...'
     foreach ($process in $desktop) {
@@ -156,56 +180,61 @@ function Close-Desktop($Path) {
     return @(Wait-ForExit $owned 10)
 }
 
-function Get-PortOwners {
+function Get-PortOwners([int]$Port = 43127) {
     # IPGlobalProperties is independent of localized netstat output. CIM supplies PIDs.
     $listeners = @([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
-        Where-Object { $_.Port -eq 43127 })
+        Where-Object { $_.Port -eq $Port })
     if (-not $listeners.Count) { return @() }
-    $rows = @(Get-NetTCPConnection -LocalPort 43127 -State Listen -ErrorAction Stop)
+    $rows = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop)
     if (-not $rows.Count) { throw 'Port is occupied but the listener identity is unavailable.' }
     return @($rows.OwningProcess | Sort-Object -Unique)
 }
 
-function Assert-PortFree {
-    if (@(Get-PortOwners).Count) { throw 'Port 43127 is still occupied.' }
-    $probe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 43127)
+function Assert-PortFree([int]$Port = 43127) {
+    if (@(Get-PortOwners $Port).Count) { throw "Port $Port is still occupied." }
+    $probe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
     $probe.Server.ExclusiveAddressUse = $true
     try { $probe.Start() } finally { $probe.Stop() }
 }
 
-function Test-ServerCommand($Process, $Executable) {
+function Test-ServerCommand($Process, $Executable, $Module = 'core.server') {
+    if ($Module -cnotin @('core.server', 'core.godot_server')) { return $false }
     if (-not (Test-SamePath $Process.ExecutablePath $Executable)) { return $false }
     # Exact allowlist; no -c, shell wrapper, extra flags, lookalike modules or substring match.
     $escaped = [regex]::Escape($Executable)
-    return $Process.CommandLine -cmatch ('^(?i:"' + $escaped + '"|' + $escaped + ')\s+-B\s+-m\s+core\.server\s*$')
+    return $Process.CommandLine -cmatch ('^(?i:"' + $escaped + '"|' + $escaped + ')\s+-B\s+-m\s+' + [regex]::Escape($Module) + '\s*$')
 }
 
-function Get-ProvenBridgeProcesses($Owner, $Processes, $Root) {
+function Get-ProvenBridgeProcesses($Owner, $Processes, $Root, $Module = 'core.server') {
     $venv = Join-Path $Root 'tools/lunitora_mcp/.venv/Scripts/python.exe'
-    if (Test-ServerCommand $Owner $venv) { return @($Owner) }
+    if (Test-ServerCommand $Owner $venv $Module) { return @($Owner) }
     # Windows venv python is a redirector. Require its live, exact repo parent,
     # the base executable recorded in pyvenv.cfg, exact argv and creation order.
     $parent = @($Processes | Where-Object { $_.ProcessId -eq $Owner.ParentProcessId })
     $cfg = Join-Path $Root 'tools/lunitora_mcp/.venv/pyvenv.cfg'
-    if ($parent.Count -ne 1 -or -not (Test-ServerCommand $parent[0] $venv) -or
+    if ($parent.Count -ne 1 -or -not (Test-ServerCommand $parent[0] $venv $Module) -or
         $parent[0].CreationDate -gt $Owner.CreationDate -or -not (Test-Path -LiteralPath $cfg)) { return @() }
     $base = @(Get-Content -LiteralPath $cfg | Where-Object { $_ -match '^executable = (.+)$' } |
         ForEach-Object { $_.Substring(13).Trim() })
-    if ($base.Count -eq 1 -and (Test-ServerCommand $Owner $base[0])) { return @($Owner, $parent[0]) }
+    if ($base.Count -eq 1 -and (Test-ServerCommand $Owner $base[0] $Module)) { return @($Owner, $parent[0]) }
     return @()
 }
 
-function Clear-StaleBridgePort($Root, $DesktopOwned) {
+function Clear-StaleBridgePort($Root, $DesktopOwned, [int]$Port = 43127, $Module = 'core.server') {
+    if (-not (($Port -eq 43127 -and $Module -ceq 'core.server') -or
+        ($Port -eq 43128 -and $Module -ceq 'core.godot_server'))) {
+        throw 'Unsupported bridge port/module pair. Nothing terminated.'
+    }
     $clock = [Diagnostics.Stopwatch]::StartNew()
-    while (@(Get-PortOwners).Count -and $clock.Elapsed.TotalSeconds -lt 10) { Start-Sleep -Milliseconds 250 }
-    foreach ($ownerId in @(Get-PortOwners)) {
+    while (@(Get-PortOwners $Port).Count -and $clock.Elapsed.TotalSeconds -lt 10) { Start-Sleep -Milliseconds 250 }
+    foreach ($ownerId in @(Get-PortOwners $Port)) {
         $all = @(Get-LauncherProcesses)
         $owners = @($all | Where-Object { $_.ProcessId -eq $ownerId })
-        if ($owners.Count -ne 1) { throw "Port 43127 owner PID $ownerId cannot be inspected. Nothing terminated." }
+        if ($owners.Count -ne 1) { throw "Port $Port owner PID $ownerId cannot be inspected. Nothing terminated." }
         $owner = $owners[0]
         # Never echo arbitrary command lines: other applications may put secrets there.
-        Write-Host "Port 43127 owner: PID $ownerId; $($owner.Name); $($owner.ExecutablePath)"
-        $proof = @(Get-ProvenBridgeProcesses $owner $all $Root)
+        Write-Host "Port $Port owner: PID $ownerId; $($owner.Name); $($owner.ExecutablePath)"
+        $proof = @(Get-ProvenBridgeProcesses $owner $all $Root $Module)
         if (-not $proof.Count) { throw 'Unknown port owner. Nothing terminated. Close its owning application yourself.' }
         $anchor = $proof[-1]
         $wasOwned = @($DesktopOwned | Where-Object { Test-ProcessIdentity $_ $owner }).Count -gt 0
@@ -213,12 +242,15 @@ function Clear-StaleBridgePort($Root, $DesktopOwned) {
         if (-not $wasOwned -and $parentAlive) { throw 'Exact bridge belongs to another live process; it is not proven stale. Nothing terminated.' }
         foreach ($process in $proof) { Stop-VerifiedProcess $process }
     }
-    Assert-PortFree
-    Write-Host 'Port 43127 is free.'
+    Assert-PortFree $Port
+    Write-Host "Port $Port is free."
 }
 
 function Get-DesktopLaunchTarget($Path) {
     Assert-Executable $Path 'desktopExe'
+    # A parent PowerShell 7 process can prepend its modules to PSModulePath.
+    # Load this host's built-in security module, preserving publisher validation.
+    Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
     # File/product names alone are insufficient proof for an executable fallback.
     $signature = Get-AuthenticodeSignature -LiteralPath $Path -ErrorAction Stop
     if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate -or
@@ -283,13 +315,90 @@ function Ensure-Application($Path, $Label, $Root, [switch]$Desktop) {
     Write-Host "$Label launch requested."
 }
 
+function ConvertFrom-WindowsCommandLine($CommandLine) {
+    # Accept the unambiguous subset used by this launcher/Godot's project manager:
+    # whole quoted arguments or bare words. Fail closed on mixed/escaped quotes.
+    # Do not execute or log the command line.
+    if (-not $CommandLine -or $CommandLine -match '[\r\n]') { return @() }
+    $tokens = [Collections.Generic.List[string]]::new()
+    $remaining = $CommandLine.Trim()
+    while ($remaining.Length) {
+        $match = [regex]::Match($remaining, '^(?:"([^"\r\n]*)"|([^\s"]+))(?=\s|$)')
+        if (-not $match.Success) { return @() }
+        if ($match.Groups[1].Success) {
+            $value = $match.Groups[1].Value
+            if ($value.EndsWith('\')) { return @() }
+        } else { $value = $match.Groups[2].Value }
+        $tokens.Add($value)
+        $remaining = $remaining.Substring($match.Length).TrimStart()
+    }
+    return $tokens.ToArray()
+}
+
+function Test-GodotEditorCommand($Process, $Executable, $Root) {
+    if (-not (Test-SamePath $Process.ExecutablePath $Executable)) { return $false }
+    $argv = @(ConvertFrom-WindowsCommandLine $Process.CommandLine)
+    if ($argv.Count -lt 2 -or -not (Test-AbsoluteLocalPath $argv[0]) -or
+        -not (Test-SamePath $argv[0] $Executable)) { return $false }
+    $editorFlag = $false
+    $projectFile = $false
+    $project = $null
+    for ($index = 1; $index -lt $argv.Count; $index++) {
+        $argument = $argv[$index]
+        switch -CaseSensitive ($argument) {
+            { $_ -cin @('--editor', '-e') } {
+                if ($editorFlag) { return $false }
+                $editorFlag = $true
+            }
+            '--path' {
+                if ($project -or $index + 1 -ge $argv.Count) { return $false }
+                $index++
+                # A relative path cannot be proven without the process cwd.
+                if (-not (Test-AbsoluteLocalPath $argv[$index])) { return $false }
+                $project = $argv[$index]
+            }
+            default {
+                # Godot also supports an absolute project.godot positional arg.
+                # Unknown switches, Project Manager and runtime args are not proof.
+                if ($project -or -not (Test-AbsoluteLocalPath $argument) -or
+                    [IO.Path]::GetFileName($argument) -cne 'project.godot') { return $false }
+                $project = [IO.Path]::GetDirectoryName($argument)
+                $projectFile = $true
+            }
+        }
+    }
+    return ($editorFlag -or $projectFile) -and (Test-SamePath $project $Root)
+}
+
+function Ensure-GodotEditor($Path, $Root) {
+    $editors = @(Get-LauncherProcesses | Where-Object { Test-GodotEditorCommand $_ $Path $Root })
+    if ($editors.Count) {
+        Write-Host 'Godot editor is already running for this checkout.'
+        return
+    }
+    # Use an explicit project path, never the Project Manager. Start-Process on
+    # Windows PowerShell joins arguments; quote the path to preserve spaces.
+    $projectPath = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $null = Start-Process -FilePath $Path -ArgumentList ('--editor --path "' + $projectPath + '"') -WorkingDirectory $Root -PassThru
+    Write-Host 'Godot editor launch requested for this checkout.'
+}
+
 function Invoke-Workflow($Mode, $Config, $Root) {
     Assert-Executable $Config.desktopExe 'desktopExe'
     $art = $Mode -in @('art', 'art-refresh', 'art-dev')
     if ($art) { Assert-Executable $Config.photoshopExe 'photoshopExe' }
     if ($Mode -eq 'art-dev') { Assert-Executable $Config.udtExe 'udtExe' }
-    if ($Mode -in @('art-refresh', 'dev-refresh')) {
-        $leftovers = @(Close-Desktop $Config.desktopExe)
+    $godot = $Mode -in @('godot', 'godot-refresh')
+    if ($godot) {
+        $godotPath = if ($Config.PSObject.Properties['godotExe']) { $Config.godotExe } else { $null }
+        Assert-Executable $godotPath 'godotExe'
+    }
+    if ($Mode -in @('art-refresh', 'dev-refresh', 'godot-refresh')) {
+        if ($Mode -eq 'godot-refresh') {
+            Write-Host 'Keeping Godot open to protect unsaved editor work.'
+            $leftovers = @(Close-Desktop $Config.desktopExe $godotPath)
+            Clear-StaleBridgePort $Root $leftovers 43128 'core.godot_server'
+        } else { $leftovers = @(Close-Desktop $Config.desktopExe) }
         if ($Mode -eq 'art-refresh') { Clear-StaleBridgePort $Root $leftovers }
         $leftovers = @(Wait-ForExit $leftovers 2)
         if ($leftovers.Count) {
@@ -303,7 +412,9 @@ function Invoke-Workflow($Mode, $Config, $Root) {
         Ensure-Application $Config.udtExe 'UXP Developer Tool' $Root
     }
     Ensure-Application $Config.desktopExe 'ChatGPT/Codex Desktop' $Root -Desktop
+    if ($Mode -eq 'godot') { Ensure-GodotEditor $godotPath $Root }
     Write-Host "OK: $Mode startup complete for $Root. Configured stdio MCP servers remain Desktop-owned."
+    if ($godot) { Write-Host 'lunitora_godot stays Codex-owned; the open Godot editor reconnects automatically.' }
     if ($art) {
         Write-Host 'After one-time plugin installation and pairing, try:'
         Write-Host '  Remove the background from <file>.png'

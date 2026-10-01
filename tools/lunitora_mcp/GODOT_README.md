@@ -4,7 +4,8 @@ This editor bridge exposes exactly three metadata tools: `godot_ping`,
 `godot_get_editor_state`, and `godot_inspect_scene`. Every tool accepts exactly
 `{}`. The Codex-owned Python stdio server listens on **127.0.0.1:43128**;
 Godot's `WebSocketPeer` connects from the enabled editor plugin. Photoshop's
-server, implementation, operator launcher, and **43127** port are separate.
+server, implementation, and **43127** port are separate. The Godot and Photoshop
+profiles share the existing `tools/operator_launcher` implementation.
 
 The v0.1 editor operation allowlist contains no writes. It cannot change nodes,
 resources, selection, animation playback, project settings, or undo/redo history;
@@ -52,10 +53,11 @@ put credentials in the config, command arguments, or environment. Restart the
 Codex connection/app as needed to discover the newly configured server; a file
 edit alone does not prove this chat has loaded or called it.
 
-Open this project using:
+For daily editor startup, configure and use the repository-local launcher below.
+The equivalent direct editor command is:
 
 ```powershell
-& 'D:/Development/Tools/Godot/4.7.2/Godot_v4.7.2-stable_win64.exe' --editor --path 'D:/Development/LunitoraGames/totolina-merge'
+& 'C:/path/to/Godot_v4.7.2-stable_win64.exe' --editor --path 'C:/path/to/totolina-merge'
 ```
 
 `project.godot` enables `addons/lunitora_godot/plugin.cfg`. Godot can start before
@@ -65,6 +67,45 @@ plugin closes its connection; enabling it starts connection attempts again.
 Only one owning Python listener and one authenticated editor are supported.
 A port conflict returns an explicit availability error and never selects a new
 port or terminates the existing listener.
+
+## Repository-local Godot launcher v0.7
+
+Reuse the existing launcher; no second launcher or manual Python server is needed.
+From the checkout root in Git Bash, validate/save the installed Godot executable:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/setup.ps1 \
+  -GodotExe 'C:\path\to\Godot_v4.7.2-stable_win64.exe'
+git godot -Check
+git godot
+```
+
+Setup saves optional `godotExe` in ignored
+`tools/operator_launcher/config.local.json`, preserves the existing Photoshop/UDT
+configuration, and installs all seven repository-local aliases. Legacy
+four-field configurations remain valid for art/dev commands. `-Check` validates
+configuration without starting or stopping applications.
+
+`git godot` ensures this is the configured `totolina-merge` checkout, starts
+ChatGPT/Codex Desktop if needed, and opens the configured Godot 4.7.2 editor using
+`--editor --path <repo-root>`. It verifies executable path and project arguments
+when detecting an already running editor; window titles alone are insufficient.
+It does not open the Project Manager, Photoshop, or UXP Developer Tool, and does
+not touch Photoshop port 43127. Codex owns the `lunitora_godot` stdio MCP process;
+the launcher never starts `core.godot_server` manually.
+
+Run `git godot-refresh` from external Git Bash after active Desktop work finishes.
+It fully restarts Desktop, allows the old Codex-owned Godot MCP process to exit,
+and verifies port 43128 becomes free before reopening Desktop. It can terminate
+only a stale process positively verified as this checkout's exact Lunitora Godot
+MCP process. An unknown PID is never killed. It keeps Godot open to protect
+unsaved editor work and lets the editor reconnect to the new Codex-owned server.
+
+The original five art/dev commands retain their 2026-09-30 live verification.
+**VERIFIED — user-reported live validation on 2026-09-30:** `git godot` opened
+Codex and the correct Totolina Merge project without Photoshop or UDT.
+`git godot-refresh` restarted Codex/MCP while preserving the running Godot editor
+and unsaved scene state; the Godot MCP reconnected successfully.
 
 ## Automatic local credential
 
@@ -271,6 +312,10 @@ The toolkit lock and production scenes, scripts, resources, and assets are
 preserved.
 
 ## Recorded validation — 2026-09-30
+
+This is the historical v0.1 implementation record. Current launcher acceptance
+is recorded in [Repository-local Godot launcher v0.7](#repository-local-godot-launcher-v07);
+the broader GUI and device checks below retain their original validation status.
 
 The implementation is on `tooling/godot-animation-mcp-v0.1` at unchanged HEAD
 `226c4ce`. Git shows 28 implementation files: three modified and 25 new, with

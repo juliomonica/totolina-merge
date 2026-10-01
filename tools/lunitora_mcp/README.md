@@ -31,7 +31,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launche
 
 Setup discovers the registered `OpenAI.Codex` Windows desktop package (whose UI
 may be named `ChatGPT.exe`), Photoshop under Program Files/Adobe, and UXP Developer
-Tool. It validates absolute local executable paths before installing the five
+Tool. It validates absolute local executable paths before installing the seven
 aliases with `git config --local`. It never selects the `codex` CLI from PATH.
 Multiple discovered installations require an explicit selection. Photoshop/UDT
 may be absent on a Codex-only workstation; commands that require them fail clearly.
@@ -42,12 +42,16 @@ rerun setup to discover its current location. For nonstandard installations:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/setup.ps1 \
   -DesktopExe 'C:\path\to\ChatGPT.exe' \
   -PhotoshopExe 'C:\path\to\Photoshop.exe' \
-  -UdtExe 'C:\path\to\Adobe UXP Developer Tools.exe'
+  -UdtExe 'C:\path\to\Adobe UXP Developer Tools.exe' \
+  -GodotExe 'C:\path\to\Godot_v4.7.2-stable_win64.exe'
 ```
 
 Machine paths and the expected checkout root live only in ignored
-`tools/operator_launcher/config.local.json`; the tracked example documents its
-four fields. No secrets belong there. Moving/copying the checkout requires fresh
+`tools/operator_launcher/config.local.json`; the tracked example documents the
+original fields and optional `godotExe`. Existing four-field Photoshop launcher
+configurations remain valid. Setup validates/saves an explicit Godot path and
+preserves existing Photoshop/UDT settings. No secrets belong there.
+Moving/copying the checkout requires fresh
 setup (remove the old ignored configuration first). There is no global Git change,
 scheduled task, Python dependency, shell-profile edit, or MCP configuration edit.
 Git shell aliases run from the repository root even when invoked in a subdirectory.
@@ -59,12 +63,23 @@ Each alias calls the tracked `launch.ps1` with its matching mode:
 !powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 art-dev
 !powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 dev
 !powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 dev-refresh
+!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 godot
+!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 godot-refresh
 ```
 
 Use `git art -Check` (or any alias with `-Check`) to validate paths without starting
 or stopping applications. The ordinary commands report application startup status,
-not verified Photoshop connectivity. Desktop owns configured stdio MCP processes;
-the launcher never runs `core.server` itself. Do not run a parallel manual server.
+not verified MCP connectivity. Desktop owns configured stdio MCP processes,
+including `lunitora_godot`; the launcher never runs `core.server` or
+`core.godot_server` itself. Do not run a parallel manual server.
+
+The Godot profiles reuse this same `tools/operator_launcher` implementation.
+`git godot` verifies the expected checkout and configured Godot executable, then
+ensures Desktop and the Godot editor are running on this repository with
+`--editor --path <repo-root>`. Detection verifies both the executable path and
+project arguments; a window title does not prove the project. It does not open
+the Project Manager. Neither Godot command opens Photoshop or UDT or touches
+port 43127. See the [Godot launcher guide](GODOT_README.md#repository-local-godot-launcher-v07).
 
 Run refresh from **external Git Bash**, after active Desktop tasks finish. It
 closes every process at the configured desktop executable path, first requesting
@@ -85,6 +100,19 @@ listener stops recovery without killing it. No process-name-wide kill or process
 tree kill is used. The launcher confirms the listener is gone and an exclusive
 IPv4 bind succeeds before ensuring Photoshop is running and reopening Desktop.
 It never closes Photoshop or interacts with UDT controls.
+
+`godot-refresh` follows the Desktop restart flow and waits for the Codex-owned
+Godot MCP process to exit. It checks only Godot port 43128, and permits automatic
+stale cleanup only for the positively verified, exact `core.godot_server` process
+for this checkout using the same executable/ancestry safeguards. An unknown
+listener is never killed. Godot stays open to protect unsaved editor work and
+reconnects when Desktop owns the new server.
+
+**VERIFIED — user-reported live validation on 2026-09-30:** `git godot` opened
+Codex and the correct Totolina Merge project without Photoshop or UDT.
+`git godot-refresh` restarted Codex/MCP while preserving the running Godot editor
+and unsaved scene state; the Godot MCP reconnected successfully. The v0.6
+validation below covers the original five art/dev commands.
 
 ### One-time private .ccx installation
 
@@ -255,6 +283,7 @@ then confirm port 43127 is free. Do not kill an unknown listener. Run from Git B
 ```bash
 # From the repository root; the launcher tests do not touch real applications.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/tests/test_launcher.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/tests/test_godot_launcher.ps1
 cd tools/lunitora_mcp
 ./.venv/Scripts/python.exe -B -m unittest discover -s tests -t . -v
 node tests/test_plugin.js
