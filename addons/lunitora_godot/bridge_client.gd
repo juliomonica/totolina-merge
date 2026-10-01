@@ -11,7 +11,8 @@ const MAX_JSON_DEPTH := 16
 const MAX_STRING_BYTES := 4096
 const CONNECT_TIMEOUT_MS := 5000
 const MAX_RETRY_MS := 8000
-const OPERATIONS := ["godot_ping", "godot_get_editor_state", "godot_inspect_scene", "godot_create_rig_lab"]
+const WRITE_OPERATIONS := ["godot_create_rig_lab", "godot_create_rig_lab_animation"]
+const OPERATIONS := ["godot_ping", "godot_get_editor_state", "godot_inspect_scene", "godot_create_rig_lab", "godot_create_rig_lab_animation"]
 
 enum Stage { STOPPED, CONNECTING, CHALLENGE, READY_PROOF, AUTHENTICATED }
 
@@ -191,7 +192,7 @@ func _accept(message: Dictionary) -> bool:
 		return true
 	if _stage != Stage.AUTHENTICATED:
 		return false
-	var write: bool = message.get("operation") == "godot_create_rig_lab"
+	var write: bool = message.get("operation") in WRITE_OPERATIONS
 	var keys := ["type", "protocol_version", "id", "operation", "params"]
 	if write:
 		keys.append("editor_session_id")

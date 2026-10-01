@@ -1,4 +1,4 @@
-"""Closed v1 wire contracts: metadata reads and one fixed, undoable lab write."""
+"""Closed v1 wire contracts: metadata reads and two fixed undoable lab writes."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from pydantic import Field, with_config
 from typing_extensions import TypedDict
 
 PROTOCOL_VERSION = 1
-BRIDGE_VERSION = "0.2.0"
+BRIDGE_VERSION = "0.3.0"
 MAX_PAYLOAD_BYTES = 256 * 1024
 MAX_STRING_BYTES = 4096
 MAX_NODES = 2000
@@ -21,15 +21,24 @@ MAX_SELECTED = 128
 MAX_PLAYER_ANIMATIONS = 128
 MAX_ANIMATIONS = 512
 WRITE_OPERATION = "godot_create_rig_lab"
+ANIMATION_WRITE_OPERATION = "godot_create_rig_lab_animation"
+WRITE_OPERATIONS = frozenset({WRITE_OPERATION, ANIMATION_WRITE_OPERATION})
 READ_OPERATIONS = frozenset({"godot_ping", "godot_get_editor_state", "godot_inspect_scene"})
-OPERATIONS = READ_OPERATIONS | {WRITE_OPERATION}
+OPERATIONS = READ_OPERATIONS | WRITE_OPERATIONS
 LAB_SCENE_PATH = "res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"
 LAB_ROOT_NAME = "TotolinaRigLab"
 RIG_ROOT_NAME = "TotolinaRigV2"
 UNDO_ACTION_NAME = "Lunitora: Create Totolina Rig Lab Scaffold"
+ANIMATION_PLAYER_PATH = "TotolinaRigV2/AnimationPlayer"
+ANIMATION_UNDO_ACTION_NAME = "Lunitora: Create Rig Lab Animation"
 WRITE_ERRORS = frozenset({"LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED",
                           "RIG_LAB_BUILD_FAILED", "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT",
                           "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY", "INVALID_REQUEST", "INVALID_MESSAGE"})
+ANIMATION_WRITE_ERRORS = (WRITE_ERRORS - {"LAB_ALREADY_CREATED", "RIG_LAB_BUILD_FAILED"}) | {
+    "LAB_RIG_REQUIRED", "LAB_RIG_MISMATCH", "LAB_ANIMATION_ALREADY_CREATED", "LAB_ANIMATION_CONFLICT",
+    "LAB_ANIMATION_EDITOR_BUSY", "LAB_ANIMATION_EDITOR_SETTLING", "RIG_LAB_ANIMATION_BUILD_FAILED",
+}
+WRITE_ERRORS_BY_OPERATION = {WRITE_OPERATION: WRITE_ERRORS, ANIMATION_WRITE_OPERATION: ANIMATION_WRITE_ERRORS}
 ERROR_MESSAGES = {
     "DISCONNECTED": "Godot editor is disconnected. Open this project with the editor plugin enabled.",
     "TIMEOUT": "Godot did not reply before the request deadline.",
@@ -54,6 +63,13 @@ ERROR_MESSAGES = {
     "SESSION_WRITE_LIMIT": "This editor session has reached its bounded write request limit.",
     "WRITE_OUTCOME_UNKNOWN": "The write outcome is unknown. Do not retry automatically; obtain a fresh editor read and review the lab.",
     "WRITE_BUSY": "A write is active or awaiting temporal settlement. Obtain a fresh editor read before another write.",
+    "LAB_RIG_REQUIRED": "Create the dedicated rig lab scaffold before creating its animation.",
+    "LAB_RIG_MISMATCH": "The lab requires the exact native v0.2 scaffold and deterministic rest pose.",
+    "LAB_ANIMATION_ALREADY_CREATED": "The fixed bend_tip animation or its global library already exists.",
+    "LAB_ANIMATION_CONFLICT": "The lab AnimationPlayer has incompatible animation or playback state.",
+    "LAB_ANIMATION_EDITOR_BUSY": "The AnimationPlayer editor or an unclassified observer is attached. Follow the documented recovery procedure.",
+    "LAB_ANIMATION_EDITOR_SETTLING": "Detached editor observations have not reached a genuine later process pass. Do not retry automatically.",
+    "RIG_LAB_ANIMATION_BUILD_FAILED": "Detached animation preparation failed before starting an undo action.",
 }
 ErrorCode = Literal[
     "DISCONNECTED", "TIMEOUT", "BUSY", "PORT_IN_USE", "EDITOR_BUSY", "AUTH_FAILED",
@@ -62,6 +78,8 @@ ErrorCode = Literal[
     "INSPECTION_FAILED",
     "LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED", "RIG_LAB_BUILD_FAILED",
     "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT", "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY",
+    "LAB_RIG_REQUIRED", "LAB_RIG_MISMATCH", "LAB_ANIMATION_ALREADY_CREATED", "LAB_ANIMATION_CONFLICT",
+    "LAB_ANIMATION_EDITOR_BUSY", "LAB_ANIMATION_EDITOR_SETTLING", "RIG_LAB_ANIMATION_BUILD_FAILED",
 ]
 BoundedString = Annotated[str, Field(max_length=MAX_STRING_BYTES)]
 NonEmptyString = Annotated[str, Field(min_length=1, max_length=MAX_STRING_BYTES)]
@@ -86,7 +104,7 @@ class PingData(TypedDict):
     godot_version: NonEmptyString
     project_path: NonEmptyString
     project_name: BoundedString
-    plugin_version: Literal["0.2.0"]
+    plugin_version: Literal["0.3.0"]
     editor_session_id: NonEmptyString
     read_only: Literal[True]
 
@@ -150,7 +168,7 @@ class Envelope(TypedDict):
     ok: bool
     connected: bool
     protocol_version: Literal[1]
-    bridge_version: Literal["0.2.0"]
+    bridge_version: Literal["0.3.0"]
     round_trip_ms: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None
     error: ErrorInfo | None
 
@@ -188,6 +206,31 @@ class RigLabData(TypedDict):
 @with_config(extra="forbid")
 class RigLabResult(Envelope):
     result: RigLabData | None
+
+
+@with_config(extra="forbid")
+class RigLabAnimationData(TypedDict):
+    editor_session_id: NonEmptyString
+    project_path: NonEmptyString
+    scene_path: Literal["res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"]
+    root_name: Literal["TotolinaRigLab"]
+    animation_player_path: Literal["TotolinaRigV2/AnimationPlayer"]
+    library_name: Literal[""]
+    animation_name: Literal["bend_tip"]
+    animation_key: Literal["bend_tip"]
+    length_seconds: Annotated[float, Field(strict=True, ge=1.0, le=1.0, allow_inf_nan=False)]
+    track_count: Annotated[int, Field(strict=True, ge=1, le=1)]
+    key_count: Annotated[int, Field(strict=True, ge=3, le=3)]
+    undo_action_name: Literal["Lunitora: Create Rig Lab Animation"]
+    undo_actions_added: Annotated[int, Field(strict=True, ge=1, le=1)]
+    save_state: Literal["saved_dirty"]
+    auto_saved: Literal[False]
+    read_only: Literal[False]
+
+
+@with_config(extra="forbid")
+class RigLabAnimationResult(Envelope):
+    result: RigLabAnimationData | None
 
 
 def error_info(code: str) -> ErrorInfo:
@@ -344,6 +387,21 @@ def validate_result(operation: str, data: dict) -> None:
         require(type(data["created_node_count"]) is int and data["created_node_count"] == 7
                 and type(data["undo_actions_added"]) is int and data["undo_actions_added"] == 1)
         require(data["save_state"] == "saved_dirty" and data["auto_saved"] is False and data["read_only"] is False)
+    elif operation == ANIMATION_WRITE_OPERATION:
+        _fields(data, {"editor_session_id", "project_path", "scene_path", "root_name",
+                       "animation_player_path", "library_name", "animation_name", "animation_key",
+                       "length_seconds", "track_count", "key_count", "undo_action_name",
+                       "undo_actions_added", "save_state", "auto_saved", "read_only"})
+        require(_string(data["editor_session_id"]) and _string(data["project_path"]))
+        require(data["scene_path"] == LAB_SCENE_PATH and data["root_name"] == LAB_ROOT_NAME
+                and data["animation_player_path"] == ANIMATION_PLAYER_PATH and data["library_name"] == ""
+                and data["animation_name"] == "bend_tip" and data["animation_key"] == "bend_tip"
+                and data["undo_action_name"] == ANIMATION_UNDO_ACTION_NAME)
+        require(type(data["length_seconds"]) in {int, float} and data["length_seconds"] == 1.0
+                and type(data["track_count"]) is int and data["track_count"] == 1
+                and type(data["key_count"]) is int and data["key_count"] == 3
+                and type(data["undo_actions_added"]) is int and data["undo_actions_added"] == 1)
+        require(data["save_state"] == "saved_dirty" and data["auto_saved"] is False and data["read_only"] is False)
     else:
         _fields(data, {"editor_session_id", "scene", "nodes"})
         require(_string(data["editor_session_id"]))
@@ -394,24 +452,24 @@ def validate_result(operation: str, data: dict) -> None:
 
 def validate_response(message: dict) -> None:
     fields = {"type", "protocol_version", "id", "operation", "ok", "result", "error"}
-    if message.get("operation") == WRITE_OPERATION:
+    if type(message.get("operation")) is str and message["operation"] in WRITE_OPERATIONS:
         fields.add("editor_session_id")
     _fields(message, fields)
     require(type(message["protocol_version"]) is int and message["protocol_version"] == PROTOCOL_VERSION
             and message["type"] == "response" and is_hex(message["id"], 32)
             and type(message["operation"]) is str and type(message["ok"]) is bool)
     require(message["operation"] in OPERATIONS, "UNSUPPORTED_OPERATION")
-    if message["operation"] == WRITE_OPERATION:
+    if message["operation"] in WRITE_OPERATIONS:
         require(_string(message["editor_session_id"]))
     if message["ok"]:
         require(message["error"] is None)
         validate_result(message["operation"], message["result"])
-        if message["operation"] == WRITE_OPERATION:
+        if message["operation"] in WRITE_OPERATIONS:
             require(message["result"]["editor_session_id"] == message["editor_session_id"])
     else:
         require(message["result"] is None)
         _fields(message["error"], {"code", "message"})
         require(type(message["error"]["code"]) is str and message["error"]["code"] in ERROR_MESSAGES
                 and _string(message["error"]["message"], empty=True))
-        if message["operation"] == WRITE_OPERATION:
-            require(message["error"]["code"] in WRITE_ERRORS)
+        if message["operation"] in WRITE_OPERATIONS:
+            require(message["error"]["code"] in WRITE_ERRORS_BY_OPERATION[message["operation"]])

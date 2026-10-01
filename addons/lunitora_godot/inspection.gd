@@ -10,7 +10,7 @@ const MAX_ANIMATIONS_TOTAL := 512
 const MAX_LIBRARIES_PER_PLAYER := 512
 const MAX_STRING_BYTES := 4096
 const MAX_FRAME_BYTES := 262144
-const PLUGIN_VERSION := "0.2.0"
+const PLUGIN_VERSION := "0.3.0"
 
 
 func success(result: Dictionary) -> Dictionary:

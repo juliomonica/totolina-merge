@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from modules.godot.bridge import GodotBridge, UnresolvedWrite
 from modules.godot.config import Config, PROJECT_ROOT
-from modules.godot.protocol import BridgeError, WRITE_OPERATION, encode
+from modules.godot.protocol import ANIMATION_WRITE_OPERATION, BridgeError, WRITE_OPERATION, encode
 from tests import test_godot_native_bridge as native
 
 
@@ -30,12 +30,12 @@ func _plugin() -> EditorPlugin:
             return candidate
     return null
 func _process(_delta: float) -> void:
-    if reloading or not FileAccess.file_exists("res://native_safety_control.json"):
+    if reloading or not FileAccess.file_exists("res://.godot/safety-control.json"):
         return
-    var command: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://native_safety_control.json"))
+    var command: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://.godot/safety-control.json"))
     if not command is Dictionary:
         return
-    DirAccess.remove_absolute(ProjectSettings.globalize_path("res://native_safety_control.json"))
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.godot/safety-control.json"))
     var plugin := _plugin()
     if plugin == null:
         return
@@ -111,7 +111,7 @@ func _process(delta: float) -> void:
     _evidence()
 func _dispatch(operation: String, params: Dictionary, request_id := "",
         expected_session_id := "", command_origin := false) -> Dictionary:
-    if operation != "godot_create_rig_lab":
+    if operation not in ["godot_create_rig_lab", "godot_create_rig_lab_animation"]:
         read_calls += 1
         if _writer._active:
             reads_while_active += 1
@@ -211,7 +211,7 @@ class GodotNativeSafetyTests(native.GodotNativeBridgeTests):
                     files = list((self.project / ".godot").glob("native_safety_*.json"))
                     latest = max(files, key=lambda path: path.stat().st_mtime_ns) if files else None
                     data = json.loads(latest.read_text(encoding="utf-8")) if latest else None
-                except (FileNotFoundError, json.JSONDecodeError):
+                except (FileNotFoundError, PermissionError, json.JSONDecodeError):
                     data = None
                 if data is not None and predicate(data):
                     return data
@@ -219,8 +219,10 @@ class GodotNativeSafetyTests(native.GodotNativeBridgeTests):
 
     async def command(self, command):
         command_id = f"{command}-{id(self)}"
-        (self.project / "native_safety_control.json").write_text(
+        pending = self.project / ".godot/safety-control.pending"
+        pending.write_text(
             json.dumps({"command": command, "id": command_id}), encoding="utf-8")
+        pending.replace(self.project / ".godot/safety-control.json")
         return await self.evidence(lambda value: value["ack"] == command_id)
 
     async def expect_error(self, code, awaitable):
@@ -284,6 +286,7 @@ class GodotNativeSafetyTests(native.GodotNativeBridgeTests):
         self.bridge.config = Config(request_timeout_seconds=0.1)
         await self.expect_error("WRITE_OUTCOME_UNKNOWN", self.bridge.request(WRITE_OPERATION, {}))
         await self.expect_error("WRITE_BUSY", self.bridge.request(WRITE_OPERATION, {}))
+        await self.expect_error("WRITE_BUSY", self.bridge.request(ANIMATION_WRITE_OPERATION, {}))
         self.assertIsNotNone(self.bridge._unresolved_write)
         before = await self.evidence(lambda value: value["write_entered"])
         self.assertFalse(before["write_finished"])
@@ -328,7 +331,8 @@ class GodotNativeSafetyTests(native.GodotNativeBridgeTests):
         await self.expect_error("WRITE_OUTCOME_UNKNOWN", self.bridge.request(WRITE_OPERATION, {}))
         await self.restart_owner()
         await self.expect_error("WRITE_OUTCOME_UNKNOWN", self.bridge.request(WRITE_OPERATION, {}))
-        after = await self.evidence(lambda value: value["ledger"] == 3)
+        await self.expect_error("WRITE_OUTCOME_UNKNOWN", self.bridge.request(ANIMATION_WRITE_OPERATION, {}))
+        after = await self.evidence(lambda value: value["ledger"] == 4)
         self.assertEqual(after["session"], state["session"])
         self.assertEqual(after["writer"], state["writer"])
         self.assertTrue(after["faulted"])

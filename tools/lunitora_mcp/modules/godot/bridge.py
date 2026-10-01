@@ -16,8 +16,8 @@ from websockets.asyncio.connection import Connection
 from websockets.exceptions import ConnectionClosed
 
 from .config import Config, Credential, HOST, PORT
-from .protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, PROTOCOL_VERSION, READ_OPERATIONS,
-                       WRITE_OPERATION,
+from .protocol import (BridgeError, MAX_PAYLOAD_BYTES, OPERATIONS, PROTOCOL_VERSION,
+                       WRITE_OPERATION, WRITE_OPERATIONS, WRITE_ERRORS_BY_OPERATION,
                        decode, encode, error_info, proof, validate_authenticate,
                        validate_hello, validate_response)
 
@@ -45,6 +45,7 @@ class UnresolvedWrite:
     sequence: int = 0
     possibly_sent: bool = False
     send_completed: bool = False
+    operation: str = WRITE_OPERATION
 
 
 class _BoundedConnection(ServerConnection):
@@ -187,11 +188,12 @@ class GodotBridge:
                 validate_response(message)
                 pending = self._pending.get(message["id"])
                 unresolved = self._unresolved_write
-                writer = message["operation"] == WRITE_OPERATION
+                writer = message["operation"] in WRITE_OPERATIONS
                 # A terminal writer reply must match its original socket, ID and
                 # target session. Replay rejection cannot settle original work.
                 if writer:
-                    if (unresolved is None or message["id"] != unresolved.request_id
+                    if (unresolved is None or message["operation"] != unresolved.operation
+                            or message["id"] != unresolved.request_id
                             or unresolved.connection is not connection):
                         continue
                     if message["editor_session_id"] != unresolved.session_id:
@@ -250,8 +252,8 @@ class GodotBridge:
             raise BridgeError("INVALID_REQUEST")
         if self.startup_error:
             raise self.startup_error
-        if operation == WRITE_OPERATION:
-            return await self._request_write()
+        if operation in WRITE_OPERATIONS:
+            return await self._request_write(operation)
         return await self._exchange(operation)
 
     def _settle_from_read(self, pending: Pending, data: dict) -> None:
@@ -285,7 +287,7 @@ class GodotBridge:
         # editor sends a fresh read from its replacement peer.
         await connection.close(1008, "WRITE_OUTCOME_UNKNOWN")
 
-    async def _request_write(self) -> tuple[dict, float]:
+    async def _request_write(self, operation: str) -> tuple[dict, float]:
         if self._write_active or self._unresolved_write is not None:
             raise BridgeError("WRITE_BUSY", connected=self._connection is not None)
         connection = self._connection
@@ -300,10 +302,10 @@ class GodotBridge:
             data, _ = await self._exchange("godot_get_editor_state", connection=connection)
             if self._connection is not connection:
                 raise BridgeError("DISCONNECTED")
-            unresolved = UnresolvedWrite(secrets.token_hex(16), connection, data["editor_session_id"])
+            unresolved = UnresolvedWrite(secrets.token_hex(16), connection, data["editor_session_id"], operation=operation)
             self._unresolved_write = unresolved
             try:
-                result, _ = await self._exchange(WRITE_OPERATION, connection=connection, writer=unresolved)
+                result, _ = await self._exchange(operation, connection=connection, writer=unresolved)
                 self._last_write_receipt = unresolved
                 return result, round((perf_counter() - started) * 1000, 3)
             except asyncio.CancelledError:
@@ -319,9 +321,7 @@ class GodotBridge:
                     if not unresolved.send_completed:
                         await self._retire(connection)
                     if (not isinstance(error, BridgeError) or error.code not in
-                            {"LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED",
-                             "RIG_LAB_BUILD_FAILED", "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT",
-                             "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY"}):
+                            WRITE_ERRORS_BY_OPERATION[operation] - {"INVALID_REQUEST", "INVALID_MESSAGE"}):
                         raise BridgeError("WRITE_OUTCOME_UNKNOWN", connected=self._connection is connection) from None
                 else:
                     self._unresolved_write = None

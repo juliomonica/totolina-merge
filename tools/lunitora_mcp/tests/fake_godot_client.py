@@ -11,9 +11,10 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 from modules.godot.config import Credential, HOST
-from modules.godot.protocol import (BRIDGE_VERSION, LAB_ROOT_NAME, LAB_SCENE_PATH, MAX_PAYLOAD_BYTES,
+from modules.godot.protocol import (ANIMATION_PLAYER_PATH, ANIMATION_UNDO_ACTION_NAME,
+                                   ANIMATION_WRITE_OPERATION, BRIDGE_VERSION, LAB_ROOT_NAME, LAB_SCENE_PATH, MAX_PAYLOAD_BYTES,
                                    PROTOCOL_VERSION, RIG_ROOT_NAME, UNDO_ACTION_NAME, WRITE_OPERATION,
-                                   decode, encode, error_info, is_hex, proof)
+                                   WRITE_OPERATIONS, decode, encode, error_info, is_hex, proof)
 
 NO_SCENE = {"exists": False, "path": None, "root_name": None, "has_saved_path": False,
             "save_state": "no_scene", "dirty_changes": None, "dirty_reason": "no_scene"}
@@ -45,6 +46,8 @@ def result_for(operation: str, credential: Credential, scene: dict, nodes: list,
             "total_count": len(selection), "nodes": deepcopy(selection[:128]), "truncated": len(selection) > 128}}
     if operation == WRITE_OPERATION:
         return rig_lab_result(credential)
+    if operation == ANIMATION_WRITE_OPERATION:
+        return rig_lab_animation_result(credential)
     return {"editor_session_id": "disposable-editor-session", "scene": deepcopy(scene), "nodes": deepcopy(nodes)}
 
 
@@ -55,11 +58,21 @@ def rig_lab_result(credential: Credential, session_id="disposable-editor-session
             "save_state": "saved_dirty", "auto_saved": False, "read_only": False}
 
 
+def rig_lab_animation_result(credential: Credential, session_id="disposable-editor-session") -> dict:
+    return {"editor_session_id": session_id, "project_path": credential.project_path,
+            "scene_path": LAB_SCENE_PATH, "root_name": LAB_ROOT_NAME,
+            "animation_player_path": ANIMATION_PLAYER_PATH, "library_name": "",
+            "animation_name": "bend_tip", "animation_key": "bend_tip", "length_seconds": 1.0,
+            "track_count": 1, "key_count": 3, "undo_action_name": ANIMATION_UNDO_ACTION_NAME,
+            "undo_actions_added": 1, "save_state": "saved_dirty", "auto_saved": False, "read_only": False}
+
+
 class FakeGodotClient:
     def __init__(self, credential: Credential, port: int, *, scene: dict | None = None,
                  nodes: list | None = None, selection: list | None = None,
                  delay: float = 0, ignore: bool = False, mutate=None,
-                 write_delay: float = 0, ignore_write_reply: bool = False, session_id="disposable-editor-session"):
+                 write_delay: float = 0, ignore_write_reply: bool = False, session_id="disposable-editor-session",
+                 has_rig: bool = False, animation_error: str | None = None):
         self.credential = credential
         self.port = port
         self.scene = deepcopy(scene if scene is not None else NO_SCENE)
@@ -69,7 +82,9 @@ class FakeGodotClient:
         self.write_delay, self.ignore_write_reply = write_delay, ignore_write_reply
         self.session_id = session_id
         self.write_ids = set()
-        self.created = False
+        self.created = has_rig
+        self.animation_created = False
+        self.animation_error = animation_error
         self.write_faulted = False
         self.applied_writes = 0
         self.requests = []
@@ -113,7 +128,7 @@ class FakeGodotClient:
                 self.request_received.set()
                 if self.ignore:
                     continue
-                delay = self.write_delay if request["operation"] == WRITE_OPERATION else self.delay
+                delay = self.write_delay if request["operation"] in WRITE_OPERATIONS else self.delay
                 if delay:
                     await asyncio.sleep(delay)
                 # A replacement peer cannot consume buffered packets from the
@@ -125,7 +140,7 @@ class FakeGodotClient:
                             "result": result_for(request["operation"], self.credential,
                                                  self.scene, self.nodes, self.selection), "error": None}
                 response["result"]["editor_session_id"] = self.session_id
-                if request["operation"] == WRITE_OPERATION:
+                if request["operation"] in WRITE_OPERATIONS:
                     response["editor_session_id"] = self.session_id
                     code = None
                     if request.get("editor_session_id") != self.session_id:
@@ -142,10 +157,22 @@ class FakeGodotClient:
                             code = "LAB_SCENE_REQUIRED"
                         elif self.scene["root_name"] != LAB_ROOT_NAME:
                             code = "LAB_ROOT_MISMATCH"
-                        elif self.created:
+                        elif request["operation"] == WRITE_OPERATION and self.created:
                             code = "LAB_ALREADY_CREATED"
+                        elif request["operation"] == ANIMATION_WRITE_OPERATION and not self.created:
+                            code = "LAB_RIG_REQUIRED"
+                        elif request["operation"] == ANIMATION_WRITE_OPERATION and self.animation_created:
+                            code = "LAB_ANIMATION_ALREADY_CREATED"
+                        elif request["operation"] == ANIMATION_WRITE_OPERATION and self.animation_error:
+                            code = self.animation_error
                         else:
-                            self.created = True
+                            if request["operation"] == WRITE_OPERATION:
+                                self.created = True
+                            else:
+                                self.animation_created = True
+                                for node in self.nodes:
+                                    if node["type"] == "AnimationPlayer":
+                                        node["animations"] = {"count": 1, "names": ["bend_tip"], "omitted_reason": None}
                             self.applied_writes += 1
                             self.scene.update(save_state="saved_dirty", dirty_changes=True)
                     if code is not None:

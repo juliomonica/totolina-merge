@@ -4,7 +4,7 @@
 **Current game:** Totolina Merge  
 **Engine:** Godot 4.7.2  
 **Platforms:** Android + iOS  
-**Status:** Godot v0.2 fixed rig-lab scaffold; broader animation capabilities remain a roadmap
+**Status:** Godot v0.3 technically accepted; fixed rig-lab animation writer; broader capabilities remain a roadmap
 **Purpose:** Source of truth for how Lunitora will automate art preparation, character rigging, animation, VFX, and development workflows through one extensible MCP toolkit.
 
 ---
@@ -30,14 +30,19 @@ The user should eventually be able to ask Codex things such as:
 The MCP is an automation layer. It does not replace human art direction.
 
 The current Godot implementation exposes three read-only metadata operations
-and one fixed writer, `godot_create_rig_lab({})`. The writer is restricted to
+and two fixed writers, `godot_create_rig_lab({})` and
+`godot_create_rig_lab_animation({})`. Both are restricted to
 `res://addons/lunitora_godot/labs/totolina_rig_lab.tscn` with the native,
 script-free `TotolinaRigLab` Node2D root. It creates seven owned nodes under
 `TotolinaRigV2`: `Meshes/TestMesh` (Polygon2D), a `Skeleton2D` with `Root/Tip`
 Bone2D nodes, and an empty `AnimationPlayer`. The exact mesh color is
 `Color(0.25, 0.5, 1.0, 1.0)`; fixed geometry, rest poses and two bone-weight
 arrays provide a minimal synthetic binding fixture. No current Totolina art is
-replaced, no animation is authored or played, and no scene is automatically saved.
+replaced and no scene is automatically saved. The second operation requires this
+unchanged rig with a pristine player, then attaches one synthetic `bend_tip`
+global-library animation: one linear-angle continuous rotation track for Tip,
+three float keys (0°, 20°, 0° at 0, 0.5, 1 second), no RESET or autoplay.
+It does not assign, seek or play the clip.
 
 Creation uses a fresh authenticated editor-state barrier and one synchronous,
 non-reentrant native Undo/Redo action. It verifies the generated recipe,
@@ -48,7 +53,16 @@ The editor's bounded write-ID ledger survives socket reconnection and Python
 owner restart, rejects replay and stops admitting writes at its limit. If an
 action began but verification failed, the writer reports uncertainty and faults
 the editor session rather than performing automatic repair. Bridge/plugin
-version is 0.2.0; the authenticated protocol remains 1. See the current
+version is 0.3.0; the authenticated protocol remains 1. Both operations share the
+128-ID ledger, busy fence and session fault latch; response settlement also
+correlates the operation. Animation creation requires the native AnimationPlayer
+editor to be detached and a stable, strictly later normal plugin process pass.
+Unknown relevant observers fail closed as a temporary lab-only restriction.
+Native Undo removes the library and Redo retains the same resources through
+bound native action arguments. This editor safety behavior is verified specifically
+against Godot 4.7.2. The strict stopped/unassigned/rest-pose guarantee covers
+controlled cycles that stay detached and settled; attaching the animation editor before
+Redo can cause Godot's normal deferred assignment/seek. See the current
 [Godot implementation and acceptance guide](../tools/lunitora_mcp/GODOT_README.md).
 
 The broader plan below is a roadmap, including reusable animation beyond the
@@ -830,7 +844,8 @@ Walk/run/jump can follow after the core rig is proven.
 
 This list records the original broad architecture target, not the current tool
 allowlist. Godot v0.1 implemented inspection only; v0.2 adds the single fixed
-rig-lab scaffold described above. General animation/VFX authoring, production
+rig-lab scaffold described above; v0.3 adds its fixed synthetic animation.
+General animation/VFX authoring, production
 character migration, batch rig editing and controller creation remain future
 work. Current Photoshop capabilities are documented separately in the toolkit
 README.
@@ -1160,10 +1175,18 @@ Targeted native rig and export exclusion/control checks passed against that
 normalized baseline. Executable iOS export/device behavior remains
 **NOT VALIDATED / REQUIRES MAC/iOS**.
 
-Review and commit the accepted v0.2 milestone before proposing small reusable
-animation-authoring operations. Production Totolina migration remains a
-separately reviewed change. Follow the [current Godot guide](../tools/lunitora_mcp/GODOT_README.md)
-for the acceptance record, setup and remaining device/visual validation.
+v0.3 technical and controlled live acceptance is complete with bridge/plugin
+`0.3.0`: prerequisite v0.2 rig creation and one successful
+`godot_create_rig_lab_animation({})` produced the exact `bend_tip` fixture. Native
+Undo removed only the animation, preserving the unsaved rig and dirty scene;
+Redo restored the animation. Manual Save and scene close/reopen verified
+persistence, and the user visually verified smooth bending and return to rest.
+Final manual cleanup restored the existing 111-byte empty Godot-authored lab
+byte-for-byte, including its UID metadata, without live-test residue. The editor
+safety limitations above and **NOT VALIDATED / REQUIRES MAC/iOS** executable
+export/device boundary remain. Production Totolina migration remains a separately
+reviewed change. Follow the [current Godot guide](../tools/lunitora_mcp/GODOT_README.md)
+for the acceptance record, setup and remaining device validation.
 
 ## Historical first milestone — Photoshop Phase 1
 
