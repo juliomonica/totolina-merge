@@ -24,8 +24,28 @@ import zipfile
 
 ADDON = "addons/lunitora_godot/"
 EXCLUSION = ADDON + "*"
-ADDON_SCRIPT_CONTROLS = ("plugin.gd", "bridge_client.gd", "inspection.gd", "rig_lab.gd", "animation_writer.gd")
-ADDON_SCENE_CONTROLS = ("labs/totolina_rig_lab.tscn",)
+ADDON_SCRIPT_CONTROLS = ("plugin.gd", "bridge_client.gd", "inspection.gd", "rig_lab.gd", "animation_writer.gd", "character_rig.gd")
+ADDON_SCENE_CONTROLS = ("labs/totolina_rig_lab.tscn", "labs/tolina_character_rig_lab.tscn")
+ADDON_SPEC_CONTROL = "specs/tolina_character_rig_v1.json"
+TOLINA_TEXTURE_NODES = {
+    "EarLeft": ("ears/cat_totolina_ear_left.png", [192, 192]),
+    "EarRight": ("ears/cat_totolina_ear_right.png", [192, 192]),
+    "Body": ("body/cat_totolina_body.png", [768, 1024]),
+    "Arms/Idle": ("arms/cat_totolina_arm_idle.png", [384, 384]),
+    "Arms/Press01": ("arms/cat_totolina_arm_press_01.png", [384, 384]),
+    "Arms/Press02": ("arms/cat_totolina_arm_press_02.png", [384, 384]),
+    "Arms/Press03": ("arms/cat_totolina_arm_press_03.png", [384, 384]),
+    "ShoulderOverlap": ("body/cat_totolina_body.png", [768, 1024]),
+    "Eyes/Rest": ("eyes/cat_totolina_eyes_blink_01.png", [328, 128]),
+    "Eyes/Half": ("eyes/cat_totolina_eyes_blink_02.png", [328, 128]),
+    "Eyes/Closed": ("eyes/cat_totolina_eyes_blink_03.png", [328, 128]),
+    "Eyes/Excited": ("eyes/cat_totolina_eyes_excited.png", [328, 128]),
+    "Eyes/Surprised": ("eyes/cat_totolina_eyes_surprised.png", [328, 128]),
+    "MouthIdle": ("mouths/cat_totolina_mouth_idle.png", [128, 128]),
+    "MouthExcited": ("mouths/cat_totolina_mouth_excited.png", [128, 128]),
+    "MouthSurprised": ("mouths/cat_totolina_mouth_surprised.png", [128, 128]),
+}
+TOLINA_TEXTURE_PREFIX = "assets/characters/totolina/"
 ERROR_PATTERN = re.compile(r"(?im)(?:^\s*(?:SCRIPT ERROR:|ERROR:)|FATAL|CrashHandler)")
 RESOURCE = '[gd_resource type="Resource" format=3]\n\n[resource]\n'
 PACKAGE_ANIMATION_VALIDATION = r'''extends SceneTree
@@ -138,12 +158,152 @@ func _finish() -> void:
     quit(0 if _failures == 0 else 1)
 '''
 
+PACKAGE_TOLINA_VALIDATION = r'''extends SceneTree
+
+const LAB_PATH := "res://addons/lunitora_godot/labs/tolina_character_rig_lab.tscn"
+const TEXTURES := __TEXTURES__
+var _checks := 0
+var _failures := 0
+
+func _check(condition: bool, label: String) -> void:
+    _checks += 1
+    if not condition:
+        _failures += 1
+        print("FAIL exported Tolina: " + label)
+
+func _initialize() -> void:
+    _run.call_deferred()
+
+func _run() -> void:
+    var args := OS.get_cmdline_user_args()
+    _check(args.size() == 2, "pack and lab-presence arguments")
+    if args.size() != 2:
+        _finish()
+        return
+    _check(ProjectSettings.load_resource_pack(args[0]), "native resource pack mounts")
+    var include_lab := args[1] == "lab"
+    var loaded := {}
+    for piece in TEXTURES:
+        var info: Array = TEXTURES[piece]
+        var path := "res://assets/characters/totolina/" + String(info[0])
+        var texture := ResourceLoader.load(path, "Texture2D", ResourceLoader.CACHE_MODE_REUSE) as Texture2D
+        _check(texture != null, "production external texture loadable " + piece)
+        if texture == null:
+            continue
+        _check(texture.get_class() == "CompressedTexture2D" and texture.get_script() == null,
+            "native imported production texture " + piece)
+        _check(texture.resource_path == path and texture.get_size() == Vector2(info[1][0], info[1][1]),
+            "external PNG identity and dimensions " + piece)
+        loaded[path] = texture
+    _check(loaded.size() == 15, "all 15 unique production inputs loadable")
+    var production := load("res://scenes/presentation/totolina_operator.tscn") as PackedScene
+    _check(production != null, "production operator remains packaged and loadable")
+    if production != null:
+        var node := production.instantiate()
+        _check(node.get_node("Visual/cat_totolina_body").texture == loaded.get(
+            "res://assets/characters/totolina/body/cat_totolina_body.png"), "production cached body identity")
+        node.free()
+    if not include_lab:
+        _check(not ResourceLoader.exists(LAB_PATH), "Tolina lab absent from normal package")
+        _check(not ResourceLoader.exists("res://addons/lunitora_godot/specs/tolina_character_rig_v1.json"),
+            "editor-only manifest absent from normal package")
+        _finish()
+        return
+    var packed := load(LAB_PATH) as PackedScene
+    _check(packed != null, "compiled Tolina lab loadable without tooling JSON")
+    if packed == null:
+        _finish()
+        return
+    var scene := packed.instantiate()
+    root.add_child(scene)
+    await process_frame
+    await process_frame
+    _check(scene.name == "TolinaCharacterRigLab" and scene.get_class() == "Node2D", "native lab root")
+    var manifest := {
+        ".": "Node2D", "TolinaRig": "Node2D", "TolinaRig/Visual": "Node2D",
+        "TolinaRig/Visual/Arms": "Node2D", "TolinaRig/Visual/Eyes": "Node2D",
+        "TolinaRig/AnimationPlayer": "AnimationPlayer",
+    }
+    for piece in TEXTURES:
+        manifest["TolinaRig/Visual/" + piece] = "Sprite2D"
+    var pending: Array[Node] = [scene]
+    var count := 0
+    while not pending.is_empty():
+        var node: Node = pending.pop_back()
+        var path := String(scene.get_path_to(node))
+        _check(manifest.has(path) and node.get_class() == manifest.get(path), "exact native class " + path)
+        _check(node.get_script() == null, "script-free " + path)
+        if node != scene:
+            _check(node.owner == scene, "persisted scene ownership " + path)
+        count += 1
+        for child in node.get_children(true):
+            pending.append(child)
+    _check(count == 22, "root plus exactly 21 generated nodes")
+    for piece in TEXTURES:
+        var sprite := scene.get_node("TolinaRig/Visual/" + piece) as Sprite2D
+        var info: Array = TEXTURES[piece]
+        var path := "res://assets/characters/totolina/" + String(info[0])
+        _check(sprite.texture == loaded.get(path), "shared cached external texture " + piece)
+        _check(sprite.visible and sprite.self_modulate == Color.WHITE and sprite.modulate.r == 1.0 and
+            sprite.modulate.g == 1.0 and sprite.modulate.b == 1.0, "visible white RGB and self modulation " + piece)
+        _check(sprite.texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR and not sprite.centered,
+            "linear filter and reviewed pivot form " + piece)
+    var body := scene.get_node("TolinaRig/Visual/Body") as Sprite2D
+    var overlap := scene.get_node("TolinaRig/Visual/ShoulderOverlap") as Sprite2D
+    _check(body.texture == overlap.texture, "Body/ShoulderOverlap share one external body")
+    _check(overlap.region_enabled and overlap.region_rect == Rect2(530, 325, 170, 95), "exact overlap region")
+    var player := scene.get_node("TolinaRig/AnimationPlayer") as AnimationPlayer
+    _check(player.root_node == NodePath("..") and player.get_node(player.root_node) == scene.get_node("TolinaRig"),
+        "player root resolves to TolinaRig")
+    _check(player.get_animation_library_list().size() == 1 and player.has_animation_library(&""), "one global library")
+    _check(player.get_animation_list() == PackedStringArray(["blink"]) and not player.has_animation(&"RESET"),
+        "one blink and no RESET")
+    _check(player.autoplay == &"" and player.assigned_animation == &"" and player.current_animation == &"" and
+        not player.is_playing() and player.get_queue().is_empty(), "unassigned stopped empty autoplay and queue")
+    var library := player.get_animation_library(&"")
+    _check(library.get_class() == "AnimationLibrary" and library.get_script() == null and
+        library.get_animation_list_size() == 1, "one native inline library")
+    var animation := player.get_animation(&"blink")
+    _check(animation != null and animation.get_class() == "Animation" and animation.get_script() == null,
+        "native inline animation")
+    _check(animation == library.get_animation(&"blink"), "library/player exact animation identity")
+    _check(animation.length == 0.24 and animation.step == 0.125 and animation.loop_mode == Animation.LOOP_NONE and
+        not animation.capture_included and animation.get_marker_names().is_empty(), "length step loop capture markers")
+    _check(animation.get_track_count() == 3, "exactly three tracks")
+    var names := ["Rest", "Half", "Closed"]
+    var times := PackedFloat32Array([0.0, 0.05, 0.095, 0.14, 0.19, 0.24])
+    var values := [[1.0, 0.0, 0.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0, 1.0, 0.0, 0.0]]
+    for track in range(3):
+        _check(animation.track_get_type(track) == Animation.TYPE_VALUE and animation.track_is_enabled(track) and
+            not animation.track_is_imported(track) and not animation.track_get_interpolation_loop_wrap(track),
+            "type and track flags " + names[track])
+        _check(animation.track_get_path(track) == NodePath("Visual/Eyes/" + names[track] + ":modulate:a") and
+            animation.track_get_interpolation_type(track) == Animation.INTERPOLATION_LINEAR and
+            animation.value_track_get_update_mode(track) == Animation.UPDATE_CONTINUOUS, "path interpolation update " + names[track])
+        _check(animation.track_get_key_count(track) == 6, "six keys " + names[track])
+        for key in range(6):
+            var value: Variant = animation.track_get_key_value(track, key)
+            _check(animation.track_get_key_time(track, key) == times[key], "canonical float32 time")
+            _check(typeof(value) == TYPE_FLOAT and value == values[track][key] and value >= 0.0 and value <= 1.0,
+                "exact bounded float alpha")
+            _check(animation.track_get_key_transition(track, key) == 1.0, "unit transition")
+        var sprite := scene.get_node("TolinaRig/Visual/Eyes/" + names[track]) as Sprite2D
+        _check(sprite.modulate.a == values[track][0], "persisted initial rest alpha " + names[track])
+    scene.free()
+    _finish()
+
+func _finish() -> void:
+    print("GODOT_MCP_EXPORTED_TOLINA_CHECKS=%d FAILURES=%d" % [_checks, _failures])
+    quit(0 if _failures == 0 else 1)
+'''
+
 
 def addon_source_snapshot(repository: Path, project: Path) -> dict[str, str]:
     """Check the exact current helper/seed source before any disposable override."""
     result: dict[str, str] = {}
     for source in sorted((repository / ADDON).rglob("*")):
-        if not source.is_file() or source.suffix not in {".gd", ".uid", ".cfg", ".tscn"}:
+        if not source.is_file() or source.suffix not in {".gd", ".uid", ".cfg", ".tscn", ".json"}:
             continue
         relative = source.relative_to(repository)
         data = source.read_bytes()
@@ -187,6 +347,60 @@ def copy_authored_lab(source: Path, project: Path) -> dict[str, object]:
     destination.write_bytes(data)
     return {"source": str(source.resolve()), "sha256": hashlib.sha256(data).hexdigest(),
             "bytes": len(data), "node_count": len(nodes), "inline_resource_count": len(resources)}
+
+
+def copy_authored_tolina_lab(source: Path, project: Path) -> dict[str, object]:
+    """Admit only an actual native saved 21-node rig with its fixed inline blink."""
+    data = source.read_bytes()
+    if not 1 <= len(data) <= 1024 * 1024:
+        raise RuntimeError("Authored Tolina artifact exceeds the bounded fixture size")
+    text = data.decode("utf-8", errors="strict").replace("\r\n", "\n")
+    if re.search(r"(?m)^script\s*=", text) or ".json" in text:
+        raise RuntimeError("Tolina package control must be native and have no JSON runtime dependency")
+    nodes = re.findall(r"(?m)^\[node\s+([^\r\n]+)\]$", text)
+    manifest = {}
+    for entry in nodes:
+        fields = dict(re.findall(r'(name|type|parent)="([^"]*)"', entry))
+        if not {"name", "type"}.issubset(fields):
+            raise RuntimeError("Malformed authored Tolina node header")
+        path = fields["name"] if "parent" not in fields else (
+            fields["name"] if fields["parent"] == "." else fields["parent"] + "/" + fields["name"])
+        if path in manifest:
+            raise RuntimeError("Duplicate authored Tolina node path")
+        manifest[path] = fields["type"]
+    expected = {"TolinaCharacterRigLab": "Node2D", "TolinaRig": "Node2D",
+                "TolinaRig/Visual": "Node2D", "TolinaRig/Visual/Arms": "Node2D",
+                "TolinaRig/Visual/Eyes": "Node2D", "TolinaRig/AnimationPlayer": "AnimationPlayer"}
+    expected.update({"TolinaRig/Visual/" + piece: "Sprite2D" for piece in TOLINA_TEXTURE_NODES})
+    if manifest != expected:
+        raise RuntimeError("Tolina package control must contain root plus the exact 21-node rig")
+    external = re.findall(r"(?m)^\[ext_resource\s+([^\r\n]+)\]$", text)
+    paths = []
+    for entry in external:
+        fields = dict(re.findall(r'(type|path|id)="([^"]*)"', entry))
+        if fields.get("type") != "Texture2D" or not fields.get("id"):
+            raise RuntimeError("Tolina control may reference only approved external Texture2D PNGs")
+        paths.append(fields.get("path"))
+    expected_paths = {"res://" + TOLINA_TEXTURE_PREFIX + value[0] for value in TOLINA_TEXTURE_NODES.values()}
+    if len(paths) != 15 or len(set(paths)) != 15 or set(paths) != expected_paths:
+        raise RuntimeError("Tolina control must reference exactly the 15 approved external PNG paths")
+    resources = re.findall(r'(?m)^\[sub_resource type="([^"]+)"', text)
+    if sorted(resources) != ["Animation", "AnimationLibrary"] or '"blink"' not in text:
+        raise RuntimeError("Tolina control must contain only its inline blink animation/library")
+    destination = project / ADDON / ADDON_SCENE_CONTROLS[1]
+    destination.write_bytes(data)
+    return {"source": str(source.resolve()), "sha256": hashlib.sha256(data).hexdigest(),
+            "bytes": len(data), "node_count": len(nodes), "inline_resource_count": len(resources),
+            "external_texture_count": len(paths), "no_json_runtime_dependency": True}
+
+
+def production_source_snapshot(repository: Path) -> dict[str, str]:
+    """Hash production inputs without inspecting private machine/signing content."""
+    sources = [repository / "project.godot", repository / "export_presets.cfg"]
+    for directory in ("assets", "scenes", "scripts", "config", "localization"):
+        sources.extend(path for path in (repository / directory).rglob("*") if path.is_file())
+    return {path.relative_to(repository).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(sources)}
 
 
 def preset_sections(source: str) -> dict[str, tuple[str, str]]:
@@ -252,6 +466,67 @@ def verify_authored_package(engine: str, package: Path, artifacts: Path,
     return int(summaries[0][0])
 
 
+def verify_tolina_package(engine: str, package: Path, artifacts: Path,
+                         env: dict[str, str], timeout: int, name: str, *, include_lab: bool) -> int:
+    """Load production textures and the inline blink with no manifest/helper use."""
+    project = artifacts / "native-tolina-package-check"
+    project.mkdir(exist_ok=True)
+    (project / "project.godot").write_text(
+        'config_version=5\n[application]\nconfig/name="Tolina native package validation"\n'
+        '[rendering]\nrenderer/rendering_method="gl_compatibility"\n', encoding="utf-8")
+    mapping = json.dumps(TOLINA_TEXTURE_NODES, separators=(",", ":"))
+    (project / "verify.gd").write_text(PACKAGE_TOLINA_VALIDATION.replace("__TEXTURES__", mapping), encoding="utf-8")
+    log = artifacts / f"{name}-tolina-native-validation.log"
+    run_engine([engine, "--headless", "--path", str(project), "--script", "res://verify.gd", "--",
+                str(package), "lab" if include_lab else "excluded"], log, env, timeout)
+    summaries = re.findall(r"(?m)^GODOT_MCP_EXPORTED_TOLINA_CHECKS=(\d+) FAILURES=(\d+)$",
+                           log.read_text(encoding="utf-8", errors="replace"))
+    minimum = 200 if include_lab else 50
+    if len(summaries) != 1 or int(summaries[0][0]) < minimum or summaries[0][1] != "0":
+        raise RuntimeError(f"Exported Tolina native validation failed; inspect {log}")
+    return int(summaries[0][0])
+
+
+def without_editor_json(control: Path, destination: Path) -> None:
+    """Diagnostic control removes tooling JSON and its possible compiled target."""
+    removed = {ADDON + ADDON_SPEC_CONTROL, ADDON + ADDON_SPEC_CONTROL + ".remap"}
+    with zipfile.ZipFile(control) as source:
+        normalized = {entry.removeprefix("res://").lstrip("/"): entry for entry in source.namelist()}
+        remap = normalized.get(ADDON + ADDON_SPEC_CONTROL + ".remap")
+        if remap:
+            removed.update(re.findall(r'(?m)^path="res://([^"]+)"$', source.read(remap).decode("utf-8")))
+        with zipfile.ZipFile(destination, "w") as target:
+            for entry in source.infolist():
+                if entry.filename.removeprefix("res://").lstrip("/") not in removed:
+                    target.writestr(entry, source.read(entry.filename))
+
+
+def compare_tolina_texture_payloads(excluded_path: Path, control_path: Path) -> dict[str, str]:
+    """Require unchanged import bytes and CTEX payloads in both mobile packages."""
+    paths = {TOLINA_TEXTURE_PREFIX + value[0] for value in TOLINA_TEXTURE_NODES.values()}
+    result = {}
+    with zipfile.ZipFile(excluded_path) as excluded, zipfile.ZipFile(control_path) as control:
+        excluded_names = {entry.removeprefix("res://").lstrip("/"): entry for entry in excluded.namelist()}
+        control_names = {entry.removeprefix("res://").lstrip("/"): entry for entry in control.namelist()}
+        for path in sorted(paths):
+            imported = path + ".import"
+            if imported not in excluded_names or imported not in control_names:
+                raise RuntimeError("Production texture import is missing from mobile package: " + path)
+            original = excluded.read(excluded_names[imported])
+            positive = control.read(control_names[imported])
+            if original != positive:
+                raise RuntimeError("Production texture import differs across mobile package controls: " + path)
+            targets = re.findall(r'(?m)^path="res://([^"]+)"$', positive.decode("utf-8"))
+            if len(targets) != 1 or targets[0] not in excluded_names or targets[0] not in control_names:
+                raise RuntimeError("Production texture compiled payload is missing: " + path)
+            original_payload = excluded.read(excluded_names[targets[0]])
+            control_payload = control.read(control_names[targets[0]])
+            if original_payload != control_payload:
+                raise RuntimeError("Production texture payload changed across mobile package controls: " + path)
+            result[path] = hashlib.sha256(control_payload).hexdigest()
+    return result
+
+
 def verify_resource_control(package: zipfile.ZipFile, normalized_entries: dict[str, str], relative: str) -> str:
     """Require a real source resource or its exported artifact, following remaps."""
     source = ADDON + relative
@@ -294,7 +569,7 @@ def verify_zip(path: Path, *, excluded: bool, full_project: bool = False) -> dic
                 raise RuntimeError("Positive addon-resource control is absent")
             if not any(entry.startswith(ADDON + "nested/export_probe.tres") for entry in addon_entries):
                 raise RuntimeError("Nested positive addon-resource control is absent")
-            for resource in (*ADDON_SCRIPT_CONTROLS, *ADDON_SCENE_CONTROLS):
+            for resource in (*ADDON_SCRIPT_CONTROLS, *ADDON_SCENE_CONTROLS, ADDON_SPEC_CONTROL):
                 actual_controls[resource] = verify_resource_control(package, normalized_entries, resource)
         # An exported .remap may lead to bytecode under .godot/exported rather
         # than the source folder. The excluded package must have no artifact
@@ -359,6 +634,8 @@ def main() -> None:
     parser.add_argument("--full-project", action="store_true", help="Copy current production runtime resources before exporting, without local credentials or caches")
     parser.add_argument("--authored-lab-scene", type=Path,
                         help="Retained native/public-writer saved rig+animation artifact for disposable inline export controls")
+    parser.add_argument("--authored-tolina-scene", type=Path,
+                        help="Retained native-writer saved 21-node Tolina rig+blink with approved external PNG references")
     parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
     engine = shutil.which(args.godot)
@@ -366,8 +643,11 @@ def main() -> None:
         parser.error("Godot not found; pass --godot /absolute/path/to/Godot")
     repository = Path(__file__).resolve().parents[2]
     addon = repository / ADDON
-    if not all((addon / filename).is_file() for filename in ("plugin.cfg", *ADDON_SCRIPT_CONTROLS, *ADDON_SCENE_CONTROLS)):
-        parser.error("The v0.3 addon helpers and actual rig-lab fixture must exist before package validation")
+    if not all((addon / filename).is_file() for filename in ("plugin.cfg", *ADDON_SCRIPT_CONTROLS,
+                                                            *ADDON_SCENE_CONTROLS, ADDON_SPEC_CONTROL)):
+        parser.error("The v0.4 addon helpers, reviewed specification and actual lab baselines must exist")
+    if args.authored_tolina_scene and not args.full_project:
+        parser.error("The external production-texture control requires --full-project")
     if args.artifacts_dir:
         artifacts = args.artifacts_dir.resolve()
         if artifacts.is_relative_to(repository) and not artifacts.is_relative_to(repository / ".godot"):
@@ -381,7 +661,9 @@ def main() -> None:
     # source artwork, credentials, caches, signing stores, or user saves.
     copy_runtime_snapshot(repository, project, full_project=args.full_project)
     source_snapshot = addon_source_snapshot(repository, project)
+    production_snapshot = production_source_snapshot(repository)
     authored_lab = copy_authored_lab(args.authored_lab_scene, project) if args.authored_lab_scene else None
+    authored_tolina = copy_authored_tolina_lab(args.authored_tolina_scene, project) if args.authored_tolina_scene else None
     if not args.full_project:
         (project / "project.godot").write_text(
             'config_version=5\n[application]\nconfig/name="Godot MCP export validation"\n'
@@ -434,6 +716,9 @@ def main() -> None:
                                "fixture": "isolated working-tree runtime project" if args.full_project else "isolated native exporter",
                                "addon_source_sha256": source_snapshot,
                                "authored_lab_control": authored_lab,
+                               "authored_tolina_control": authored_tolina,
+                               "production_source_files_preserved": len(production_snapshot),
+                               "executable_ios_export_device_behavior": "NOT VALIDATED / REQUIRES MAC/iOS",
                                "presets": {}}
     for name, (section, body) in presets.items():
         without = without_addon_exclusion(source, section, body)
@@ -448,6 +733,18 @@ def main() -> None:
         if authored_lab:
             control_result["authored_animation_native_checks"] = verify_authored_package(
                 engine, control, artifacts, env, args.timeout, name)
+        if args.full_project:
+            excluded_result["production_tolina_native_checks"] = verify_tolina_package(
+                engine, excluded, artifacts, env, args.timeout, name + "-excluded", include_lab=False)
+            control_result["production_texture_payload_sha256"] = compare_tolina_texture_payloads(excluded, control)
+        if authored_tolina:
+            control_result["authored_tolina_native_checks"] = verify_tolina_package(
+                engine, control, artifacts, env, args.timeout, name + "-control", include_lab=True)
+            diagnostic = artifacts / f"{name}-control-without-editor-json.zip"
+            without_editor_json(control, diagnostic)
+            control_result["tolina_without_json_native_checks"] = verify_tolina_package(
+                engine, diagnostic, artifacts, env, args.timeout, name + "-without-json", include_lab=True)
+            control_result["tolina_has_no_json_runtime_dependency"] = True
         compiled_count = compare_packages(excluded, control)
         report["presets"][name] = {"excluded": excluded_result, "control": control_result, "compiled_remap_targets_absent": compiled_count}
         print(f"PASS {name}: excluded {excluded_result['addon_entries']} addon entries; control {control_result['addon_entries']}; {compiled_count} remapped compiled resources absent", flush=True)
@@ -455,11 +752,18 @@ def main() -> None:
     for relative, digest in source_snapshot.items():
         if hashlib.sha256((repository / relative).read_bytes()).hexdigest() != digest:
             raise RuntimeError("Repository addon sources changed during export validation")
-        if relative != ADDON + ADDON_SCENE_CONTROLS[0] or authored_lab is None:
+        overridden = ((relative == ADDON + ADDON_SCENE_CONTROLS[0] and authored_lab is not None) or
+                      (relative == ADDON + ADDON_SCENE_CONTROLS[1] and authored_tolina is not None))
+        if not overridden:
             if hashlib.sha256((project / relative).read_bytes()).hexdigest() != digest:
                 raise RuntimeError("Disposable addon source snapshot changed during export validation")
     if authored_lab and hashlib.sha256((project / ADDON / ADDON_SCENE_CONTROLS[0]).read_bytes()).hexdigest() != authored_lab["sha256"]:
         raise RuntimeError("Disposable authored lab scene changed during export validation")
+    if authored_tolina and hashlib.sha256((project / ADDON / ADDON_SCENE_CONTROLS[1]).read_bytes()).hexdigest() != authored_tolina["sha256"]:
+        raise RuntimeError("Disposable authored Tolina scene changed during export validation")
+    for relative, digest in production_snapshot.items():
+        if hashlib.sha256((repository / relative).read_bytes()).hexdigest() != digest:
+            raise RuntimeError("Repository production input changed during export validation: " + relative)
     (artifacts / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print("EXPORT EXCLUSION: 2 native mobile preset packages and 2 positive-control packages passed; 0 skipped.", flush=True)
 

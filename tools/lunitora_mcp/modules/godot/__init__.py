@@ -1,1 +1,1 @@
-"""Strictly read-only Godot editor bridge; independent of Photoshop transport."""
+"""Authenticated Godot metadata and fixed lab writers; separate from Photoshop transport."""

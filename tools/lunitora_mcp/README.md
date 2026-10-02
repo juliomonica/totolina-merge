@@ -1,6 +1,6 @@
 # Lunitora Photoshop MCP — v0.6 operator convenience
 
-Separate Godot profile: [Godot Animation MCP v0.3 setup and rig lab](GODOT_README.md).
+Separate Godot profile: [Godot Animation MCP v0.4 setup and dedicated labs](GODOT_README.md).
 Its three metadata tools remain read-only. `godot_create_rig_lab({})` adds one
 fixed seven-node scaffold only in the dedicated `TotolinaRigLab` scene, with one
 native Undo/Redo action and no autosave. The blue test mesh uses exact
@@ -9,7 +9,7 @@ The separate `godot_create_rig_lab_animation({})` requires that unchanged fixtur
 and a detached, settled animation editor, then adds only synthetic `bend_tip`.
 Both writers bind requests to fresh editor-session reads, reject re-entry and
 duplicate write IDs, verify scene/history after committing, and fail closed
-when the outcome is uncertain. Bridge/plugin version is 0.3.0, protocol remains
+when the outcome is uncertain. Bridge/plugin version is 0.4.0, protocol remains
 1, and Codex owns its separate port 43128 stdio process. The Godot guide records
 the broader reusable animation roadmap and separates historical v0.1 evidence
 from completed v0.2 and v0.3 real-checkout live acceptance. The v0.3 cycle verified
@@ -20,6 +20,22 @@ residue. The guide retains the Godot 4.7.2-specific detached/settled editor safe
 conditions, characterized attached-editor Redo behavior, conservative lab-only
 observer restriction and **NOT VALIDATED / REQUIRES MAC/iOS** executable/device
 limitation. Photoshop implementation and port 43127 remain independent.
+
+v0.4 adds only `godot_create_tolina_rig_lab({})` and
+`godot_create_tolina_lab_blink({})`, gated to the separate native
+`TolinaCharacterRigLab` scene. Its pinned reviewed specification creates 21
+nodes using immutable cached external production textures; blink adds three
+alpha tracks with bounded keys and exact rest endpoints in a separate native
+action. Native Godot 4.7.2 playback can overshoot near keys, as characterized in
+the Godot guide. All four writers share one session safety coordinator. v0.4 is
+technically accepted: live bridge/plugin `0.4.0`, both Tolina writers, native
+blink Undo/Redo and manual Save/Reopen passed. The user approved the production
+idle/front match, final blink and 390×844, 405×720 and 540×960 presentations.
+Cleanup restored the clean 117-byte empty Tolina lab without A/B/C residue.
+Writers preserve production resources; Leon's intentional, approved `blink_02`
+artwork replacement and final PNG/spec hashes are recorded in the Godot guide.
+The changed PNG's `.png.import` and all other Tolina PNG/import files remain unchanged.
+Machine-local configuration is not changed by this implementation.
 
 Repository-controlled Photoshop bridge with two compatible read-only tools,
 photoshop_ping and photoshop_get_active_document, plus photoshop_process_image

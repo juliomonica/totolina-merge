@@ -1,0 +1,540 @@
+{
+  "schema_version": 1,
+  "rig_id": "tolina_character_rig_v1",
+  "textures": [
+    {
+      "id": "body",
+      "path": "res://assets/characters/totolina/body/cat_totolina_body.png",
+      "source_sha256": "55849bc22bbecdde6b8f2cbbf0899a4ff03c2764556557fb1abe25c3fcc7fd25",
+      "import_sha256": "9db65dd43657a33a323661053baf92a117de2ff7503bcf42636b3f805c2408b3",
+      "size_px": [
+        768,
+        1024
+      ]
+    },
+    {
+      "id": "ear_left",
+      "path": "res://assets/characters/totolina/ears/cat_totolina_ear_left.png",
+      "source_sha256": "a39b3adea12b1e8e0e3c63c8f11070927b8427234bdc5e2376cb4fb4ccf00165",
+      "import_sha256": "48d678ed1284d89415ebe2cb8918a10a5111af9dfb7f833c6aba16b6806f600f",
+      "size_px": [
+        192,
+        192
+      ]
+    },
+    {
+      "id": "ear_right",
+      "path": "res://assets/characters/totolina/ears/cat_totolina_ear_right.png",
+      "source_sha256": "f81cd49427856b3d2bbfb663adf591c495b1dd0ae59a131d16b71147260efd36",
+      "import_sha256": "48b07426ab05b0188813e7514d267742381e4ad121f0a95393e976c43db51879",
+      "size_px": [
+        192,
+        192
+      ]
+    },
+    {
+      "id": "arm_idle",
+      "path": "res://assets/characters/totolina/arms/cat_totolina_arm_idle.png",
+      "source_sha256": "c574924132e416feb3e3720761f3eec0a125e5077068cd44dd3b1a7e526f1045",
+      "import_sha256": "1b4f224ec2b757e925ad89dd8291a6ad3d617fd151df3c1336fa05b0a1fbc06b",
+      "size_px": [
+        384,
+        384
+      ]
+    },
+    {
+      "id": "arm_press_01",
+      "path": "res://assets/characters/totolina/arms/cat_totolina_arm_press_01.png",
+      "source_sha256": "32b95f70598f89c4c9f26abdc7df4c757d153b99dd27fdc8a76c5bf9afcc556e",
+      "import_sha256": "a4c08d36a2c2b7d85cc92025867592e2606ba8017e1cc63d3cb8cd6cb4f36c0d",
+      "size_px": [
+        384,
+        384
+      ]
+    },
+    {
+      "id": "arm_press_02",
+      "path": "res://assets/characters/totolina/arms/cat_totolina_arm_press_02.png",
+      "source_sha256": "9d4f6203ed00c588ba9f9234820c31b752fad6a85db8b842d0907f9a5c29afa6",
+      "import_sha256": "da7a1983448d9ab397c30534491d37edc3128defaef4b88d379e890c4a567dd5",
+      "size_px": [
+        384,
+        384
+      ]
+    },
+    {
+      "id": "arm_press_03",
+      "path": "res://assets/characters/totolina/arms/cat_totolina_arm_press_03.png",
+      "source_sha256": "7617c79ef32becd51db6b325a33a6270c1f30b80f640342f63bd5a58406903d3",
+      "import_sha256": "74b2d824dcf47d9f996c935bff7cc58f8e7e50c5650693f4ad34f0b4acace8e4",
+      "size_px": [
+        384,
+        384
+      ]
+    },
+    {
+      "id": "eyes_blink_01",
+      "path": "res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_01.png",
+      "source_sha256": "cea73af030776c85dd35a62f06bb184f0da46e307d2c2b43dc52187543bde2b4",
+      "import_sha256": "481e1925d399dbd4fec8646222d8800d3d098262b3c8f42719fbc3abc987585e",
+      "size_px": [
+        328,
+        128
+      ]
+    },
+    {
+      "id": "eyes_blink_02",
+      "path": "res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_02.png",
+      "source_sha256": "7e797c9d373a0440e663286be575ebf856b185e0c62e49d7f38002fc7af63f99",
+      "import_sha256": "234da814d6487857421c73864c7079f2d1f6db696f79002792de0a655d19c25b",
+      "size_px": [
+        328,
+        128
+      ]
+    },
+    {
+      "id": "eyes_blink_03",
+      "path": "res://assets/characters/totolina/eyes/cat_totolina_eyes_blink_03.png",
+      "source_sha256": "7f5b8488c043158986bf8990773d1f673b06415bf75f429062ce6df12560bee3",
+      "import_sha256": "fa2f7089ee9ffd038973bc42bef81e0e628cca931dc9837a62beeb8e062f0cc4",
+      "size_px": [
+        328,
+        128
+      ]
+    },
+    {
+      "id": "eyes_excited",
+      "path": "res://assets/characters/totolina/eyes/cat_totolina_eyes_excited.png",
+      "source_sha256": "5070ce78e0449e362689e4093111ed2e872ca71d3c764ae2faade8a5b397bd6d",
+      "import_sha256": "f226c16333738279a5a6d0c1603ba4bb5a62e46a26ea621ea0892e687811eb84",
+      "size_px": [
+        328,
+        128
+      ]
+    },
+    {
+      "id": "eyes_surprised",
+      "path": "res://assets/characters/totolina/eyes/cat_totolina_eyes_surprised.png",
+      "source_sha256": "626a15c0aa182cf1de6a9aaa17fad2af65336720386613adfa07c79e877d39f6",
+      "import_sha256": "60f75f53f8ced0f9b79d9660239e522557725664223b473ff80fa0ab1a9cef98",
+      "size_px": [
+        328,
+        128
+      ]
+    },
+    {
+      "id": "mouth_idle",
+      "path": "res://assets/characters/totolina/mouths/cat_totolina_mouth_idle.png",
+      "source_sha256": "40abaf3ab335233314c712fd7c7b72a0950949b2863242ff54c9b90891961895",
+      "import_sha256": "d48230743c49759bb1ad1519175dd7f7d9bdf8e6a7dad6a1e81fd6ae2c7b3132",
+      "size_px": [
+        128,
+        128
+      ]
+    },
+    {
+      "id": "mouth_excited",
+      "path": "res://assets/characters/totolina/mouths/cat_totolina_mouth_excited.png",
+      "source_sha256": "791a45a196aa717594b61c5cab8a14c9df6506ce6abd17c4d061bc5630b5fb85",
+      "import_sha256": "0cedd0cee7fde0f6c8df1c0097162b6ad861cdc59bcd52e6790aaf25880cd9eb",
+      "size_px": [
+        128,
+        128
+      ]
+    },
+    {
+      "id": "mouth_surprised",
+      "path": "res://assets/characters/totolina/mouths/cat_totolina_mouth_surprised.png",
+      "source_sha256": "611750032353eddb3f72a55d308ceae300876f4d868af97bdf8f37615c7a0c3a",
+      "import_sha256": "c762a128d011349a42ae7ed587cb5231c4b740de710815bd90aa2ece1f3a768f",
+      "size_px": [
+        128,
+        128
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "id": "Visual",
+      "parent": ".",
+      "position_px": [
+        0,
+        0
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ]
+    },
+    {
+      "id": "Arms",
+      "parent": "Visual",
+      "position_px": [
+        650,
+        410
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ]
+    },
+    {
+      "id": "Eyes",
+      "parent": "Visual",
+      "position_px": [
+        401,
+        173
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1.1,
+        1.1
+      ]
+    }
+  ],
+  "pieces": [
+    {
+      "id": "EarLeft",
+      "parent": "Visual",
+      "texture": "ear_left",
+      "position_px": [
+        271,
+        145.99998
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1.05,
+        1.05
+      ],
+      "pivot_px": [
+        130,
+        155
+      ],
+      "z_index": 0,
+      "alpha": 1,
+      "region_px": null
+    },
+    {
+      "id": "EarRight",
+      "parent": "Visual",
+      "texture": "ear_right",
+      "position_px": [
+        548,
+        148
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1.05,
+        1.05
+      ],
+      "pivot_px": [
+        62,
+        155
+      ],
+      "z_index": 0,
+      "alpha": 1,
+      "region_px": null
+    },
+    {
+      "id": "Body",
+      "parent": "Visual",
+      "texture": "body",
+      "position_px": [
+        0,
+        0
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        0,
+        0
+      ],
+      "z_index": 0,
+      "alpha": 1,
+      "region_px": null
+    },
+    {
+      "id": "Idle",
+      "parent": "Visual/Arms",
+      "texture": "arm_idle",
+      "position_px": [
+        -16,
+        17
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1.1,
+        1.1
+      ],
+      "pivot_px": [
+        110,
+        60
+      ],
+      "z_index": 4,
+      "alpha": 1,
+      "region_px": null
+    },
+    {
+      "id": "Press01",
+      "parent": "Visual/Arms",
+      "texture": "arm_press_01",
+      "position_px": [
+        10,
+        -13
+      ],
+      "rotation_rad": -0.65,
+      "scale": [
+        1.1,
+        1.1
+      ],
+      "pivot_px": [
+        130,
+        30
+      ],
+      "z_index": 2,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "Press02",
+      "parent": "Visual/Arms",
+      "texture": "arm_press_02",
+      "position_px": [
+        16,
+        -11
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1.1,
+        1.1
+      ],
+      "pivot_px": [
+        130,
+        30
+      ],
+      "z_index": 2,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "Press03",
+      "parent": "Visual/Arms",
+      "texture": "arm_press_03",
+      "position_px": [
+        13,
+        -34
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1.1,
+        1.1
+      ],
+      "pivot_px": [
+        130,
+        20
+      ],
+      "z_index": 2,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "ShoulderOverlap",
+      "parent": "Visual",
+      "texture": "body",
+      "position_px": [
+        530,
+        325
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        0,
+        0
+      ],
+      "z_index": 3,
+      "alpha": 1,
+      "region_px": [
+        530,
+        325,
+        170,
+        95
+      ]
+    },
+    {
+      "id": "Rest",
+      "parent": "Visual/Eyes",
+      "texture": "eyes_blink_01",
+      "position_px": [
+        0,
+        0
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        164,
+        64
+      ],
+      "z_index": 0,
+      "alpha": 1,
+      "region_px": null
+    },
+    {
+      "id": "Half",
+      "parent": "Visual/Eyes",
+      "texture": "eyes_blink_02",
+      "position_px": [
+        0,
+        0
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        164,
+        64
+      ],
+      "z_index": 0,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "Closed",
+      "parent": "Visual/Eyes",
+      "texture": "eyes_blink_03",
+      "position_px": [
+        0,
+        0
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        164,
+        64
+      ],
+      "z_index": 0,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "Excited",
+      "parent": "Visual/Eyes",
+      "texture": "eyes_excited",
+      "position_px": [
+        0,
+        0
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        164,
+        64
+      ],
+      "z_index": 0,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "Surprised",
+      "parent": "Visual/Eyes",
+      "texture": "eyes_surprised",
+      "position_px": [
+        0,
+        0
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        164,
+        64
+      ],
+      "z_index": 0,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "MouthIdle",
+      "parent": "Visual",
+      "texture": "mouth_idle",
+      "position_px": [
+        405,
+        255
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        64,
+        0
+      ],
+      "z_index": 0,
+      "alpha": 1,
+      "region_px": null
+    },
+    {
+      "id": "MouthExcited",
+      "parent": "Visual",
+      "texture": "mouth_excited",
+      "position_px": [
+        401,
+        249
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        64,
+        0
+      ],
+      "z_index": 0,
+      "alpha": 0,
+      "region_px": null
+    },
+    {
+      "id": "MouthSurprised",
+      "parent": "Visual",
+      "texture": "mouth_surprised",
+      "position_px": [
+        401,
+        251
+      ],
+      "rotation_rad": 0,
+      "scale": [
+        1,
+        1
+      ],
+      "pivot_px": [
+        64,
+        0
+      ],
+      "z_index": 0,
+      "alpha": 0,
+      "region_px": null
+    }
+  ]
+}

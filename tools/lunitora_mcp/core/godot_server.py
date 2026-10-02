@@ -1,4 +1,4 @@
-"""Run Godot metadata reads and two fixed undoable lab operations."""
+"""Run Godot metadata reads and four fixed undoable lab operations."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -25,7 +25,8 @@ def create_server(config: Config, credential: Credential | None, *,
 
     server = GodotMCPServer(
         "Lunitora Godot", version=BRIDGE_VERSION, lifespan=lifespan, log_level="WARNING",
-        instructions="Three read-only Godot metadata tools, godot_create_rig_lab and godot_create_rig_lab_animation; each takes exactly {}. "
+        instructions="Three read-only Godot metadata tools and four fixed writers: godot_create_rig_lab, godot_create_rig_lab_animation, "
+                     "godot_create_tolina_rig_lab and godot_create_tolina_lab_blink; each takes exactly {}. "
                      "Each write adds only its fixed fixture to the exact open, saved lab through one editor undo action. "
                      "Animation creation requires the existing valid rig and a detached, settled AnimationPlayer editor; it never creates the rig. "
                      "No generic property/method/script/resource APIs, saving, playback or production writes exist. "

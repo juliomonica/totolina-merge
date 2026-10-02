@@ -344,6 +344,9 @@ class GodotNativeAnimationTests(native.GodotNativeBridgeTests):
         self.assert_recipe(await self.frames())
 
     async def finish_child(self):
+        # Drain pipes while asking the fixture to quit. Waiting for exit before
+        # draining a failed editor's error output can deadlock its pipe handles.
+        communication = asyncio.create_task(self.process.communicate())
         if self.process.returncode is None:
             if hasattr(self, "_command_counter"):
                 pending = self.project / ".godot/animation_control.pending"
@@ -351,11 +354,10 @@ class GodotNativeAnimationTests(native.GodotNativeBridgeTests):
                     json.dumps({"command": "quit", "id": "cleanup", "frames": 0}), encoding="utf-8")
                 pending.replace(self.project / ".godot/animation_control.json")
             try:
-                await asyncio.wait_for(self.process.wait(), 5)
+                await asyncio.wait_for(asyncio.shield(communication), 5)
             except TimeoutError:
                 self.process.terminate()
-                await self.process.wait()
-        stdout, stderr = await self.process.communicate()
+        stdout, stderr = await asyncio.wait_for(communication, 10)
         output = stdout + stderr
         self.assertNotIn(self.credential.secret.hex().encode(), output)
         directory = PROJECT_ROOT / "tools/lunitora_mcp/.local/native-animation-logs"
