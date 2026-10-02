@@ -17,7 +17,8 @@ from tests import test_godot_native_animation as animation
 
 RIG = "godot_create_tolina_rig_lab"
 BLINK = "godot_create_tolina_lab_blink"
-ALL_WRITES = ("godot_create_rig_lab", "godot_create_rig_lab_animation", RIG, BLINK)
+ALL_WRITES = ("godot_create_rig_lab", "godot_create_rig_lab_animation", RIG, BLINK,
+              "godot_create_rig_test_cat_deformation_lab", "godot_create_rig_test_cat_deformation_demo")
 LAB = "addons/lunitora_godot/labs/tolina_character_rig_lab.tscn"
 CONTROL = '''@tool
 extends "res://addons/lunitora_godot/plugin.gd"
@@ -167,8 +168,8 @@ class GodotNativeCharacterTests(native.GodotNativeBridgeTests):
         self.baseline = (self.project / LAB).read_bytes()
         self.assertEqual(self.production_hashes(), self.production_before)
         ping = await self.public("godot_ping")
-        self.assertEqual(ping["bridge_version"], "0.4.0")
-        self.assertEqual(ping["result"]["plugin_version"], "0.4.0")
+        self.assertEqual(ping["bridge_version"], "0.5.0")
+        self.assertEqual(ping["result"]["plugin_version"], "0.5.0")
 
     async def graphical_ready(self):
         await self.evidence(lambda value: value["display"] == "Windows"
@@ -548,7 +549,7 @@ class GodotNativeCharacterTests(native.GodotNativeBridgeTests):
         baseline = await self.command("wrong_root")
         oldest = f"{0x9000:032x}"
         for index in range(128):
-            operation = ALL_WRITES[index % 4]
+            operation = ALL_WRITES[index % len(ALL_WRITES)]
             error = "LAB_ROOT_MISMATCH" if operation in (RIG, BLINK) else "LAB_SCENE_REQUIRED"
             with patch("modules.godot.bridge.secrets.token_hex", side_effect=[f"{0xa000 + index:032x}", f"{0x9000 + index:032x}"]):
                 await self.public(operation, error=error)

@@ -56,7 +56,7 @@ def last_fitting_repeat(character: str) -> int:
 
 
 class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
-    async def test_only_seven_tools_with_closed_empty_inputs_and_annotations(self):
+    async def test_only_nine_tools_with_closed_empty_inputs_and_annotations(self):
         async with Client(create_server(Config(), disposable_credential(), port=0)) as client:
             listing = (await client.list_tools()).tools
             self.assertEqual({tool.name for tool in listing}, OPERATIONS)
@@ -108,7 +108,7 @@ class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unavailable_and_conflicting_listeners_do_not_disable_discovery(self):
         async with Client(create_server(Config(), None, port=0)) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 7)
+            self.assertEqual(len((await client.list_tools()).tools), 9)
             response = await client.call_tool("godot_ping", {})
             self.assertEqual(response.structured_content["error"]["code"], "LOCAL_AUTH_UNSAFE")
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
@@ -116,7 +116,7 @@ class GodotMCPTests(unittest.IsolatedAsyncioTestCase):
             occupied.listen(1)
             server = create_server(Config(), disposable_credential(), port=occupied.getsockname()[1])
             async with Client(server) as client:
-                self.assertEqual(len((await client.list_tools()).tools), 7)
+                self.assertEqual(len((await client.list_tools()).tools), 9)
                 response = await client.call_tool("godot_ping", {})
                 self.assertEqual(response.structured_content["error"]["code"], "PORT_IN_USE")
 
@@ -230,7 +230,7 @@ class GodotStdioTests(unittest.IsolatedAsyncioTestCase):
         process = await self.child(unsafe=True)
         await self.initialize(process)
         listing = await self.exchange(process, 2, "tools/list", {})
-        self.assertEqual(len(listing["result"]["tools"]), 7)
+        self.assertEqual(len(listing["result"]["tools"]), 9)
         response = await self.exchange(process, 3, "tools/call", {"name": "godot_ping", "arguments": {}})
         self.assertEqual(response["result"]["structuredContent"]["error"]["code"], "LOCAL_AUTH_UNSAFE")
         await self.assert_clean_shutdown(process)

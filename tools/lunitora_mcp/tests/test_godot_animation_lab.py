@@ -443,11 +443,11 @@ class AnimationTransportTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AnimationMCPTests(unittest.IsolatedAsyncioTestCase):
-    async def test_seven_tools_keep_read_schemas_and_closed_animation_contract(self):
+    async def test_nine_tools_keep_read_schemas_and_closed_animation_contract(self):
         server = create_server(Config(), disposable_credential(), port=0)
         listing = await server.list_tools()
         self.assertEqual({tool.name for tool in listing}, OPERATIONS)
-        self.assertEqual(len(listing), 7)
+        self.assertEqual(len(listing), 9)
         for tool in listing:
             self.assertEqual(tool.annotations.read_only_hint, tool.name in READ_OPERATIONS)
             self.assertEqual(tool.annotations.idempotent_hint, tool.name in READ_OPERATIONS)

@@ -399,7 +399,7 @@ func _run() -> void:
 	# Persist accepted public fixture artifact only through an explicit editor save.
 	_save("explicit final export-control fixture save")
 	await _frames()
-	_check(_plugin()._dispatch("godot_ping", {}).result.plugin_version == "0.4.0", "intentional live plugin version")
+	_check(_plugin()._dispatch("godot_ping", {}).result.plugin_version == "0.5.0", "intentional live plugin version")
 	_finish()
 
 

@@ -49,10 +49,11 @@ class TolinaContractTests(unittest.TestCase):
     def setUp(self):
         self.credential = disposable_credential()
 
-    def test_four_fixed_writes_protocol_one_version_four(self):
-        self.assertEqual(WRITE_OPERATIONS, frozenset(ALL_WRITES))
-        self.assertEqual(len(OPERATIONS), 7)
-        self.assertEqual(BRIDGE_VERSION, "0.4.0")
+    def test_original_four_write_contracts_remain_registered_under_version_five(self):
+        self.assertTrue(frozenset(ALL_WRITES) <= WRITE_OPERATIONS)
+        self.assertEqual(len(WRITE_OPERATIONS), 6)
+        self.assertEqual(len(OPERATIONS), 9)
+        self.assertEqual(BRIDGE_VERSION, "0.5.0")
         self.assertEqual(envelope(tolina_rig_lab_result(self.credential), elapsed_ms=0)["protocol_version"], 1)
 
     def test_rig_exact_closed_eleven_field_contract(self):

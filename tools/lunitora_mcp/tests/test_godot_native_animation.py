@@ -122,13 +122,14 @@ class GodotNativeAnimationTests(native.GodotNativeBridgeTests):
     async def evidence(self, predicate=lambda value: True):
         async with asyncio.timeout(15):
             while True:
-                files = list((self.project / ".godot").glob("animation_evidence_*.json"))
-                latest = max(files, key=lambda path: path.stat().st_mtime_ns) if files else None
                 try:
+                    files = list((self.project / ".godot").glob("animation_evidence_*.json"))
+                    latest = max(files, key=lambda path: path.stat().st_mtime_ns) if files else None
                     data = json.loads(latest.read_text(encoding="utf-8")) if latest else None
                 except (FileNotFoundError, PermissionError, json.JSONDecodeError):
                     # Godot publishes successive evidence files. On Windows a
-                    # path can appear before its short-lived write handle closes.
+                    # path can appear before its short-lived write handle closes
+                    # or disappear during the fixture's bounded report pruning.
                     # Wait for a complete readable report; never retry MCP writes.
                     data = None
                 if data is not None and predicate(data):

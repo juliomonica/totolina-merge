@@ -18,6 +18,10 @@ from modules.godot.protocol import (ANIMATION_PLAYER_PATH, ANIMATION_UNDO_ACTION
                                    TOLINA_RIG_UNDO_ACTION_NAME, TOLINA_ANIMATION_PLAYER_PATH,
                                    TOLINA_BLINK_UNDO_ACTION_NAME, TOLINA_RIG_WRITE_OPERATION,
                                    TOLINA_BLINK_WRITE_OPERATION,
+                                   DEFORMATION_LAB_SCENE_PATH, DEFORMATION_LAB_ROOT_NAME,
+                                   DEFORMATION_RIG_ROOT_NAME, DEFORMATION_RIG_UNDO_ACTION_NAME,
+                                   DEFORMATION_ANIMATION_PLAYER_PATH, DEFORMATION_DEMO_UNDO_ACTION_NAME,
+                                   DEFORMATION_RIG_WRITE_OPERATION, DEFORMATION_DEMO_WRITE_OPERATION,
                                    WRITE_OPERATIONS, decode, encode, error_info, is_hex, proof)
 
 NO_SCENE = {"exists": False, "path": None, "root_name": None, "has_saved_path": False,
@@ -31,6 +35,7 @@ ROOT_NODE = {"path": ".", "parent_path": None, "type": "Node2D", "child_count": 
              "kind": None, "animations": None}
 LAB_SCENE = dict(SAVED_SCENE, path=LAB_SCENE_PATH, root_name=LAB_ROOT_NAME)
 TOLINA_LAB_SCENE = dict(SAVED_SCENE, path=TOLINA_LAB_SCENE_PATH, root_name=TOLINA_LAB_ROOT_NAME)
+DEFORMATION_LAB_SCENE = dict(SAVED_SCENE, path=DEFORMATION_LAB_SCENE_PATH, root_name=DEFORMATION_LAB_ROOT_NAME)
 
 
 def disposable_credential() -> Credential:
@@ -57,6 +62,10 @@ def result_for(operation: str, credential: Credential, scene: dict, nodes: list,
         return tolina_rig_lab_result(credential)
     if operation == TOLINA_BLINK_WRITE_OPERATION:
         return tolina_lab_blink_result(credential)
+    if operation == DEFORMATION_RIG_WRITE_OPERATION:
+        return deformation_rig_lab_result(credential)
+    if operation == DEFORMATION_DEMO_WRITE_OPERATION:
+        return deformation_demo_result(credential)
     return {"editor_session_id": "disposable-editor-session", "scene": deepcopy(scene), "nodes": deepcopy(nodes)}
 
 
@@ -89,6 +98,19 @@ def tolina_lab_blink_result(credential: Credential, session_id="disposable-edito
             "track_count": 3, "key_count": 18, "undo_action_name": TOLINA_BLINK_UNDO_ACTION_NAME}
 
 
+def deformation_rig_lab_result(credential: Credential, session_id="disposable-editor-session") -> dict:
+    return {**rig_lab_result(credential, session_id), "scene_path": DEFORMATION_LAB_SCENE_PATH,
+            "root_name": DEFORMATION_LAB_ROOT_NAME, "created_root": DEFORMATION_RIG_ROOT_NAME,
+            "created_node_count": 19, "undo_action_name": DEFORMATION_RIG_UNDO_ACTION_NAME}
+
+
+def deformation_demo_result(credential: Credential, session_id="disposable-editor-session") -> dict:
+    return {**rig_lab_animation_result(credential, session_id), "scene_path": DEFORMATION_LAB_SCENE_PATH,
+            "root_name": DEFORMATION_LAB_ROOT_NAME, "animation_player_path": DEFORMATION_ANIMATION_PLAYER_PATH,
+            "animation_name": "deformation_demo", "animation_key": "deformation_demo", "length_seconds": 2.0,
+            "track_count": 7, "key_count": 35, "undo_action_name": DEFORMATION_DEMO_UNDO_ACTION_NAME}
+
+
 class FakeGodotClient:
     def __init__(self, credential: Credential, port: int, *, scene: dict | None = None,
                  nodes: list | None = None, selection: list | None = None,
@@ -96,7 +118,8 @@ class FakeGodotClient:
                  write_delay: float = 0, ignore_write_reply: bool = False, session_id="disposable-editor-session",
                  has_rig: bool = False, animation_error: str | None = None,
                  has_tolina_rig: bool = False, tolina_rig_error: str | None = None,
-                 blink_error: str | None = None):
+                 blink_error: str | None = None, has_deformation_rig: bool = False,
+                 deformation_rig_error: str | None = None, deformation_demo_error: str | None = None):
         self.credential = credential
         self.port = port
         self.scene = deepcopy(scene if scene is not None else NO_SCENE)
@@ -113,6 +136,10 @@ class FakeGodotClient:
         self.blink_created = False
         self.tolina_rig_error = tolina_rig_error
         self.blink_error = blink_error
+        self.deformation_created = has_deformation_rig
+        self.deformation_demo_created = False
+        self.deformation_rig_error = deformation_rig_error
+        self.deformation_demo_error = deformation_demo_error
         self.write_faulted = False
         self.applied_writes = 0
         self.requests = []
@@ -183,8 +210,9 @@ class FakeGodotClient:
                         self.write_ids.add(request["id"])
                         operation = request["operation"]
                         tolina = operation in {TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION}
-                        expected_path = TOLINA_LAB_SCENE_PATH if tolina else LAB_SCENE_PATH
-                        expected_root = TOLINA_LAB_ROOT_NAME if tolina else LAB_ROOT_NAME
+                        deformation = operation in {DEFORMATION_RIG_WRITE_OPERATION, DEFORMATION_DEMO_WRITE_OPERATION}
+                        expected_path = DEFORMATION_LAB_SCENE_PATH if deformation else TOLINA_LAB_SCENE_PATH if tolina else LAB_SCENE_PATH
+                        expected_root = DEFORMATION_LAB_ROOT_NAME if deformation else TOLINA_LAB_ROOT_NAME if tolina else LAB_ROOT_NAME
                         if self.scene["path"] != expected_path:
                             code = "LAB_SCENE_REQUIRED"
                         elif self.scene["root_name"] != expected_root:
@@ -207,19 +235,33 @@ class FakeGodotClient:
                             code = "LAB_ANIMATION_ALREADY_CREATED"
                         elif operation == TOLINA_BLINK_WRITE_OPERATION and self.blink_error:
                             code = self.blink_error
+                        elif operation == DEFORMATION_RIG_WRITE_OPERATION and self.deformation_created:
+                            code = "LAB_ALREADY_CREATED"
+                        elif operation == DEFORMATION_RIG_WRITE_OPERATION and self.deformation_rig_error:
+                            code = self.deformation_rig_error
+                        elif operation == DEFORMATION_DEMO_WRITE_OPERATION and not self.deformation_created:
+                            code = "LAB_RIG_REQUIRED"
+                        elif operation == DEFORMATION_DEMO_WRITE_OPERATION and self.deformation_demo_created:
+                            code = "LAB_ANIMATION_ALREADY_CREATED"
+                        elif operation == DEFORMATION_DEMO_WRITE_OPERATION and self.deformation_demo_error:
+                            code = self.deformation_demo_error
                         else:
                             if request["operation"] == WRITE_OPERATION:
                                 self.created = True
                             elif operation == TOLINA_RIG_WRITE_OPERATION:
                                 self.tolina_created = True
+                            elif operation == DEFORMATION_RIG_WRITE_OPERATION:
+                                self.deformation_created = True
                             else:
-                                if tolina:
+                                if deformation:
+                                    self.deformation_demo_created = True
+                                elif tolina:
                                     self.blink_created = True
                                 else:
                                     self.animation_created = True
                                 for node in self.nodes:
                                     if node["type"] == "AnimationPlayer":
-                                        node["animations"] = {"count": 1, "names": ["blink" if tolina else "bend_tip"], "omitted_reason": None}
+                                        node["animations"] = {"count": 1, "names": ["deformation_demo" if deformation else "blink" if tolina else "bend_tip"], "omitted_reason": None}
                             self.applied_writes += 1
                             self.scene.update(save_state="saved_dirty", dirty_changes=True)
                     if code is not None:

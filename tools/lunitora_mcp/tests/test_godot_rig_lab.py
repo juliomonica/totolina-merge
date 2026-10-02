@@ -34,7 +34,7 @@ class RigLabSchemaTests(unittest.TestCase):
     def test_fixed_seven_node_result_and_closed_schema(self):
         validate_result(WRITE_OPERATION, self.data)
         TypeAdapter(RigLabResult).validate_python(envelope(self.data, elapsed_ms=0.1))
-        self.assertEqual(BRIDGE_VERSION, "0.4.0")
+        self.assertEqual(BRIDGE_VERSION, "0.5.0")
         for field, value in (("created_node_count", 8), ("created_node_count", True),
                              ("undo_actions_added", 0), ("auto_saved", True), ("read_only", True),
                              ("scene_path", "res://scenes/presentation/totolina_operator.tscn"),

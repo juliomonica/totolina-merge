@@ -484,7 +484,7 @@ func _run() -> void:
 	_error(bounded.create(_root(), _manager, _plugin._session_id, first_ledger_id, true),
 		"WRITE_REPLAY_REJECTED", "full write ledger still rejects its oldest admitted ID")
 	_check(bounded._write_ids.size() == 128, "authoritative writer ledger remains bounded and non-evicting")
-	_check(_plugin._dispatch("godot_ping", {}).result.plugin_version == "0.4.0", "existing ping advertises intentional plugin version")
+	_check(_plugin._dispatch("godot_ping", {}).result.plugin_version == "0.5.0", "existing ping advertises intentional plugin version")
 	_check(_plugin._dispatch("godot_get_editor_state", {}).ok and _plugin._dispatch("godot_inspect_scene", {}).ok, "existing read-only tools retain behavior")
 	_finish()
 

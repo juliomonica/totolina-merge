@@ -1,11 +1,13 @@
 @tool
 extends RefCounted
-## Four fixed operations share one editor-session writer. No automatic saving.
+## Six fixed operations share one editor-session writer. No automatic saving.
 
 const AnimationWriter = preload("res://addons/lunitora_godot/animation_writer.gd")
 const CharacterRig = preload("res://addons/lunitora_godot/character_rig.gd")
+const DeformationRig = preload("res://addons/lunitora_godot/deformation_rig.gd")
 const WRITE_OPERATIONS := ["godot_create_rig_lab", "godot_create_rig_lab_animation",
-	"godot_create_tolina_rig_lab", "godot_create_tolina_lab_blink"]
+	"godot_create_tolina_rig_lab", "godot_create_tolina_lab_blink",
+	"godot_create_rig_test_cat_deformation_lab", "godot_create_rig_test_cat_deformation_demo"]
 
 const LAB_PATH := "res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"
 const ROOT_NAME := "TotolinaRigLab"
@@ -34,6 +36,7 @@ var _animation_process_frame := -1
 var _in_editor_process := false
 var _animation_observation: Dictionary = {}
 var _tolina_context: Dictionary = {}
+var _deformation_context: Dictionary = {}
 
 
 func _init(session_id: String) -> void:
@@ -66,6 +69,16 @@ func create_tolina_blink(scene_root: Node, undo_redo: EditorUndoRedoManager,
 	return _run_write(scene_root, undo_redo, expected_session_id, request_id, command_origin, "godot_create_tolina_lab_blink")
 
 
+func create_deformation(scene_root: Node, undo_redo: EditorUndoRedoManager,
+		expected_session_id: String, request_id: String, command_origin := false) -> Dictionary:
+	return _run_write(scene_root, undo_redo, expected_session_id, request_id, command_origin, "godot_create_rig_test_cat_deformation_lab")
+
+
+func create_deformation_demo(scene_root: Node, undo_redo: EditorUndoRedoManager,
+		expected_session_id: String, request_id: String, command_origin := false) -> Dictionary:
+	return _run_write(scene_root, undo_redo, expected_session_id, request_id, command_origin, "godot_create_rig_test_cat_deformation_demo")
+
+
 func _run_write(scene_root: Node, undo_redo: EditorUndoRedoManager,
 		expected_session_id: String, request_id: String, command_origin: bool, operation: String) -> Dictionary:
 	if not command_origin or not _hex_id(request_id) or operation not in WRITE_OPERATIONS:
@@ -95,13 +108,17 @@ func _run_write(scene_root: Node, undo_redo: EditorUndoRedoManager,
 		"godot_create_rig_lab_animation": value = _create_animation_guarded(scene_root, undo_redo, expected_session_id)
 		"godot_create_tolina_rig_lab": value = _create_tolina_guarded(scene_root, undo_redo, expected_session_id)
 		"godot_create_tolina_lab_blink": value = _create_tolina_blink_guarded(scene_root, undo_redo, expected_session_id)
+		"godot_create_rig_test_cat_deformation_lab": value = _create_deformation_guarded(scene_root, undo_redo, expected_session_id)
+		"godot_create_rig_test_cat_deformation_demo": value = _create_deformation_demo_guarded(scene_root, undo_redo, expected_session_id)
 	var result: Dictionary
 	var valid := value is Dictionary and _valid_operation_result(value, operation)
 	if not valid:
 		var build_error: String = {"godot_create_rig_lab": "RIG_LAB_BUILD_FAILED",
 			"godot_create_rig_lab_animation": "RIG_LAB_ANIMATION_BUILD_FAILED",
 			"godot_create_tolina_rig_lab": "TOLINA_RIG_BUILD_FAILED",
-			"godot_create_tolina_lab_blink": "TOLINA_BLINK_BUILD_FAILED"}[operation]
+			"godot_create_tolina_lab_blink": "TOLINA_BLINK_BUILD_FAILED",
+			"godot_create_rig_test_cat_deformation_lab": "DEFORMATION_RIG_BUILD_FAILED",
+			"godot_create_rig_test_cat_deformation_demo": "DEFORMATION_DEMO_BUILD_FAILED"}[operation]
 		result = _failure("WRITE_OUTCOME_UNKNOWN" if _action_started else build_error,
 			"The write could not produce a verified response.")
 	else:
@@ -326,6 +343,8 @@ func end_editor_process() -> void:
 
 
 func _animation_signature(root: Node) -> Dictionary:
+	if is_instance_valid(root) and root.scene_file_path == DeformationRig.LAB_PATH:
+		return _deformation_animation_signature(root)
 	var tolina := is_instance_valid(root) and root.scene_file_path == CharacterRig.LAB_PATH
 	if not (_tolina_root_gate(root, _session_id) if tolina else _root_gate(root, _session_id)).ok:
 		return {}
@@ -700,6 +719,257 @@ func _tolina_blink_success_data() -> Dictionary:
 		"undo_actions_added": 1, "save_state": "saved_dirty", "auto_saved": false, "read_only": false}
 
 
+func _deformation_root_gate(root: Node, expected_session_id: String) -> Dictionary:
+	if _retired or expected_session_id != _session_id:
+		return _failure("INVALID_MESSAGE", "The write belongs to a retired editor session.")
+	if not is_instance_valid(root) or root != EditorInterface.get_edited_scene_root() or root.scene_file_path != DeformationRig.LAB_PATH:
+		return _failure("LAB_SCENE_REQUIRED", "Open the dedicated saved rig test cat deformation lab scene.")
+	if root.name != DeformationRig.ROOT_NAME or root.get_class() != "Node2D" or root.get_script() != null:
+		return _failure("LAB_ROOT_MISMATCH", "The lab root must be the native script-free RigTestCatDeformationLab Node2D.")
+	return {"ok": true, "result": {}, "error": null}
+
+
+func _deformation_gate(root: Node, expected_session_id: String) -> Dictionary:
+	var gate := _deformation_root_gate(root, expected_session_id)
+	if not gate.ok:
+		return gate
+	if root.has_node(NodePath(DeformationRig.RIG_NAME)):
+		return _failure("LAB_ALREADY_CREATED", "The lab already contains RigTestCatRig.")
+	return gate
+
+
+func _deformation_preflight() -> Dictionary:
+	var context: Dictionary = DeformationRig.read_spec()
+	if not context.ok:
+		return _failure(context.error.code, context.error.message)
+	_deformation_context = context
+	return {"ok": true, "result": context, "error": null}
+
+
+func _deformation_history_after(root: Node, before: Dictionary,
+		undo_redo: EditorUndoRedoManager, action: String) -> bool:
+	if not _deformation_root_gate(root, before.session).ok or root.get_instance_id() != before.root_id or undo_redo.is_committing_action() or undo_redo.get_object_history_id(root) != before.history_id:
+		return false
+	var history: UndoRedo = before.history
+	if not is_instance_valid(history):
+		return false
+	var count: int = before.current + 2
+	if before.max_steps > 0:
+		count = mini(count, before.max_steps)
+	return history.get_version() == before.version + 1 and history.get_history_count() == count \
+		and history.get_current_action() == count - 1 and history.get_current_action_name() == action \
+		and not history.has_redo() and EditorInterface.get_unsaved_scenes().has(DeformationRig.LAB_PATH)
+
+
+func _prepare_deformation_rig(spec: Dictionary, textures: Dictionary) -> Node2D:
+	return DeformationRig.prepare(spec, textures)
+
+
+func _prepare_deformation_library() -> AnimationLibrary:
+	return DeformationRig.prepare_demo()
+
+
+func _verify_deformation_demo_recipe(library: AnimationLibrary) -> String:
+	return DeformationRig.verify_demo(library)
+
+
+func _create_deformation_guarded(root: Node, undo_redo: EditorUndoRedoManager,
+		expected_session_id: String) -> Dictionary:
+	var gate := _deformation_gate(root, expected_session_id)
+	if not gate.ok:
+		return gate
+	var preflight := _deformation_preflight()
+	if not preflight.ok:
+		return preflight
+	var context: Dictionary = preflight.result
+	var textures_before: Dictionary = DeformationRig.resource_states(context.textures)
+	var rig: Node2D = _prepare_deformation_rig(context.spec, context.textures)
+	if rig == null or not DeformationRig.writer_observer_gate(rig).ok or not DeformationRig.verify(rig, null, context.spec, context.textures):
+		if is_instance_valid(rig):
+			rig.free()
+		return _failure("DEFORMATION_RIG_BUILD_FAILED", "Detached deformation rig preparation failed.")
+	var before := _tolina_history_before(root, undo_redo)
+	if before.is_empty():
+		rig.free()
+		return _failure("DEFORMATION_RIG_BUILD_FAILED", "The lab has no available editor scene history.")
+	before.scene_state = AnimationWriter.scene_state(root, null)
+	before.context = context
+	before.textures = textures_before
+	# All validation from here through action registration, commit, verification
+	# and the common response epilogue is synchronous. No yielding or saving.
+	preflight = _deformation_preflight()
+	gate = _deformation_gate(root, expected_session_id)
+	var observers := DeformationRig.writer_observer_gate(rig)
+	if not preflight.ok or not gate.ok or not observers.ok or undo_redo.is_committing_action() or DeformationRig.resource_states(context.textures) != textures_before or not DeformationRig.verify(rig, null, context.spec, context.textures):
+		rig.free()
+		if not preflight.ok:
+			return preflight
+		if not observers.ok:
+			return _failure(observers.error.code, observers.error.message)
+		return gate if not gate.ok else _failure("WRITE_BUSY" if undo_redo.is_committing_action() else "DEFORMATION_RIG_BUILD_FAILED", "Final detached rig or resource validation failed.")
+	_action_started = true
+	undo_redo.create_action(DeformationRig.ACTION_NAME, UndoRedo.MERGE_DISABLE, root, false, true)
+	undo_redo.add_do_method(root, &"add_child", rig, true)
+	for path in DeformationRig.MANIFEST:
+		var node: Node = rig if path == "." else rig.get_node(NodePath(path))
+		undo_redo.add_do_property(node, &"owner", root)
+	undo_redo.add_undo_method(root, &"remove_child", rig)
+	undo_redo.add_do_reference(rig)
+	undo_redo.commit_action(true)
+	if not _verify_deformation_after_action(root, rig, before, undo_redo):
+		return _failure("WRITE_OUTCOME_UNKNOWN", "Post-action deformation rig verification failed; inspect the scene and history.")
+	return {"ok": true, "result": _deformation_success_data(), "error": null}
+
+
+func _verify_deformation_after_action(root: Node, rig: Node, before: Dictionary,
+		undo_redo: EditorUndoRedoManager) -> bool:
+	if not _deformation_history_after(root, before, undo_redo, DeformationRig.ACTION_NAME):
+		return false
+	if not is_instance_valid(rig) or root.get_node_or_null(NodePath(DeformationRig.RIG_NAME)) != rig or rig.get_parent() != root:
+		return false
+	# get_bone_count/get_index_in_skeleton can synchronously emit setup signals.
+	# Inspect the exact native observer before any fixture getter may flush them.
+	if not DeformationRig.writer_observer_gate(rig).ok or not DeformationRig.verify(rig, root, before.context.spec, before.context.textures):
+		return false
+	var original: Array = []
+	for row in AnimationWriter.scene_state(root, null):
+		var node := instance_from_id(row.id) as Node
+		if node != rig and not rig.is_ancestor_of(node):
+			original.append(row)
+	return original == before.scene_state and DeformationRig.resource_states(before.context.textures) == before.textures and DeformationRig.verify_asset_files(before.context.spec)
+
+
+func _deformation_animation_signature(root: Node) -> Dictionary:
+	if not _deformation_root_gate(root, _session_id).ok:
+		return {}
+	var rig := root.get_node_or_null(NodePath(DeformationRig.RIG_NAME))
+	if rig == null:
+		return {}
+	if _deformation_context.is_empty():
+		var context: Dictionary = DeformationRig.read_spec()
+		if not context.ok:
+			return {}
+		_deformation_context = context
+	if not DeformationRig.writer_observer_gate(rig).ok or not DeformationRig.verify(rig, root, _deformation_context.spec, _deformation_context.textures, false):
+		return {}
+	var player: AnimationPlayer = rig.get_node("AnimationPlayer")
+	if not AnimationWriter.observers(player).is_empty():
+		return {}
+	var inspected := EditorInterface.get_inspector().get_edited_object()
+	var selected: Array = []
+	for node in EditorInterface.get_selection().get_selected_nodes():
+		selected.append(node.get_instance_id())
+	return {"session": _session_id, "root": root.get_instance_id(),
+		"rig": rig.get_instance_id(), "player": player.get_instance_id(),
+		"scene": root.scene_file_path, "state": AnimationWriter.scene_state(root, player),
+		"player_state": AnimationWriter.player_state(player),
+		"libraries": player.get_animation_library_list(), "animations": player.get_animation_list(),
+		"selected": selected, "inspected": inspected.get_instance_id() if is_instance_valid(inspected) else 0}
+
+
+func _deformation_animation_gate(root: Node, expected_session_id: String) -> Dictionary:
+	var gate := _deformation_root_gate(root, expected_session_id)
+	if not gate.ok:
+		return gate
+	var rig := root.get_node_or_null(NodePath(DeformationRig.RIG_NAME))
+	if rig == null:
+		return _failure("LAB_RIG_REQUIRED", "Create the reviewed deformation rig fixture first.")
+	var observers: Dictionary = DeformationRig.writer_observer_gate(rig)
+	if not observers.ok:
+		invalidate_animation_admission()
+		return _failure(observers.error.code, observers.error.message)
+	if _deformation_context.is_empty() or not DeformationRig.verify(rig, root, _deformation_context.spec, _deformation_context.textures, false) or not DeformationRig.verify_demo_targets(rig):
+		return _failure("LAB_RIG_MISMATCH", "The lab must contain the exact native deformation fixture at rest with resolved demo targets.")
+	var player: AnimationPlayer = rig.get_node("AnimationPlayer")
+	if not AnimationWriter.observers(player).is_empty():
+		invalidate_animation_admission()
+		return _failure("LAB_ANIMATION_EDITOR_BUSY", "AnimationPlayer editor or an unclassified observer is attached. Unpin and close/reopen the lab with the Animation panel hidden.")
+	if player.has_animation(DeformationRig.DEMO_NAME):
+		return _failure("LAB_ANIMATION_ALREADY_CREATED", "The lab already contains deformation_demo.")
+	if not player.get_animation_library_list().is_empty() or not player.get_animation_list().is_empty() or not AnimationWriter.pristine(player):
+		return _failure("LAB_ANIMATION_CONFLICT", "The player must have no libraries, animation assignment, playback or queue and retain native defaults.")
+	if not _in_editor_process or _animation_process_frame != Engine.get_process_frames() or _animation_quiet_frame < 0 or _animation_process_frame <= _animation_quiet_frame or _animation_signature(root) != _animation_observation:
+		return _failure("LAB_ANIMATION_EDITOR_SETTLING", "The lab requires two stable normal editor process observations before a fresh request.")
+	return {"ok": true, "result": {}, "error": null}
+
+
+func _create_deformation_demo_guarded(root: Node, undo_redo: EditorUndoRedoManager,
+		expected_session_id: String) -> Dictionary:
+	var gate := _deformation_root_gate(root, expected_session_id)
+	if not gate.ok:
+		return gate
+	var preflight := _deformation_preflight()
+	if not preflight.ok:
+		return preflight
+	gate = _deformation_animation_gate(root, expected_session_id)
+	if not gate.ok:
+		return gate
+	var context: Dictionary = preflight.result
+	var library: AnimationLibrary = _prepare_deformation_library()
+	if library == null or not _verify_deformation_demo_recipe(library).is_empty():
+		return _failure("DEFORMATION_DEMO_BUILD_FAILED", "Detached deformation demo preparation failed.")
+	var before := _tolina_history_before(root, undo_redo)
+	if before.is_empty():
+		return _failure("DEFORMATION_DEMO_BUILD_FAILED", "The lab has no available editor scene history.")
+	var rig := root.get_node(NodePath(DeformationRig.RIG_NAME))
+	var player: AnimationPlayer = rig.get_node("AnimationPlayer")
+	before.rig_id = rig.get_instance_id()
+	before.player_id = player.get_instance_id()
+	before.scene_state = AnimationWriter.scene_state(root, player)
+	before.player_state = AnimationWriter.player_state(player)
+	before.animation = library.get_animation(DeformationRig.DEMO_NAME)
+	before.context = context
+	before.textures = DeformationRig.resource_states(context.textures)
+	preflight = _deformation_preflight()
+	gate = _deformation_animation_gate(root, expected_session_id)
+	if not preflight.ok or not gate.ok or undo_redo.is_committing_action() or DeformationRig.resource_states(context.textures) != before.textures or not _verify_deformation_demo_recipe(library).is_empty():
+		if not preflight.ok:
+			return preflight
+		return gate if not gate.ok else _failure("WRITE_BUSY" if undo_redo.is_committing_action() else "DEFORMATION_DEMO_BUILD_FAILED", "Final demo or resource validation failed.")
+	_action_started = true
+	undo_redo.create_action(DeformationRig.DEMO_ACTION_NAME, UndoRedo.MERGE_DISABLE, root, false, true)
+	# Bound native Variant arguments retain both RefCounted resources for Redo.
+	# Node-only reference APIs and custom resource retention are unnecessary.
+	undo_redo.add_do_method(player, &"add_animation_library", &"", library)
+	undo_redo.add_undo_method(player, &"remove_animation_library", &"")
+	undo_redo.commit_action(true)
+	if not _verify_deformation_demo_after_action(root, rig, player, library, before, undo_redo):
+		return _failure("WRITE_OUTCOME_UNKNOWN", "Post-action deformation demo verification failed; inspect the scene and history.")
+	return {"ok": true, "result": _deformation_demo_success_data(), "error": null}
+
+
+func _verify_deformation_demo_after_action(root: Node, rig: Node, player: AnimationPlayer,
+		library: AnimationLibrary, before: Dictionary, undo_redo: EditorUndoRedoManager) -> bool:
+	if not _deformation_history_after(root, before, undo_redo, DeformationRig.DEMO_ACTION_NAME):
+		return false
+	if not is_instance_valid(rig) or not is_instance_valid(player) or rig.get_instance_id() != before.rig_id or player.get_instance_id() != before.player_id or root.get_node_or_null(NodePath(DeformationRig.RIG_NAME)) != rig:
+		return false
+	if not DeformationRig.writer_observer_gate(rig).ok or not DeformationRig.verify(rig, root, before.context.spec, before.context.textures, false) or not DeformationRig.verify_demo_targets(rig) or not _verify_deformation_demo_recipe(library).is_empty():
+		return false
+	if player.get_animation_library_list() != [&""] or player.get_animation_list() != PackedStringArray([DeformationRig.DEMO_NAME]) or player.get_animation_library(&"") != library or player.get_animation(DeformationRig.DEMO_NAME) != before.animation:
+		return false
+	return AnimationWriter.observers(player).is_empty() and AnimationWriter.pristine(player) \
+		and AnimationWriter.player_state(player) == before.player_state and AnimationWriter.scene_state(root, player) == before.scene_state \
+		and DeformationRig.resource_states(before.context.textures) == before.textures and DeformationRig.verify_asset_files(before.context.spec)
+
+
+func _deformation_success_data() -> Dictionary:
+	return {"editor_session_id": _session_id, "project_path": _canonical_project_path(),
+		"scene_path": DeformationRig.LAB_PATH, "root_name": DeformationRig.ROOT_NAME,
+		"created_root": DeformationRig.RIG_NAME, "created_node_count": 19,
+		"undo_action_name": DeformationRig.ACTION_NAME, "undo_actions_added": 1,
+		"save_state": "saved_dirty", "auto_saved": false, "read_only": false}
+
+
+func _deformation_demo_success_data() -> Dictionary:
+	return {"editor_session_id": _session_id, "project_path": _canonical_project_path(),
+		"scene_path": DeformationRig.LAB_PATH, "root_name": DeformationRig.ROOT_NAME,
+		"animation_player_path": "RigTestCatRig/AnimationPlayer", "library_name": "",
+		"animation_name": "deformation_demo", "animation_key": "deformation_demo", "length_seconds": 2.0,
+		"track_count": 7, "key_count": 35, "undo_action_name": DeformationRig.DEMO_ACTION_NAME,
+		"undo_actions_added": 1, "save_state": "saved_dirty", "auto_saved": false, "read_only": false}
+
+
 func _valid_operation_result(value: Dictionary, operation: String) -> bool:
 	match operation:
 		"godot_create_rig_lab": return _valid_result(value)
@@ -708,10 +978,17 @@ func _valid_operation_result(value: Dictionary, operation: String) -> bool:
 		return false
 	if not value.ok:
 		return _valid_result(value)
-	var expected := _tolina_success_data() if operation == "godot_create_tolina_rig_lab" else _tolina_blink_success_data()
+	var expected: Dictionary
+	match operation:
+		"godot_create_tolina_rig_lab": expected = _tolina_success_data()
+		"godot_create_tolina_lab_blink": expected = _tolina_blink_success_data()
+		"godot_create_rig_test_cat_deformation_lab": expected = _deformation_success_data()
+		"godot_create_rig_test_cat_deformation_demo": expected = _deformation_demo_success_data()
+		_: return false
+	var rig_operation := operation in ["godot_create_tolina_rig_lab", "godot_create_rig_test_cat_deformation_lab"]
 	return value.error == null and value.result is Dictionary and value.result == expected \
 		and typeof(value.result.undo_actions_added) == TYPE_INT \
-		and (typeof(value.result.created_node_count) == TYPE_INT if operation == "godot_create_tolina_rig_lab" else typeof(value.result.track_count) == TYPE_INT and typeof(value.result.key_count) == TYPE_INT and typeof(value.result.length_seconds) == TYPE_FLOAT)
+		and (typeof(value.result.created_node_count) == TYPE_INT if rig_operation else typeof(value.result.track_count) == TYPE_INT and typeof(value.result.key_count) == TYPE_INT and typeof(value.result.length_seconds) == TYPE_FLOAT)
 
 
 func _hex_id(value: String) -> bool:

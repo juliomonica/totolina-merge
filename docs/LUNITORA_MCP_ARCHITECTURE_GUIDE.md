@@ -2,9 +2,9 @@
 
 **Studio:** Lunitora Games  
 **Current game:** Totolina Merge  
-**Engine:** Godot 4.7.2  
+**Engine:** Godot `4.7.2-stable (official)`\
 **Platforms:** Android + iOS  
-**Status:** Godot v0.4 technically accepted after automated, real-checkout live and user visual validation; broader capabilities remain a roadmap
+**Status:** Godot v0.5 technically accepted after consolidated regression, controlled live history/persistence/replay and user visual review. Production-art improvements and physical-device validation remain separate.
 **Purpose:** Source of truth for how Lunitora will automate art preparation, character rigging, animation, VFX, and development workflows through one extensible MCP toolkit.
 
 ---
@@ -30,7 +30,7 @@ The user should eventually be able to ask Codex things such as:
 The MCP is an automation layer. It does not replace human art direction.
 
 The current Godot implementation exposes three read-only metadata operations
-and four fixed writers. The unchanged synthetic operations,
+and six fixed writers. The unchanged synthetic operations,
 `godot_create_rig_lab({})` and `godot_create_rig_lab_animation({})`, are restricted to
 `res://addons/lunitora_godot/labs/totolina_rig_lab.tscn` with the native,
 script-free `TotolinaRigLab` Node2D root. It creates seven owned nodes under
@@ -53,7 +53,7 @@ The editor's bounded write-ID ledger survives socket reconnection and Python
 owner restart, rejects replay and stops admitting writes at its limit. If an
 action began but verification failed, the writer reports uncertainty and faults
 the editor session rather than performing automatic repair. Bridge/plugin
-version is 0.4.0; the authenticated protocol remains 1. All four operations share the
+version is 0.5.0; the authenticated protocol remains 1. All six operations share the
 128-ID ledger, busy fence and session fault latch; response settlement also
 correlates the operation. Animation creation requires the native AnimationPlayer
 editor to be detached and a stable, strictly later normal plugin process pass.
@@ -92,6 +92,85 @@ rest-endpoint bounds. Godot 4.7.2 can extrapolate slightly outside `[0,1]` near
 keys due to approximate key lookup; native playback bounds are therefore not
 claimed. This characterized engine limitation was explicitly accepted without
 clamping, changing keys or expanding the writer.
+
+v0.5 adds exactly `godot_create_rig_test_cat_deformation_lab({})` and
+`godot_create_rig_test_cat_deformation_demo({})` in the native/script-free
+`RigTestCatDeformationLab` scene under the export-excluded addon. Its 19 generated
+native, script-free nodes form three proof stations: a real-art Polygon2D tail
+with Skeleton2D/four Bone2Ds, 561 explicit vertices, 1,024 triangles and
+deterministic pinned weights; a two-piece hierarchical shoulder/elbow arm; and
+ordinary HeadPivot transform animation for head Y bob.
+A static `ScarfForeground` Sprite2D uses an exact-source transparent 288x147
+torso/scarf extraction at offset `(-139,238)` and z-index `1` to overlap the lower
+neck. The old 36-point recipe survives only in archived conversion evidence,
+not maintained extraction/equivalence tooling; native Polygon AA versus the PNG has documented boundary-only rasterization
+differences, not pixel identity. It adds no animation track and preserves head
+transforms/bob and `head_full` artwork; no neck node is required.
+The bounded arm-only revision pins four 1254x1254 upper/lower left/right exports;
+only the left two-piece pair is instantiated. UpperArm scale `(0.4,0.4)` and
+offset `(-810,-320)`, Elbow position `(-385,680)`, and LowerArmPaw offset
+`(-860,-240)`, fixed rotation `-0.87026` and z-index `-1` align the replacement art.
+Node count, ArmStation scale, Shoulder/Elbow keys and demo timing remain unchanged;
+no candidate elbow sleeve-overlap, head, neck or independently generated scarf layers are integrated.
+The narrowly reusable internal weighted-mesh helper validates trusted explicit
+data; no generic transport geometry or automatic triangulation/weighting is exposed.
+All 24 fixture PNG/import pairs are repository fixture inputs at
+`addons/lunitora_godot/test_assets/rig_test_cat/`. The original approved relocation
+preserved PNG bytes, import settings and UIDs; the arm-only revision repins the
+four replacement arm inputs and already-current torso import metadata without
+changing torso pixels/settings. Existing mobile presets remain
+unchanged. Six immutable cached external textures serve the generated rig;
+the pinned JSON manifest remains tooling-only.
+
+The final deformation spec SHA-256 is
+`459b16ecf4367ef7c9254961a223a0c7ac0d56e79bc9bbc63b5b89e47b700571`.
+The distributed lab is intentionally an empty 120-byte native scene containing
+only `RigTestCatDeformationLab (Node2D)`, UID `uid://dkuplpgst2o17`, SHA-256
+`1645fa0ad54b5f435e3b8e4a94d1e1baa1f00a9d01a44831687a904527efbb4d`.
+The populated acceptance scene is persistence evidence, not the distributed
+writer prerequisite. Restoration reused the captured baseline byte-for-byte,
+including normal Godot UID/unique-ID metadata; no UID was regenerated.
+
+The demo is one global library/animation, 2.0 seconds, step `0.125`, `LOOP_NONE`,
+seven continuous tracks, 35 exact keys and native `-2.0` easing, with exact rest
+endpoints. No RESET, autoplay, automatic playback or seek is added. Each tool adds
+one native Undo action without saving; Redo reuses retained nodes/resources.
+Exact TailMesh skeletal observer admission precedes setup-flushing getters;
+unknown relevant observers and every TailMesh/ScarfForeground draw observer reject before action
+creation. This includes the attached native Polygon2D editor as a conservative
+lab restriction. Normal selection/Inspector invalidation and later quiet frames
+settle previously queued callbacks; exact rest validation still fails if an
+observer changed the rig. The writer never detaches/suppresses callbacks. Both use the shared
+six-writer ledger, settlement/read barrier, guards and session-wide uncertainty
+latch. Godot 4.7.2 detached/settled AnimationPlayer conditions remain necessary.
+The [Godot guide](../tools/lunitora_mcp/GODOT_README.md) records the exact fixture,
+spec pin and final native/GPU/export evidence. Controlled live rig/demo creation,
+Undo demo/rig, Redo rig/demo, manual Save/Reopen and final replay passed. The user
+accepted the visual result for this technical milestone. Current arm artwork is
+sufficient to validate tooling; better joint-ready production artwork remains a
+future art-quality improvement, not a failed MCP capability or a generic rig
+quality guarantee. No IK, physics,
+AnimationTree, facial work, runtime controller or production integration is added.
+The bounded scarf extraction revision adds no nodes or transport surface: 35
+reviewed Polygon/PNG A/B pairs preserve exact source RGBA with disclosed
+boundary-only rasterization differences. All 26 native lifecycle/safety cases,
+retained tail/arm GPU comparisons and six compiled resource checks pass. Shared
+coordinator/transport/animation/weighted-primitive code and unrelated artwork
+remain unchanged; the live editor is not manipulated by these disposable tests.
+After acceptance, one-off extraction/frozen-Polygon proof machinery and four
+unreferenced candidate PNG/import pairs were removed. All 24 pinned pairs,
+Sprite identity/registration/hash and native/GPU/export coverage remain intact;
+the spec and runtime implementation are unchanged.
+
+Final consolidated regression passed 457 MCP methods (78 native), 1,101 separate
+native checks, 82 launcher checks, 165 UXP checks and the normal 25-run Kitchen
+batch (11,044 checks). Android/iOS resource-package exclusion, positive controls
+and compiled scene loading without tooling JSON passed; these do not execute
+APK/IPA behavior. Executable Android behavior remains **REQUIRES ANDROID DEVICE**;
+executable iOS/Xcode/device behavior remains **REQUIRES MAC/iOS**. Actual executable
+exports/signing/installations and additional live Photoshop/operator workflows
+were **NOT EXECUTED** in this batch; broader installed operator/coexistence
+workflows remain **REQUIRES USER TEST**. No physical-device acceptance is claimed.
 
 The broader plan below is a roadmap, including reusable animation beyond the
 current artwork: native skeletal rigs where articulation helps, AnimationPlayer
@@ -1192,6 +1271,17 @@ These decisions are considered agreed unless a real implementation problem prove
 ---
 
 # 27. Immediate Next Step
+
+Godot v0.5 technical and controlled live acceptance is complete on
+`4.7.2-stable (official)`, bridge/plugin `0.5.0`, protocol `1`. The final
+consolidated batch passed and the user approved the visual technical milestone.
+The distributed deformation lab has been restored to its captured 120-byte
+empty native seed; the accepted populated Save/Reopen scene is not distributed.
+Proceed to milestone documentation/diff review and separately approved Git
+publication. Production-art improvement and physical Android/iOS validation are
+separate follow-up work, not implied by resource-package success. The
+[Godot guide](../tools/lunitora_mcp/GODOT_README.md#final-v05-acceptance-and-consolidated-regression---2026-10-02)
+is the detailed acceptance record. Earlier milestone history follows.
 
 v0.2 technical and live acceptance is complete. Bridge/plugin `0.2.0` was verified
 in the real checkout; `godot_create_rig_lab({})` succeeded exactly once. Native
