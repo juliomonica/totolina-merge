@@ -34,17 +34,19 @@ ADDON_FILES = (
     "plugin.cfg", "plugin.gd", "plugin.gd.uid", "bridge_client.gd",
     "bridge_client.gd.uid", "inspection.gd", "inspection.gd.uid", "rig_lab.gd", "rig_lab.gd.uid",
     "animation_writer.gd", "animation_writer.gd.uid",
+    "character_rig.gd", "character_rig.gd.uid", "specs/tolina_character_rig_v1.json",
 )
 FIXTURE_FILES = ("inspection_validation.gd", "inspection_validation.gd.uid",
                  "rig_lab_validation.gd", "rig_lab_validation.gd.uid",
                  "animation_lab_validation.gd", "animation_lab_validation.gd.uid")
 LAB_PATH = "addons/lunitora_godot/labs/totolina_rig_lab.tscn"
+CHARACTER_LAB_PATH = "addons/lunitora_godot/labs/tolina_character_rig_lab.tscn"
 
 
 def production_snapshot(repository: Path) -> dict[str, str]:
     """Audit source scenes/resources plus any real lab; never copy them to tests."""
     files = {repository / "project.godot", repository / "export_presets.cfg",
-             repository / LAB_PATH}
+             repository / LAB_PATH, repository / CHARACTER_LAB_PATH}
     for directory in ("scenes", "resources", "assets", "scripts"):
         location = repository / directory
         if location.is_dir():
@@ -94,6 +96,7 @@ def main() -> int:
     print(f"ARTIFACTS: {artifacts}", flush=True)
     try:
         for filename in ADDON_FILES:
+            (addon / filename).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(repository / "addons" / "lunitora_godot" / filename, addon / filename)
         for filename in FIXTURE_FILES:
             shutil.copy2(repository / "tests" / "godot_mcp" / filename, fixtures / filename)
@@ -218,7 +221,7 @@ def main() -> int:
             '            controller._normal_process_tick()\n'
             '    super._poll_editor_commands()\n', encoding="utf-8")
         (addon / "plugin.cfg").write_text('[plugin]\nname="Isolated animation writer"\n'
-            'description="Disposable test hook"\nauthor="Lunitora tests"\nversion="0.3.0"\n'
+            'description="Disposable test hook"\nauthor="Lunitora tests"\nversion="0.4.0"\n'
             'script="native_animation_plugin.gd"\n', encoding="utf-8")
         animation_controller = project / "addons" / "animation_lab_validation"
         animation_controller.mkdir()

@@ -4,7 +4,7 @@
 **Current game:** Totolina Merge  
 **Engine:** Godot 4.7.2  
 **Platforms:** Android + iOS  
-**Status:** Godot v0.3 technically accepted; fixed rig-lab animation writer; broader capabilities remain a roadmap
+**Status:** Godot v0.4 technically accepted after automated, real-checkout live and user visual validation; broader capabilities remain a roadmap
 **Purpose:** Source of truth for how Lunitora will automate art preparation, character rigging, animation, VFX, and development workflows through one extensible MCP toolkit.
 
 ---
@@ -30,8 +30,8 @@ The user should eventually be able to ask Codex things such as:
 The MCP is an automation layer. It does not replace human art direction.
 
 The current Godot implementation exposes three read-only metadata operations
-and two fixed writers, `godot_create_rig_lab({})` and
-`godot_create_rig_lab_animation({})`. Both are restricted to
+and four fixed writers. The unchanged synthetic operations,
+`godot_create_rig_lab({})` and `godot_create_rig_lab_animation({})`, are restricted to
 `res://addons/lunitora_godot/labs/totolina_rig_lab.tscn` with the native,
 script-free `TotolinaRigLab` Node2D root. It creates seven owned nodes under
 `TotolinaRigV2`: `Meshes/TestMesh` (Polygon2D), a `Skeleton2D` with `Root/Tip`
@@ -53,7 +53,7 @@ The editor's bounded write-ID ledger survives socket reconnection and Python
 owner restart, rejects replay and stops admitting writes at its limit. If an
 action began but verification failed, the writer reports uncertainty and faults
 the editor session rather than performing automatic repair. Bridge/plugin
-version is 0.3.0; the authenticated protocol remains 1. Both operations share the
+version is 0.4.0; the authenticated protocol remains 1. All four operations share the
 128-ID ledger, busy fence and session fault latch; response settlement also
 correlates the operation. Animation creation requires the native AnimationPlayer
 editor to be detached and a stable, strictly later normal plugin process pass.
@@ -64,6 +64,34 @@ against Godot 4.7.2. The strict stopped/unassigned/rest-pose guarantee covers
 controlled cycles that stay detached and settled; attaching the animation editor before
 Redo can cause Godot's normal deferred assignment/seek. See the current
 [Godot implementation and acceptance guide](../tools/lunitora_mcp/GODOT_README.md).
+
+The v0.4 operations `godot_create_tolina_rig_lab({})` and
+`godot_create_tolina_lab_blink({})` accept no parameters and operate only in
+`res://addons/lunitora_godot/labs/tolina_character_rig_lab.tscn`, with the native
+script-free `TolinaCharacterRigLab` root. A closed, externally digest-pinned
+editor JSON manifest defines 4 Node2D, 16 Sprite2D and one empty AnimationPlayer.
+The initial local visual composition matches the saved/reset production
+operator; production scripts, random blink/reactions and machine placement are
+omitted. Textures are normal cached immutable external PNG resources, including
+the shared body/shoulder texture. A second native action adds only `blink`:
+three continuous linear eye-alpha tracks, 18 canonical float32-time keys,
+0.24-second length and no assignment, playback, RESET or autoplay. The generated
+scene has no JSON dependency. Both actions use the existing session/admission
+coordinator; neither saves automatically or mutates production resources.
+Live bridge/plugin `0.4.0`, both Tolina writers, native blink Undo/Redo and manual
+Save/Reopen persistence passed. The user approved the production idle/front
+match, final blink and 390×844, 405×720 and 540×960 presentations. Manual cleanup
+restored the clean Godot-authored 117-byte empty Tolina lab; no A/B/C residue
+remains. Separately, Leon intentionally replaced the approved `blink_02.png`
+artwork; its import and all other Tolina PNG/import files remain unchanged.
+Exact final PNG/spec hashes and empty-lab contents/hash are recorded in the
+[Godot acceptance guide](../tools/lunitora_mcp/GODOT_README.md).
+Executable iOS export/device behavior remains **NOT VALIDATED / REQUIRES MAC/iOS**.
+The exact blink recipe retains strict authored-key, writer-written-alpha and
+rest-endpoint bounds. Godot 4.7.2 can extrapolate slightly outside `[0,1]` near
+keys due to approximate key lookup; native playback bounds are therefore not
+claimed. This characterized engine limitation was explicitly accepted without
+clamping, changing keys or expanding the writer.
 
 The broader plan below is a roadmap, including reusable animation beyond the
 current artwork: native skeletal rigs where articulation helps, AnimationPlayer

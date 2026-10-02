@@ -1,9 +1,10 @@
-# Lunitora Godot Animation MCP v0.3
+# Lunitora Godot Animation MCP v0.4
 
 This editor bridge exposes the three existing metadata tools, `godot_ping`,
-`godot_get_editor_state`, and `godot_inspect_scene`, plus two fixed lab operations:
-`godot_create_rig_lab` and `godot_create_rig_lab_animation`. All five accept exactly
-`{}`; extra fields are rejected. Bridge and editor-plugin versions are **0.3.0**; the authenticated
+`godot_get_editor_state`, and `godot_inspect_scene`, plus four fixed lab operations:
+`godot_create_rig_lab`, `godot_create_rig_lab_animation`,
+`godot_create_tolina_rig_lab`, and `godot_create_tolina_lab_blink`. All seven accept exactly
+`{}`; extra fields are rejected. Bridge and editor-plugin versions are **0.4.0**; the authenticated
 transport protocol remains **1**. The Codex-owned Python stdio server listens on **127.0.0.1:43128**;
 Godot's `WebSocketPeer` connects from the enabled editor plugin. Photoshop's
 server, implementation, and **43127** port are separate. The Godot and Photoshop
@@ -15,6 +16,195 @@ unchanged fixture and adds one synthetic clip in one native editor action. Neith
 saves the lab, changes production scenes/artwork, or starts animation playback.
 Inspection reads the current edited scene through public editor APIs and does
 not instantiate production scenes or inspect arbitrary script properties.
+
+The separate Tolina character lab adds the reviewed real-art cutout fixture and
+one bounded blink; the existing synthetic lab and its contracts are preserved.
+All four writers share the same session ledger, settlement rules, busy fence,
+post-action fault latch and no-retry policy. See [Tolina lab v0.4](#tolina-lab-v04).
+
+## Tolina lab v0.4
+
+The fixed empty-input tools are `godot_create_tolina_rig_lab({})` and
+`godot_create_tolina_lab_blink({})`. They require the currently edited scene to
+be exactly `res://addons/lunitora_godot/labs/tolina_character_rig_lab.tscn`, with
+the native script-free `TolinaCharacterRigLab` Node2D root. Root identity is
+semantic; normal Godot UID metadata is allowed. Production paths are rejected.
+Saving remains a manual user action.
+
+The editor-only [reviewed manifest](../../addons/lunitora_godot/specs/tolina_character_rig_v1.json)
+uses schema version 1. `character_rig.gd` pins its complete byte digest outside
+the JSON. Closed fields, fixed IDs/paths, PNG/import hashes, dimensions, native
+resource types, parents/cycles, finite bounded transforms, regions, alpha,
+z-index and count/depth limits are checked before native action creation.
+Missing or changed input returns `TOLINA_SPEC_INVALID` or `TOLINA_ASSET_INVALID`;
+the writer does not repair assets or imports. The manifest is tooling data;
+generated scene nodes have no runtime JSON dependency.
+
+The exact subtree has 21 nodes:
+
+```text
+TolinaRig (Node2D)
+├── Visual (Node2D)
+│   ├── EarLeft, EarRight, Body (Sprite2D)
+│   ├── Arms (Node2D)
+│   │   └── Idle, Press01, Press02, Press03 (Sprite2D)
+│   ├── ShoulderOverlap (Sprite2D)
+│   ├── Eyes (Node2D)
+│   │   └── Rest, Half, Closed, Excited, Surprised (Sprite2D)
+│   └── MouthIdle, MouthExcited, MouthSurprised (Sprite2D)
+└── AnimationPlayer (empty)
+```
+
+The manifest is the exact mapping source of truth. Every Sprite2D is visible,
+with white RGB and `self_modulate = Color.WHITE`; initial variant opacity is
+`modulate.a`. Press01/02/03, Half/Closed/Excited/Surprised eyes, and
+MouthExcited/Surprised begin at alpha 0. The other pieces begin at alpha 1.
+`position = position_px`, `rotation = rotation_rad`, `scale = scale`,
+`centered = false`, and `offset = -pivot_px`. Pivot is manifest data, not a
+Sprite2D property. A texture-local point maps to
+`position + rotation * (scale * (point - pivot))`; for a region, point and pivot
+are relative to that cropped region. The region origin selects source pixels
+and is not added to the destination. ShoulderOverlap uses region
+`Rect2(530, 325, 170, 95)`, positioned at `(530, 325)` with zero pivot.
+
+Textures use normal `CACHE_MODE_REUSE`; Body/ShoulderOverlap share the same
+external body texture. Assignment can emit a new Sprite2D's `texture_changed`,
+but production Texture2D content/properties/paths are never changed. Verification
+compares native resource state and source/import hashes. Normal reference-count,
+Sprite2D observer and save-time external-resource-ID bookkeeping is permitted;
+production referrer IDs and resource contents remain unchanged. There is no
+`take_over_path`, private texture copy, cache replacement, reimport or production
+save. Static local composition follows the saved/reset production operator,
+with no intentional visual difference; its production script, random blink,
+reaction channels and machine-parent transform are omitted.
+
+Rig creation is one action, `Lunitora: Create Tolina Character Rig`, with detached
+preparation, ownership for all 21 nodes and native retained node references.
+Undo removes the subtree; Redo reattaches the same nodes and restores ownership.
+Blink uses `Lunitora: Create Tolina Lab Blink`; native bound method arguments
+retain the same AnimationLibrary/Animation through Undo/Redo. No resource
+do/undo-reference calls or custom history cache are used.
+
+The reviewed blink has one global library and one `blink` Animation, length
+`0.24`, step `0.125`, non-looping. Three enabled continuous linear value tracks
+target `Visual/Eyes/Rest:modulate:a`, `Visual/Eyes/Half:modulate:a`, and
+`Visual/Eyes/Closed:modulate:a`. Times are canonical
+`PackedFloat32Array([0, 0.05, 0.095, 0.14, 0.19, 0.24])`; respective values are
+`[1,0,0,0,0,1]`, `[0,1,0,0,1,0]`, `[0,0,1,1,0,0]`, with transitions 1. There
+are no extra tracks, markers, RESET, autoplay, assignment, queue or playback.
+Target validation resolves the exact native sprites and float alpha channels.
+
+Authored keys, writer-written sprite alpha and rest endpoints are strictly in
+`[0,1]`. **Godot 4.7.2 playback limitation:** its approximate key search can
+select an upcoming segment and extrapolate with an unclamped weight just before
+a key. Native tests characterize an alpha of `1.00002222` / `-0.00002222`,
+including actual Color assignment; this is an observed sample, not a universal
+error bound. The approved exact fixture is retained without clamps, altered
+keys or automatic playback. Detached interpolation samples must remain finite
+and complementary. Absolute bounds on native playback interpolation are not
+claimed. See the [pinned engine interpolation implementation](https://github.com/godotengine/godot/blob/4.7.2-stable/scene/resources/animation.cpp#L2247-L2505).
+
+The v0.3 Godot 4.7.2-specific AnimationPlayer-editor admission rule applies to
+both animation writers: no native attachment or unclassified relevant observer,
+one quiet normal plugin process observation followed by a strictly later normal
+process, and a final synchronous recheck. Recursive polling cannot mature the
+barrier. Changes in scene, session, selection, inspector or target invalidate it.
+Admission never changes panel, selection, pin or callback state. Controlled
+detached/settled cycles retain strict stopped/unassigned/rest-state guarantees;
+attaching the Animation editor before a later native Redo can cause normal
+Godot observer assignment/seek, which is characterized rather than intercepted.
+Unknown relevant observers remain a conservative lab-only admission restriction.
+
+All four writers share one 128-ID editor-session ledger, operation/session
+correlation, reconnect/Python-restart handling, busy/committing guard and fault
+latch. Preparation failures are pre-action only. Once action creation begins,
+uncertainty returns `WRITE_OUTCOME_UNKNOWN` and blocks all writers. Ordered reads
+settle execution ordering; they do not establish semantic success. Never retry
+a write automatically.
+
+**VERIFIED:** real-checkout bridge/plugin `0.4.0`, successful
+`godot_create_tolina_rig_lab({})` and `godot_create_tolina_lab_blink({})`, native
+blink Undo/Redo and manual Save/Reopen persistence. **USER VERIFIED:** generated
+Tolina matches the production idle/front appearance; the final blink returns to
+normal eyes and looks good at 390×844, 405×720 and 540×960, without unacceptable
+clipping, seams or ghosting. Final manual cleanup restored the clean empty
+117-byte lab below. No A/B/C experiment residue remains. Tolina bones/mesh,
+production integration, AnimationTree, IK and procedural animation are outside
+this milestone.
+Executable iOS export/device behavior remains **NOT VALIDATED / REQUIRES MAC/iOS**.
+
+The MCP writers preserved production Texture2D resources and source/import files.
+Separately, Leon intentionally replaced only
+`assets/characters/totolina/eyes/cat_totolina_eyes_blink_02.png`; its final approved
+SHA-256 is `7e797c9d373a0440e663286be575ebf856b185e0c62e49d7f38002fc7af63f99`.
+Its `.png.import` and every other Tolina PNG/import remain unchanged. The final
+rig-spec digest and external pin are
+`439aed4c21b6d524a875ceec3144e5a1b82d5cdece799dd6851d30f435a2be0f`.
+Targeted construction, blink, Undo/Redo, persistence, texture-preservation and
+export-control validation was rerun against this approved artwork/spec pair;
+five retained native/editor cases and 1,094 resource export/control checks passed.
+The original public blink recipe was retained.
+
+### v0.4 automated validation — 2026-10-01
+
+**VERIFIED:** Godot `4.7.2.stable.official.ed1daf0bf`, bridge/plugin `0.4.0`,
+protocol `1`. Implementation suite results and affected-case reruns follow;
+the final artwork/spec validation is identified above.
+
+| Gate | Result |
+| --- | --- |
+| Godot Python / protocol / export boundary | 168 tests: 130 existing, 32 Tolina, six export-boundary. |
+| Existing native transport / public writers | 25 tests, including graphical editor cases. |
+| Tolina native public writers | 27 tests: 16 headless editor and 11 graphical; 220 unique Godot tests overall. |
+| Standalone editor fixture | 56 inspection + 442 synthetic rig + 603 animation assertions; 1,101 total. |
+| Supplemental closed character helper proof | 76 native checks. |
+| Photoshop | 171 Python tests and 165 UXP checks. |
+| Launcher | 82 checks; real application/process mutations mocked. |
+| Kitchen | Two runner self-tests; 25 suites / 11,044 checks, including 12 graphical suites. |
+| Mobile resource exports | Four Android/iOS exclusion/control packs, two JSON-removed diagnostic packs, 1,234 native assertions. |
+
+Native tests verify the 21-node recipe, ownership, all sixteen sprites and three
+groups against the saved production composition, root/inherited modulation,
+render defaults, external texture identity, cold/warm/production-loaded caches,
+zero Texture2D mutation signals, combined rig/blink Undo twice/Redo twice,
+retained instance lifetime/disposal, clean/dirty save points, save/reopen and
+plugin reload. Admission, replay/capacity, request/session correlation,
+timeout/lost response, read settlement, reconnect/Python restart/session rollover,
+native committing/re-entry and both shared post-action fault cases pass.
+Missing/changed specs, PNG/import/CTEX inputs, cached resource faults and wrong
+lab/root/native class/script reject before action creation. The characterized
+native interpolation limitation above remains explicit.
+
+Each normal export has zero addon entries and omits all ten compiled addon
+remap targets. Controls load both authored labs; Tolina remains loadable after
+removing the editor JSON. All fifteen production PNG import/CTEX payloads match
+between normal and control packs; export checks preserve their production-input
+snapshots. Source audits use exact final addon bytes. The intended Tolina lab
+baseline is the following Godot-authored empty native root, **117 bytes** with a
+final newline, SHA-256
+`28b3f645e60c64f4ee89e766eede0e47470053ddd61edc81c7cde0fe184eec96`:
+
+```ini
+[gd_scene format=3 uid="uid://c21k6kuywph5f"]
+
+[node name="TolinaCharacterRigLab" type="Node2D" unique_id=140800244]
+```
+
+Keep this normal UID metadata; do not restore the earlier 71-byte representation.
+The accepted synthetic lab remains unchanged at 111 bytes with its existing UID
+metadata. Neither baseline contains a generated scaffold or animation.
+
+Initial disposable-fixture publication/timer assumptions and a replay test's
+missing separate read barrier were corrected in test support; affected tests
+passed on rerun. Concurrent source changes were detected by export hash audits
+and the final frozen-source export run passed. No safety check was weakened.
+The numerical playback limitation was explicitly approved without altering the
+fixture. Machine-local configuration, production scenes/scripts, export presets,
+Photoshop and launcher implementation remain unchanged. The intentional artwork
+exception and completed live/visual acceptance are recorded above.
+**NOT EXECUTED:** executable exports/device tests. **NOT VALIDATED / REQUIRES
+MAC/iOS:** executable iOS export/device behavior; `ios.zip` is absent from the
+installed `4.7.2.stable` templates.
 
 ## New-computer setup
 
@@ -46,7 +236,7 @@ args = ['-B', '-m', 'core.godot_server']
 cwd = 'D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp'
 startup_timeout_sec = 15
 tool_timeout_sec = 10
-enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene', 'godot_create_rig_lab', 'godot_create_rig_lab_animation']
+enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene', 'godot_create_rig_lab', 'godot_create_rig_lab_animation', 'godot_create_tolina_rig_lab', 'godot_create_tolina_lab_blink']
 ```
 
 On this PC the user configuration is `C:\Users\julio\.codex\config.toml`.

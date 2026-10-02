@@ -1,6 +1,6 @@
 @tool
 extends EditorPlugin
-## Three unchanged read-only operations and two fixed, gated undoable writes.
+## Three unchanged read-only operations and four fixed, gated undoable writes.
 
 const BridgeClient = preload("res://addons/lunitora_godot/bridge_client.gd")
 const Inspection = preload("res://addons/lunitora_godot/inspection.gd")
@@ -65,6 +65,12 @@ func _dispatch(operation: String, params: Dictionary, request_id := "",
 	if not params.is_empty():
 		return _inspection.failure("INVALID_REQUEST", "Request parameters must be empty.")
 	match operation:
+		"godot_create_tolina_rig_lab":
+			return _writer.create_tolina(EditorInterface.get_edited_scene_root(), get_undo_redo(),
+				expected_session_id, request_id, command_origin)
+		"godot_create_tolina_lab_blink":
+			return _writer.create_tolina_blink(EditorInterface.get_edited_scene_root(), get_undo_redo(),
+				expected_session_id, request_id, command_origin)
 		"godot_create_rig_lab_animation":
 			return _writer.create_animation(EditorInterface.get_edited_scene_root(), get_undo_redo(),
 				expected_session_id, request_id, command_origin)

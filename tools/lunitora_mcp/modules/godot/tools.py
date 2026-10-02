@@ -1,4 +1,4 @@
-"""Three metadata reads and two fixed lab writes; exact empty public inputs."""
+"""Three metadata reads and four fixed lab writes; exact empty public inputs."""
 from __future__ import annotations
 
 from typing import Annotated
@@ -9,7 +9,9 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from .bridge import GodotBridge
 from .protocol import (BridgeError, EditorStateResult, MAX_PAYLOAD_BYTES, OPERATIONS, PingResult,
                        RigLabResult, RigLabAnimationResult, SceneInspectionResult, WRITE_OPERATION,
-                       ANIMATION_WRITE_OPERATION, WRITE_OPERATIONS, encode, envelope, validate_result)
+                       ANIMATION_WRITE_OPERATION, TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION,
+                       TolinaRigLabResult, TolinaLabBlinkResult,
+                       WRITE_OPERATIONS, encode, envelope, validate_result)
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False, "maxProperties": 0}
 # The text block and structured content both contain the metadata for MCP client
@@ -95,7 +97,7 @@ async def call_bridge(bridge: GodotBridge, operation: str) -> CallToolResult:
         if dispatched and operation in WRITE_OPERATIONS:
             bridge.retain_unknown_write()
             error = BridgeError("WRITE_OUTCOME_UNKNOWN", connected=True)
-        return tool_result(envelope(error=error))
+        return tool_result(envelope(error=error, operation=operation))
     except Exception:
         if operation not in WRITE_OPERATIONS:
             raise
@@ -138,3 +140,13 @@ def register_tools(server: GodotMCPServer, bridge: GodotBridge) -> None:
     async def godot_create_rig_lab_animation() -> Annotated[CallToolResult, RigLabAnimationResult]:
         """Add the fixed bend_tip animation in one undo action to the exact existing lab rig with a detached, settled animation editor. Never creates a rig, saves, selects, plays or writes production scenes. Unknown outcomes require a fresh read and review; never retry automatically."""
         return await call_bridge(bridge, ANIMATION_WRITE_OPERATION)
+
+    @server.tool(annotations=write_annotations)
+    async def godot_create_tolina_rig_lab() -> Annotated[CallToolResult, TolinaRigLabResult]:
+        """Create the reviewed 21-node Tolina cutout rig in one undo action, only in the exact Tolina character lab. Uses immutable external production textures; never saves, replaces, plays or writes production content. Unknown outcomes require a fresh read and review; never retry automatically."""
+        return await call_bridge(bridge, TOLINA_RIG_WRITE_OPERATION)
+
+    @server.tool(annotations=write_annotations)
+    async def godot_create_tolina_lab_blink() -> Annotated[CallToolResult, TolinaLabBlinkResult]:
+        """Add exactly the reviewed blink animation in one undo action to the exact Tolina lab rig with a detached, settled AnimationPlayer editor. Never creates a rig, saves, selects, plays or changes production textures. Unknown outcomes require a fresh read and review; never retry automatically."""
+        return await call_bridge(bridge, TOLINA_BLINK_WRITE_OPERATION)

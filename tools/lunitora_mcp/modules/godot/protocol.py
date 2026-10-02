@@ -1,4 +1,4 @@
-"""Closed v1 wire contracts: metadata reads and two fixed undoable lab writes."""
+"""Closed v1 wire contracts: metadata reads and four fixed undoable lab writes."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from pydantic import Field, with_config
 from typing_extensions import TypedDict
 
 PROTOCOL_VERSION = 1
-BRIDGE_VERSION = "0.3.0"
+BRIDGE_VERSION = "0.4.0"
 MAX_PAYLOAD_BYTES = 256 * 1024
 MAX_STRING_BYTES = 4096
 MAX_NODES = 2000
@@ -22,7 +22,10 @@ MAX_PLAYER_ANIMATIONS = 128
 MAX_ANIMATIONS = 512
 WRITE_OPERATION = "godot_create_rig_lab"
 ANIMATION_WRITE_OPERATION = "godot_create_rig_lab_animation"
-WRITE_OPERATIONS = frozenset({WRITE_OPERATION, ANIMATION_WRITE_OPERATION})
+TOLINA_RIG_WRITE_OPERATION = "godot_create_tolina_rig_lab"
+TOLINA_BLINK_WRITE_OPERATION = "godot_create_tolina_lab_blink"
+WRITE_OPERATIONS = frozenset({WRITE_OPERATION, ANIMATION_WRITE_OPERATION,
+                              TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION})
 READ_OPERATIONS = frozenset({"godot_ping", "godot_get_editor_state", "godot_inspect_scene"})
 OPERATIONS = READ_OPERATIONS | WRITE_OPERATIONS
 LAB_SCENE_PATH = "res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"
@@ -31,6 +34,12 @@ RIG_ROOT_NAME = "TotolinaRigV2"
 UNDO_ACTION_NAME = "Lunitora: Create Totolina Rig Lab Scaffold"
 ANIMATION_PLAYER_PATH = "TotolinaRigV2/AnimationPlayer"
 ANIMATION_UNDO_ACTION_NAME = "Lunitora: Create Rig Lab Animation"
+TOLINA_LAB_SCENE_PATH = "res://addons/lunitora_godot/labs/tolina_character_rig_lab.tscn"
+TOLINA_LAB_ROOT_NAME = "TolinaCharacterRigLab"
+TOLINA_RIG_ROOT_NAME = "TolinaRig"
+TOLINA_RIG_UNDO_ACTION_NAME = "Lunitora: Create Tolina Character Rig"
+TOLINA_ANIMATION_PLAYER_PATH = "TolinaRig/AnimationPlayer"
+TOLINA_BLINK_UNDO_ACTION_NAME = "Lunitora: Create Tolina Lab Blink"
 WRITE_ERRORS = frozenset({"LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED",
                           "RIG_LAB_BUILD_FAILED", "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT",
                           "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY", "INVALID_REQUEST", "INVALID_MESSAGE"})
@@ -38,7 +47,17 @@ ANIMATION_WRITE_ERRORS = (WRITE_ERRORS - {"LAB_ALREADY_CREATED", "RIG_LAB_BUILD_
     "LAB_RIG_REQUIRED", "LAB_RIG_MISMATCH", "LAB_ANIMATION_ALREADY_CREATED", "LAB_ANIMATION_CONFLICT",
     "LAB_ANIMATION_EDITOR_BUSY", "LAB_ANIMATION_EDITOR_SETTLING", "RIG_LAB_ANIMATION_BUILD_FAILED",
 }
-WRITE_ERRORS_BY_OPERATION = {WRITE_OPERATION: WRITE_ERRORS, ANIMATION_WRITE_OPERATION: ANIMATION_WRITE_ERRORS}
+TOLINA_RIG_WRITE_ERRORS = (WRITE_ERRORS - {"RIG_LAB_BUILD_FAILED"}) | {
+    "TOLINA_SPEC_INVALID", "TOLINA_ASSET_INVALID", "TOLINA_RIG_BUILD_FAILED",
+}
+TOLINA_BLINK_WRITE_ERRORS = (ANIMATION_WRITE_ERRORS - {"RIG_LAB_ANIMATION_BUILD_FAILED"}) | {
+    "TOLINA_SPEC_INVALID", "TOLINA_ASSET_INVALID", "TOLINA_BLINK_BUILD_FAILED",
+}
+WRITE_ERRORS_BY_OPERATION = {
+    WRITE_OPERATION: WRITE_ERRORS, ANIMATION_WRITE_OPERATION: ANIMATION_WRITE_ERRORS,
+    TOLINA_RIG_WRITE_OPERATION: TOLINA_RIG_WRITE_ERRORS,
+    TOLINA_BLINK_WRITE_OPERATION: TOLINA_BLINK_WRITE_ERRORS,
+}
 ERROR_MESSAGES = {
     "DISCONNECTED": "Godot editor is disconnected. Open this project with the editor plugin enabled.",
     "TIMEOUT": "Godot did not reply before the request deadline.",
@@ -70,6 +89,20 @@ ERROR_MESSAGES = {
     "LAB_ANIMATION_EDITOR_BUSY": "The AnimationPlayer editor or an unclassified observer is attached. Follow the documented recovery procedure.",
     "LAB_ANIMATION_EDITOR_SETTLING": "Detached editor observations have not reached a genuine later process pass. Do not retry automatically.",
     "RIG_LAB_ANIMATION_BUILD_FAILED": "Detached animation preparation failed before starting an undo action.",
+    "TOLINA_SPEC_INVALID": "The reviewed Tolina specification failed its pinned digest or closed validation. Nothing was repaired.",
+    "TOLINA_ASSET_INVALID": "An approved external Tolina texture or import failed identity, hash, type or dimension validation. Nothing was repaired.",
+    "TOLINA_RIG_BUILD_FAILED": "Detached Tolina rig preparation failed before starting an undo action.",
+    "TOLINA_BLINK_BUILD_FAILED": "Detached Tolina blink preparation failed before starting an undo action.",
+}
+# Shared rejection codes retain the legacy writer's exact diagnostic text. Only
+# the fixed v0.4 operations select these truthful Tolina-specific descriptions.
+TOLINA_ERROR_MESSAGES = {
+    "LAB_SCENE_REQUIRED": "Open the saved Tolina character rig lab scene before using this fixed writer.",
+    "LAB_ROOT_MISMATCH": "The Tolina lab root must be the exact native, script-free local Node2D.",
+    "LAB_ALREADY_CREATED": "The reserved TolinaRig subtree already exists; nothing was replaced.",
+    "LAB_RIG_REQUIRED": "Create the dedicated Tolina character rig before creating its blink.",
+    "LAB_RIG_MISMATCH": "The Tolina lab requires the exact reviewed native v0.4 rig and deterministic rest state.",
+    "LAB_ANIMATION_ALREADY_CREATED": "The fixed blink animation or its global library already exists.",
 }
 ErrorCode = Literal[
     "DISCONNECTED", "TIMEOUT", "BUSY", "PORT_IN_USE", "EDITOR_BUSY", "AUTH_FAILED",
@@ -80,6 +113,7 @@ ErrorCode = Literal[
     "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT", "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY",
     "LAB_RIG_REQUIRED", "LAB_RIG_MISMATCH", "LAB_ANIMATION_ALREADY_CREATED", "LAB_ANIMATION_CONFLICT",
     "LAB_ANIMATION_EDITOR_BUSY", "LAB_ANIMATION_EDITOR_SETTLING", "RIG_LAB_ANIMATION_BUILD_FAILED",
+    "TOLINA_SPEC_INVALID", "TOLINA_ASSET_INVALID", "TOLINA_RIG_BUILD_FAILED", "TOLINA_BLINK_BUILD_FAILED",
 ]
 BoundedString = Annotated[str, Field(max_length=MAX_STRING_BYTES)]
 NonEmptyString = Annotated[str, Field(min_length=1, max_length=MAX_STRING_BYTES)]
@@ -104,7 +138,7 @@ class PingData(TypedDict):
     godot_version: NonEmptyString
     project_path: NonEmptyString
     project_name: BoundedString
-    plugin_version: Literal["0.3.0"]
+    plugin_version: Literal["0.4.0"]
     editor_session_id: NonEmptyString
     read_only: Literal[True]
 
@@ -168,7 +202,7 @@ class Envelope(TypedDict):
     ok: bool
     connected: bool
     protocol_version: Literal[1]
-    bridge_version: Literal["0.3.0"]
+    bridge_version: Literal["0.4.0"]
     round_trip_ms: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None
     error: ErrorInfo | None
 
@@ -233,18 +267,64 @@ class RigLabAnimationResult(Envelope):
     result: RigLabAnimationData | None
 
 
-def error_info(code: str) -> ErrorInfo:
-    return {"code": code, "message": ERROR_MESSAGES[code]}
+@with_config(extra="forbid")
+class TolinaRigLabData(TypedDict):
+    editor_session_id: NonEmptyString
+    project_path: NonEmptyString
+    scene_path: Literal["res://addons/lunitora_godot/labs/tolina_character_rig_lab.tscn"]
+    root_name: Literal["TolinaCharacterRigLab"]
+    created_root: Literal["TolinaRig"]
+    created_node_count: Annotated[int, Field(strict=True, ge=21, le=21)]
+    undo_action_name: Literal["Lunitora: Create Tolina Character Rig"]
+    undo_actions_added: Annotated[int, Field(strict=True, ge=1, le=1)]
+    save_state: Literal["saved_dirty"]
+    auto_saved: Literal[False]
+    read_only: Literal[False]
+
+
+@with_config(extra="forbid")
+class TolinaRigLabResult(Envelope):
+    result: TolinaRigLabData | None
+
+
+@with_config(extra="forbid")
+class TolinaLabBlinkData(TypedDict):
+    editor_session_id: NonEmptyString
+    project_path: NonEmptyString
+    scene_path: Literal["res://addons/lunitora_godot/labs/tolina_character_rig_lab.tscn"]
+    root_name: Literal["TolinaCharacterRigLab"]
+    animation_player_path: Literal["TolinaRig/AnimationPlayer"]
+    library_name: Literal[""]
+    animation_name: Literal["blink"]
+    animation_key: Literal["blink"]
+    length_seconds: Annotated[float, Field(strict=True, ge=0.24, le=0.24, allow_inf_nan=False)]
+    track_count: Annotated[int, Field(strict=True, ge=3, le=3)]
+    key_count: Annotated[int, Field(strict=True, ge=18, le=18)]
+    undo_action_name: Literal["Lunitora: Create Tolina Lab Blink"]
+    undo_actions_added: Annotated[int, Field(strict=True, ge=1, le=1)]
+    save_state: Literal["saved_dirty"]
+    auto_saved: Literal[False]
+    read_only: Literal[False]
+
+
+@with_config(extra="forbid")
+class TolinaLabBlinkResult(Envelope):
+    result: TolinaLabBlinkData | None
+
+
+def error_info(code: str, *, operation: str | None = None) -> ErrorInfo:
+    messages = TOLINA_ERROR_MESSAGES if operation in {TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION} else {}
+    return {"code": code, "message": messages.get(code, ERROR_MESSAGES[code])}
 
 
 def envelope(result: dict | None = None, *, elapsed_ms: float | None = None,
-             error: BridgeError | None = None) -> dict:
+             error: BridgeError | None = None, operation: str | None = None) -> dict:
     if error is None and (result is None or elapsed_ms is None or not math.isfinite(elapsed_ms) or elapsed_ms < 0):
         raise ValueError("Successful result requires bounded timing and metadata.")
     return {"ok": error is None, "connected": error is None or error.connected,
             "protocol_version": PROTOCOL_VERSION, "bridge_version": BRIDGE_VERSION,
             "round_trip_ms": elapsed_ms, "result": result if error is None else None,
-            "error": error_info(error.code) if error else None}
+            "error": error_info(error.code, operation=operation) if error else None}
 
 
 def require(condition: bool, code: str = "INVALID_MESSAGE") -> None:
@@ -377,29 +457,43 @@ def validate_result(operation: str, data: dict) -> None:
             _fields(node, {"path", "type"})
             require(_path(node["path"]) and _string(node["type"]) and node["path"] not in seen)
             seen.add(node["path"])
-    elif operation == WRITE_OPERATION:
+    elif operation in {WRITE_OPERATION, TOLINA_RIG_WRITE_OPERATION}:
         _fields(data, {"editor_session_id", "project_path", "scene_path", "root_name", "created_root",
                        "created_node_count", "undo_action_name", "undo_actions_added", "save_state",
                        "auto_saved", "read_only"})
         require(_string(data["editor_session_id"]) and _string(data["project_path"]))
-        require(data["scene_path"] == LAB_SCENE_PATH and data["root_name"] == LAB_ROOT_NAME
-                and data["created_root"] == RIG_ROOT_NAME and data["undo_action_name"] == UNDO_ACTION_NAME)
-        require(type(data["created_node_count"]) is int and data["created_node_count"] == 7
+        if operation == TOLINA_RIG_WRITE_OPERATION:
+            scene_path, root_name = TOLINA_LAB_SCENE_PATH, TOLINA_LAB_ROOT_NAME
+            created_root, action_name, node_count = TOLINA_RIG_ROOT_NAME, TOLINA_RIG_UNDO_ACTION_NAME, 21
+        else:
+            scene_path, root_name = LAB_SCENE_PATH, LAB_ROOT_NAME
+            created_root, action_name, node_count = RIG_ROOT_NAME, UNDO_ACTION_NAME, 7
+        require(data["scene_path"] == scene_path and data["root_name"] == root_name
+                and data["created_root"] == created_root and data["undo_action_name"] == action_name)
+        require(type(data["created_node_count"]) is int and data["created_node_count"] == node_count
                 and type(data["undo_actions_added"]) is int and data["undo_actions_added"] == 1)
         require(data["save_state"] == "saved_dirty" and data["auto_saved"] is False and data["read_only"] is False)
-    elif operation == ANIMATION_WRITE_OPERATION:
+    elif operation in {ANIMATION_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION}:
         _fields(data, {"editor_session_id", "project_path", "scene_path", "root_name",
                        "animation_player_path", "library_name", "animation_name", "animation_key",
                        "length_seconds", "track_count", "key_count", "undo_action_name",
                        "undo_actions_added", "save_state", "auto_saved", "read_only"})
         require(_string(data["editor_session_id"]) and _string(data["project_path"]))
-        require(data["scene_path"] == LAB_SCENE_PATH and data["root_name"] == LAB_ROOT_NAME
-                and data["animation_player_path"] == ANIMATION_PLAYER_PATH and data["library_name"] == ""
-                and data["animation_name"] == "bend_tip" and data["animation_key"] == "bend_tip"
-                and data["undo_action_name"] == ANIMATION_UNDO_ACTION_NAME)
-        require(type(data["length_seconds"]) in {int, float} and data["length_seconds"] == 1.0
-                and type(data["track_count"]) is int and data["track_count"] == 1
-                and type(data["key_count"]) is int and data["key_count"] == 3
+        if operation == TOLINA_BLINK_WRITE_OPERATION:
+            scene_path, root_name = TOLINA_LAB_SCENE_PATH, TOLINA_LAB_ROOT_NAME
+            player_path, animation_name = TOLINA_ANIMATION_PLAYER_PATH, "blink"
+            action_name, length, track_count, key_count = TOLINA_BLINK_UNDO_ACTION_NAME, 0.24, 3, 18
+        else:
+            scene_path, root_name = LAB_SCENE_PATH, LAB_ROOT_NAME
+            player_path, animation_name = ANIMATION_PLAYER_PATH, "bend_tip"
+            action_name, length, track_count, key_count = ANIMATION_UNDO_ACTION_NAME, 1.0, 1, 3
+        require(data["scene_path"] == scene_path and data["root_name"] == root_name
+                and data["animation_player_path"] == player_path and data["library_name"] == ""
+                and data["animation_name"] == animation_name and data["animation_key"] == animation_name
+                and data["undo_action_name"] == action_name)
+        require(type(data["length_seconds"]) in {int, float} and data["length_seconds"] == length
+                and type(data["track_count"]) is int and data["track_count"] == track_count
+                and type(data["key_count"]) is int and data["key_count"] == key_count
                 and type(data["undo_actions_added"]) is int and data["undo_actions_added"] == 1)
         require(data["save_state"] == "saved_dirty" and data["auto_saved"] is False and data["read_only"] is False)
     else:

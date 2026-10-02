@@ -14,6 +14,10 @@ from modules.godot.config import Credential, HOST
 from modules.godot.protocol import (ANIMATION_PLAYER_PATH, ANIMATION_UNDO_ACTION_NAME,
                                    ANIMATION_WRITE_OPERATION, BRIDGE_VERSION, LAB_ROOT_NAME, LAB_SCENE_PATH, MAX_PAYLOAD_BYTES,
                                    PROTOCOL_VERSION, RIG_ROOT_NAME, UNDO_ACTION_NAME, WRITE_OPERATION,
+                                   TOLINA_LAB_ROOT_NAME, TOLINA_LAB_SCENE_PATH, TOLINA_RIG_ROOT_NAME,
+                                   TOLINA_RIG_UNDO_ACTION_NAME, TOLINA_ANIMATION_PLAYER_PATH,
+                                   TOLINA_BLINK_UNDO_ACTION_NAME, TOLINA_RIG_WRITE_OPERATION,
+                                   TOLINA_BLINK_WRITE_OPERATION,
                                    WRITE_OPERATIONS, decode, encode, error_info, is_hex, proof)
 
 NO_SCENE = {"exists": False, "path": None, "root_name": None, "has_saved_path": False,
@@ -26,6 +30,7 @@ UNNAMED_SCENE = {"exists": True, "path": None, "root_name": "Root", "has_saved_p
 ROOT_NODE = {"path": ".", "parent_path": None, "type": "Node2D", "child_count": 0,
              "kind": None, "animations": None}
 LAB_SCENE = dict(SAVED_SCENE, path=LAB_SCENE_PATH, root_name=LAB_ROOT_NAME)
+TOLINA_LAB_SCENE = dict(SAVED_SCENE, path=TOLINA_LAB_SCENE_PATH, root_name=TOLINA_LAB_ROOT_NAME)
 
 
 def disposable_credential() -> Credential:
@@ -48,6 +53,10 @@ def result_for(operation: str, credential: Credential, scene: dict, nodes: list,
         return rig_lab_result(credential)
     if operation == ANIMATION_WRITE_OPERATION:
         return rig_lab_animation_result(credential)
+    if operation == TOLINA_RIG_WRITE_OPERATION:
+        return tolina_rig_lab_result(credential)
+    if operation == TOLINA_BLINK_WRITE_OPERATION:
+        return tolina_lab_blink_result(credential)
     return {"editor_session_id": "disposable-editor-session", "scene": deepcopy(scene), "nodes": deepcopy(nodes)}
 
 
@@ -67,12 +76,27 @@ def rig_lab_animation_result(credential: Credential, session_id="disposable-edit
             "undo_actions_added": 1, "save_state": "saved_dirty", "auto_saved": False, "read_only": False}
 
 
+def tolina_rig_lab_result(credential: Credential, session_id="disposable-editor-session") -> dict:
+    return {**rig_lab_result(credential, session_id), "scene_path": TOLINA_LAB_SCENE_PATH,
+            "root_name": TOLINA_LAB_ROOT_NAME, "created_root": TOLINA_RIG_ROOT_NAME,
+            "created_node_count": 21, "undo_action_name": TOLINA_RIG_UNDO_ACTION_NAME}
+
+
+def tolina_lab_blink_result(credential: Credential, session_id="disposable-editor-session") -> dict:
+    return {**rig_lab_animation_result(credential, session_id), "scene_path": TOLINA_LAB_SCENE_PATH,
+            "root_name": TOLINA_LAB_ROOT_NAME, "animation_player_path": TOLINA_ANIMATION_PLAYER_PATH,
+            "animation_name": "blink", "animation_key": "blink", "length_seconds": 0.24,
+            "track_count": 3, "key_count": 18, "undo_action_name": TOLINA_BLINK_UNDO_ACTION_NAME}
+
+
 class FakeGodotClient:
     def __init__(self, credential: Credential, port: int, *, scene: dict | None = None,
                  nodes: list | None = None, selection: list | None = None,
                  delay: float = 0, ignore: bool = False, mutate=None,
                  write_delay: float = 0, ignore_write_reply: bool = False, session_id="disposable-editor-session",
-                 has_rig: bool = False, animation_error: str | None = None):
+                 has_rig: bool = False, animation_error: str | None = None,
+                 has_tolina_rig: bool = False, tolina_rig_error: str | None = None,
+                 blink_error: str | None = None):
         self.credential = credential
         self.port = port
         self.scene = deepcopy(scene if scene is not None else NO_SCENE)
@@ -85,6 +109,10 @@ class FakeGodotClient:
         self.created = has_rig
         self.animation_created = False
         self.animation_error = animation_error
+        self.tolina_created = has_tolina_rig
+        self.blink_created = False
+        self.tolina_rig_error = tolina_rig_error
+        self.blink_error = blink_error
         self.write_faulted = False
         self.applied_writes = 0
         self.requests = []
@@ -153,9 +181,13 @@ class FakeGodotClient:
                         code = "SESSION_WRITE_LIMIT"
                     else:
                         self.write_ids.add(request["id"])
-                        if self.scene["path"] != LAB_SCENE_PATH:
+                        operation = request["operation"]
+                        tolina = operation in {TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION}
+                        expected_path = TOLINA_LAB_SCENE_PATH if tolina else LAB_SCENE_PATH
+                        expected_root = TOLINA_LAB_ROOT_NAME if tolina else LAB_ROOT_NAME
+                        if self.scene["path"] != expected_path:
                             code = "LAB_SCENE_REQUIRED"
-                        elif self.scene["root_name"] != LAB_ROOT_NAME:
+                        elif self.scene["root_name"] != expected_root:
                             code = "LAB_ROOT_MISMATCH"
                         elif request["operation"] == WRITE_OPERATION and self.created:
                             code = "LAB_ALREADY_CREATED"
@@ -165,14 +197,29 @@ class FakeGodotClient:
                             code = "LAB_ANIMATION_ALREADY_CREATED"
                         elif request["operation"] == ANIMATION_WRITE_OPERATION and self.animation_error:
                             code = self.animation_error
+                        elif operation == TOLINA_RIG_WRITE_OPERATION and self.tolina_created:
+                            code = "LAB_ALREADY_CREATED"
+                        elif operation == TOLINA_RIG_WRITE_OPERATION and self.tolina_rig_error:
+                            code = self.tolina_rig_error
+                        elif operation == TOLINA_BLINK_WRITE_OPERATION and not self.tolina_created:
+                            code = "LAB_RIG_REQUIRED"
+                        elif operation == TOLINA_BLINK_WRITE_OPERATION and self.blink_created:
+                            code = "LAB_ANIMATION_ALREADY_CREATED"
+                        elif operation == TOLINA_BLINK_WRITE_OPERATION and self.blink_error:
+                            code = self.blink_error
                         else:
                             if request["operation"] == WRITE_OPERATION:
                                 self.created = True
+                            elif operation == TOLINA_RIG_WRITE_OPERATION:
+                                self.tolina_created = True
                             else:
-                                self.animation_created = True
+                                if tolina:
+                                    self.blink_created = True
+                                else:
+                                    self.animation_created = True
                                 for node in self.nodes:
                                     if node["type"] == "AnimationPlayer":
-                                        node["animations"] = {"count": 1, "names": ["bend_tip"], "omitted_reason": None}
+                                        node["animations"] = {"count": 1, "names": ["blink" if tolina else "bend_tip"], "omitted_reason": None}
                             self.applied_writes += 1
                             self.scene.update(save_state="saved_dirty", dirty_changes=True)
                     if code is not None:
