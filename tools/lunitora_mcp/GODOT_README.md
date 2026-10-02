@@ -1,10 +1,11 @@
-# Lunitora Godot Animation MCP v0.4
+# Lunitora Godot Animation MCP v0.5
 
 This editor bridge exposes the three existing metadata tools, `godot_ping`,
-`godot_get_editor_state`, and `godot_inspect_scene`, plus four fixed lab operations:
+`godot_get_editor_state`, and `godot_inspect_scene`, plus six fixed lab operations:
 `godot_create_rig_lab`, `godot_create_rig_lab_animation`,
-`godot_create_tolina_rig_lab`, and `godot_create_tolina_lab_blink`. All seven accept exactly
-`{}`; extra fields are rejected. Bridge and editor-plugin versions are **0.4.0**; the authenticated
+`godot_create_tolina_rig_lab`, `godot_create_tolina_lab_blink`,
+`godot_create_rig_test_cat_deformation_lab`, and `godot_create_rig_test_cat_deformation_demo`.
+All nine accept exactly `{}`; extra fields are rejected. Bridge and editor-plugin versions are **0.5.0**; the authenticated
 transport protocol remains **1**. The Codex-owned Python stdio server listens on **127.0.0.1:43128**;
 Godot's `WebSocketPeer` connects from the enabled editor plugin. Photoshop's
 server, implementation, and **43127** port are separate. The Godot and Photoshop
@@ -19,8 +20,400 @@ not instantiate production scenes or inspect arbitrary script properties.
 
 The separate Tolina character lab adds the reviewed real-art cutout fixture and
 one bounded blink; the existing synthetic lab and its contracts are preserved.
-All four writers share the same session ledger, settlement rules, busy fence,
+All six writers share the same session ledger, settlement rules, busy fence,
 post-action fault latch and no-retry policy. See [Tolina lab v0.4](#tolina-lab-v04).
+
+## Rig test cat deformation lab v0.5
+
+Technical milestone acceptance is complete on Godot
+`4.7.2-stable (official)`, bridge/plugin `0.5.0`, protocol `1`. Controlled live
+history/persistence/replay and user visual review passed. This proves the bounded
+MCP tooling capability, not production-ready artwork or physical-device behavior.
+
+The two new parameterless tools operate only in
+`res://addons/lunitora_godot/labs/rig_test_cat_deformation_lab.tscn`, with the native,
+script-free `RigTestCatDeformationLab` Node2D root. Admission is semantic; normal
+Godot UID metadata is allowed. Production scene paths are refused.
+
+`godot_create_rig_test_cat_deformation_lab({})` adds exactly 19 owned native,
+script-free nodes in three independent proof stations:
+
+```text
+RigTestCatRig (Node2D)
+├── TailStation (Node2D)
+│   ├── TailMesh (Polygon2D)
+│   └── TailSkeleton (Skeleton2D)
+│       └── TailRoot (Bone2D)
+│           └── TailMid1 (Bone2D)
+│               └── TailMid2 (Bone2D)
+│                   └── TailTip (Bone2D)
+├── ArmStation (Node2D)
+│   └── Shoulder (Node2D)
+│       └── UpperArm (Sprite2D)
+│           └── Elbow (Node2D)
+│               └── LowerArmPaw (Sprite2D)
+├── BodyStation (Node2D)
+│   ├── Torso (Sprite2D)
+│   ├── HeadPivot (Node2D)
+│   │   └── Head (Sprite2D)
+│   └── ScarfForeground (Sprite2D)
+└── AnimationPlayer
+```
+
+This fixture is not a complete character assembly. Its reviewed tooling-only
+specification is `addons/lunitora_godot/specs/rig_test_cat_deformation_v1.json`,
+externally pinned by `deformation_rig.gd` to SHA-256
+`459b16ecf4367ef7c9254961a223a0c7ac0d56e79bc9bbc63b5b89e47b700571`.
+All 24 pinned PNG/import pairs live under `addons/lunitora_godot/test_assets/rig_test_cat/`.
+The original relocation preserved PNG bytes/dimensions, import settings and UIDs; only native
+path-derived `path`, `source_file` and `dest_files` changed. The old asset directory
+is removed. The bounded arm-only revision replaces the four upper/lower left/right
+arm inputs with approved 1254x1254 exports and pins their current import metadata.
+Torso pixels/settings are unchanged; only its already-current import hash/UID is
+repinned. The unchanged addon exclusion removes the complete fixture from
+normal Android/iOS resource packages. Generated scenes use six immutable cached
+external Texture2Ds and have no JSON runtime dependency.
+
+The tail has 561 explicit pixel-space vertices/UVs, 1,024 triangles, 96 perimeter
+vertices followed by 465 interior vertices, and four explicit normalized weight
+arrays with at most two influences. No triangulation or weighting is inferred.
+The four zero-rotation rest origins are `(160,1280)`, `(450,-90)`, `(180,-400)`,
+`(-50,-370)`; stable bone angles and disabled automatic length calculation survive
+native save/reopen. The arm uses only `UpperArm` and `LowerArmPaw` Sprite2Ds under
+the unchanged Shoulder/Elbow hierarchy. The fixture instantiates the left pair;
+the right pair remains approved inventory, not an added station. ArmStation scale
+stays `(0.5,0.5)`. UpperArm position/rotation stay zero, scale is `(0.4,0.4)` and
+offset is `(-810,-320)`. Elbow position is `(-385,680)` in UpperArm's source space,
+with unchanged rest rotation `0.87026`. LowerArmPaw position is zero, scale is one,
+offset is `(-860,-240)`, fixed rotation is `-0.87026` and z-index is `-1` so the
+orange forearm moves behind the cream sleeve. The existing Shoulder/Elbow tracks
+and all timing/easing are unchanged. No elbow sleeve-overlap node or candidate
+head/neck or independently generated scarf texture is used; the body station isolates HeadPivot motion.
+HeadPivot rests at `(0,306)` with unchanged scale `(0.8,0.8)` and head offset
+`(-627,-1145)`. Absolute head Y keys `[306,300,294,300,306]` preserve the relative
+bob `[0,-6,-12,-6,0]`. Source alpha contours at threshold `128` overlap across the
+local collar band `[-210,210]` by at least `16.2` pixels at rest and `4.2` at the
+highest bob. A static `ScarfForeground` Sprite2D covers the lower neck using a
+288x147 transparent extraction of the approved torso pixels. It is uncentered
+with offset `(-139,238)`, position `(0,0)`, rotation `0`, scale `(1,1)`, z-index `1`
+and linear filtering. The source rectangle is `(422,238,288,147)`; the original
+36-point recipe is preserved in archived conversion evidence, not maintained
+test machinery or the runtime contract. Interior RGBA is exact, original alpha is preserved, and outside
+alpha is zero. Source RGB beneath zero alpha is retained; this texture alone uses
+`process/fix_alpha_border=false` to avoid importer border-color repair. The owned,
+script-free sprite uses its own immutable cached texture and has no animation track.
+Head transforms/bob and `head_full` artwork are unchanged; no neck node is added.
+Native Polygon AA versus the baked mask has a disclosed boundary-only rasterization
+difference; see the extraction evidence below. Final controlled live visual review
+is accepted for the technical milestone; future production art quality is separate.
+
+The internal `weighted_mesh_2d.gd` accepts only explicit trusted geometry,
+UVs, triangle indices, relative bone paths and weights. Bounds are 1–32 bones,
+2,048 vertices, 4,096 triangles and four influences. Malformed/nonfinite geometry,
+degenerate triangles, invalid bindings, mismatched arrays and unnormalized or
+out-of-range weights are rejected, never repaired. Authored sums equal one;
+`1e-6` is reserved for native readback. It owns no transport, admission, history,
+saving or global state and is not exposed as a generic MCP geometry API.
+
+`godot_create_rig_test_cat_deformation_demo({})` requires the unchanged fixture
+at rest and a pristine, detached/settled AnimationPlayer. It adds one global
+AnimationLibrary containing only `deformation_demo`: 2 seconds, step `0.125`,
+`LOOP_NONE`, seven enabled continuous value tracks and 35 keys at
+`[0,0.5,1,1.5,2]`. Four tail rotations use amplitudes 2°/4°/6°/6°;
+shoulder, elbow and head Y use the reviewed values. Six rotation tracks use
+linear-angle interpolation; head Y uses linear interpolation; every transition
+is `-2.0` (native quadratic ease-in-out). Angular oracle comparisons wrap angles.
+First/final keys restore exact rest. There is no RESET, autoplay, assignment,
+playback, seek, queue, marker or extra resource.
+
+Each write creates one native action: `Lunitora: Create Rig Test Cat Deformation Rig`
+or `Lunitora: Create Rig Test Cat Deformation Demo`. Detached preparation precedes
+final admission. Rig Undo removes the subtree; Redo restores the same retained
+nodes and every owner. Native bound library arguments retain the same animation
+resources for Redo; no custom lifetime cache or resource node-reference API is used.
+Neither writer saves scenes/resources or mutates/reimports/takes over texture paths.
+
+Before any Skeleton2D getter can flush setup, admission checks
+`bone_setup_changed`. Only the exact generated native/script-free TailMesh receiver,
+its verified custom `Polygon2D::_skeleton_bone_setup_changed` callable and flags
+`0` are admitted. Unknown observers return `LAB_SKELETON_EDITOR_BUSY` before an
+action. Writer admission also rejects every TailMesh and ScarfForeground `draw` observer, including
+the native Polygon2D editor while attached: a queued redraw can otherwise invoke
+an observer after synchronous post-verification and leave a changed bone after
+Undo. Deselect the mesh/detach the relevant editor and allow normal frames to
+settle; admission never does this automatically. Structural validation still
+works during native mesh/bone selection. Selection/Inspector changes invalidate
+the shared quiet-frame barrier; a deferred callable can survive disconnection,
+so an empty connection list alone is insufficient. Later normal observations
+and exact rest-state validation must succeed before a fresh write. Callbacks are
+never disconnected or suppressed by the writer. AnimationPlayer admission
+retains the Godot **4.7.2** detached/settled rule; unknown relevant observers remain
+a conservative lab-only restriction. Strict stopped/unassigned/rest replay applies
+while these controlled conditions remain in place; attaching the animation editor
+between Undo and Redo can invoke normal Godot editor assignment/seek behavior.
+
+All six operations share the non-evicting 128-ID editor-session ledger, correlation,
+ordered read settlement, reconnect/Python-restart protection, re-entry/committing
+guards and fault latch. Final validation → action registration → commit →
+post-verification → response finalization is synchronous. Build errors are strictly
+pre-action; uncertain post-action state returns `WRITE_OUTCOME_UNKNOWN` and blocks
+every writer for the session. Never automatically retry a write.
+
+**VERIFIED:** the user accepted the controlled live tail/arm/head/scarf visual
+result and final replay for this technical milestone. Current arm artwork is
+sufficient to validate two-piece hierarchy, joint inheritance and tooling.
+Better joint-ready production arm artwork remains a future art-quality
+improvement; this fixed-fixture proof does not approve arbitrary rigs or final
+production art. New production artwork/presentation remains **REQUIRES USER TEST**
+and human visual review. Executable iOS/Xcode/device behavior remains
+**REQUIRES MAC/iOS**; executable Android behavior remains **REQUIRES ANDROID DEVICE**.
+No IK, AnimationTree, physics, facial work, production integration or generic writer
+has been added. The distributed deformation lab remains an empty native root.
+
+The intentionally distributed writer prerequisite is the exact captured
+**120-byte empty native seed**, SHA-256
+`1645fa0ad54b5f435e3b8e4a94d1e1baa1f00a9d01a44831687a904527efbb4d`,
+scene UID `uid://dkuplpgst2o17`, root unique ID `963220967`:
+
+```ini
+[gd_scene format=3 uid="uid://dkuplpgst2o17"]
+
+[node name="RigTestCatDeformationLab" type="Node2D" unique_id=963220967]
+```
+
+It has zero children, scripts or resources, UTF-8/ASCII without BOM, LF line
+endings and one final LF. After the accepted manual Save/Reopen proof, only this
+lab was restored byte-for-byte from its pre-writer capture. The populated
+71,955-byte acceptance scene is archived evidence, not distributed content.
+No UID was regenerated. The earlier pre-editor 74-byte seed was historical;
+it is not the final distribution baseline.
+
+The existing 111-byte synthetic lab and 117-byte Tolina lab remain byte-identical.
+
+### Historical automated validation - 2026-10-01
+
+The initial v0.5 automated validation used Godot
+`4.7.2.stable.official.ed1daf0bf`; installed Android/Windows templates are
+`4.7.2.stable`. The executable iOS template is absent. Tests use disposable
+projects, never the real checkout's writers.
+
+| Gate | VERIFIED evidence |
+| --- | --- |
+| Godot protocol/tools and export-control units | 206 tests. |
+| Existing native public transport/synthetic/Tolina writers | 52 tests. |
+| New deformation public writers | 25 headless/graphical cases, including observer rejection, queued-callback settlement, replay, timeout, lost reply, reload, save points and history disposal. |
+| Native GDScript / weighted primitive | 1,101 existing checks plus 153 bounded-mesh checks. |
+| CPU/GPU oracle | 201 geometry poses and 86 graphical comparisons on Windows Mobile/D3D12; no inverted/collapsed triangles, exact rest return. |
+| Mobile resource exports | Four primary packs plus two JSON-removal controls; 14 native runs / 14,108 checks. |
+| Kitchen | Two runner tests; 25 suites / 11,044 checks, including 12 graphical suites. |
+| Photoshop | 171 Python tests, 165 UXP checks and four JS syntax checks. |
+| Launcher | 82 checks; existing art/dev and Godot commands preserved. |
+
+Native proof exposed the queued draw-observer mutation described above; the
+writer now refuses that state before action creation. A plugin-reload readiness
+race was corrected only in bounded test read polling; writer retry behavior is
+unchanged. The 25-case batch passed 24 cases; the affected case and two additional
+lifecycle/session cases then passed, verifying all 25 distinct cases.
+
+Across sampled poses, triangle-area ratios are `0.649071–1.363323`, edge-length
+ratios `0.708133–1.319839`, and rest error is zero. GPU/CPU pixel differences
+are at most `6/255` with maximum mean `0.004375/255`; wrapped native easing error
+is at most `3.782e-7` radians. All five cached texture states and all 46 fixture
+source/import files remain unchanged. These bounds prove this fixed fixture,
+not artistic quality or arbitrary rigs. At that stage real-checkout v0.5 writes
+and executable/device exports were **NOT EXECUTED**. Later controlled live
+technical/visual acceptance is complete, as recorded below; physical-device
+validation remains open.
+
+### Arm-only art revision - 2026-10-02
+
+The approved two-piece arm replacement and bounded pivot correction used spec
+`c93c92a9a21b6bb52a424297fef834000c377e2da85002da3201a0aa05c91081`;
+all 19 nodes remained native/script-free. Missing legacy
+`head_full` and `cape` PNG/import pairs were recovered byte-for-byte from the
+previous approved disposable fixture, not replaced with candidate artwork.
+Tail geometry, bones, weights, animation data and every non-arm node are deeply
+equal to the captured pre-revision spec. Shared writer/safety code is byte-identical.
+
+| Targeted Gate | VERIFIED |
+| --- | --- |
+| Deformation contract/transport and export-control units | 33 + 13 tests passed. |
+| Native public-writer lifecycle/safety | 26 cases: 15 headless + 11 graphical; zero failures/errors/skips and strict clean logs. Native Undo/Redo, Save/Reopen, fixed lower rotation and nonrest rejection passed. |
+| Rendered two-piece arm | 29 captures: elbow 0/5/10/15/20 degrees, original combined timeline keys, and 390x844 / 405x720 / 540x960; opaque joint and connected silhouette in every capture. Normal/closeup/mobile captures inspected: no visible gap, doubled sleeve contour or detached joint. |
+| Actual native articulation | 65 timeline samples versus independent CPU global transforms; maximum origin error 0.0000337523 px and basis error 0.0000000394361. |
+| Retained tail/head/scarf GPU regression | 201 geometry poses + 86 CPU/GPU comparisons passed; unchanged head/scarf contract and cached textures. Full combined first/final captures and arm rest captures are pixel-identical. |
+| Mobile resource packages | Four primary packs + two JSON-removal controls; six native package-verification runs / 13,130 checks passed. Normal addon exclusion and compiled authored scene without tooling JSON verified. This is not device/executable export validation. |
+| Source preservation | All 56 current PNG/import files unchanged during writer/render operations, including the 46 pinned inputs and ten unused candidate files. Export validation also preserved 229 production inputs. |
+
+Only disposable projects ran the public writers and native save/history commands;
+the live editor was not manipulated. The checkout's empty UID-normalized lab
+remains 120 bytes, SHA-256
+`1645fa0ad54b5f435e3b8e4a94d1e1baa1f00a9d01a44831687a904527efbb4d`.
+No source PNG was edited, no overlap node or new head/neck/scarf layer was added,
+and no stage/commit/merge/tag/push operation was performed. Android/iOS hardware
+behavior and final controlled live acceptance are not established by these tests.
+
+### Exact scarf asset extraction - 2026-10-02
+
+The accepted Polygon foreground is replaced with the Sprite described above,
+without artistic regeneration, resampling or color changes. Its one-time
+deterministic recipe, extraction and frozen-reference A/B machinery were removed
+after acceptance; the pinned PNG and ongoing native/GPU/export regression checks
+are the maintained contract. Historical conversion evidence is archived outside
+the checkout. The source was
+only `rig_test_cat_torso.png`, SHA-256
+`4c38f6ff82ccaf9774a50613febbbf7004feb028e3698272126a5454d396b949`.
+The extracted PNG is SHA-256
+`b76534ce925d736de66ad5d74ee163780968a3c63a3a5c8af02e7dd993aff4d3`;
+its import file is SHA-256
+`cb6b770b4ef34f80bb7a0a23e89977e4383c9104d9266c98ded3963a4afc485d`.
+Native and independent CPU membership checks confirm 22,471 unchanged interior
+RGBA pixels, unchanged crop RGB, zero outside alpha, and original alpha values
+252/253/254. No unrelated source artwork is edited.
+
+The frozen approved Polygon scene/spec are compared against the PNG in 35 native
+Mobile/D3D12 A/B pairs: Y=306/300/294 plus 305.625/303/297/294.375, at normal and
+closeup scale and all three phone sizes. This is **bounded raster equivalence,
+not pixel identity**: zero changed pixels outside a two-rendered-pixel boundary
+band; protected face pixels unchanged; all neck-coverage checks pass. Boundary
+RGB delta reaches 183/255 at a few one-pixel neckline coverage changes; at most
+56 pixels per pair exceed 4/255 and boundary mean is at most 1.456552/255.
+Full-body alpha delta is at most 2/255. Isolated torso on/off RGBA/alpha delta is
+at most 3/255, matching the approved Polygon and showing no extra opacity halo.
+Normal/closeup/mobile captures were inspected: neck inserted, jaw/whiskers clear,
+no gap, duplicated cape/scarf pixels, or new visible seam. The initial 128-channel
+guard failed honestly and is retained in archived evidence; explicit reviewed
+rasterization acceptance requires the exact source checks, zero outside-band
+change, unchanged protected region, covered neck, <=64 pixels over 4/255 and
+boundary mean <=2/255. Arbitrary scales/transforms are not covered by this proof.
+
+| Targeted Gate | VERIFIED |
+| --- | --- |
+| Contract/transport and export-control units | 33 + 13 tests passed. |
+| Native writer/history/persistence/safety | Fresh full 26-case batch: 11 graphical + 15 headless, no failures/errors/skips, strict clean logs. Native Undo/Redo and Save/Reopen pass with the distinct sixth scarf texture; no automatic save, assignment, playback or seek. Approved JSON numeric registration passes; six valid-bounds scarf texture/pivot/z/position/rotation/scale mutations reject. |
+| Frozen Polygon versus extracted PNG | 35 A/B pairs pass explicit reviewed-raster criteria and source-byte checks; native and independent CPU audits agree. The retained raw 128-channel gate fails, and pixel identity is not claimed. |
+| Fresh authored Sprite rendering | 19 nodes; 86 tail CPU/GPU comparisons and 201 geometry poses pass, unchanged max difference 6/255. Head bob error zero; protected face/neck checks pass; isolated torso difference <=3/255. Actual normal/closeup/mobile captures inspected. |
+| Retained arm and rest return | 65 independent global-transform samples; 29 two-piece arm captures including mobile. No holes or doubled contours; exact rest transforms and pixel-identical rest captures. |
+| Compiled resource packages | Four primary Android/iOS packs plus two JSON-removal controls; six native checks / 13,036 assertions. Six external textures and compiled 19-node rig/demo load without tooling JSON. Normal addon exclusion remains intact; not executable/device validation. |
+| Preservation | All 56 current PNG/import files unchanged during writer/GPU operations; all 24 pinned pairs and 229 production inputs unchanged during exports. Compared with pre-extraction, only the requested scarf PNG/import changed; shared coordinator, transport, animation writer, weighted primitive and empty 120-byte lab remain byte-identical. |
+
+The fresh native-authored scene is 71,953 bytes, SHA-256
+`2504b5a148f0752a0a49658eea7febcfb16f6bb26bde64797114c1926283909f`.
+The live editor was not manipulated. No candidate head/neck or overlap node was
+integrated, and no stage/commit/merge/tag/push operation was performed. Final
+controlled live acceptance and hardware/executable validation remain separate.
+
+### Bounded scarf cleanup - 2026-10-02
+
+The accepted runtime result and spec digest are unchanged. One-off extraction
+and old-Polygon A/B tools have no current-fixture callers and are not retained as
+an asset-generation framework. Removed from `tests/godot_mcp/`:
+`scarf_foreground_extraction_v1.json`, `extract_scarf_foreground.gd`, its `.uid`,
+`extract_scarf_foreground.py`, `scarf_extraction_validation.gd`, its `.uid`, and
+`run_scarf_extraction_validation.py`.
+
+Only four confirmed unused candidate PNG/import pairs were removed:
+`body/rig_test_cat_head_main.png`, `body/rig_test_cat_neck_under_scarf.png`,
+`arms/rig_test_cat_arm_elbow_sleeve_overlap_l.png` and
+`arms/rig_test_cat_arm_elbow_sleeve_overlap_r.png`. Their only file/UID references
+were their own import sidecars. The negative test excluding candidate IDs remains.
+No superseded independently generated scarf remained in the checkout: its path
+already holds the accepted extracted PNG. Historical task-local proof artifacts
+remain outside the checkout, not part of maintained runtime/test machinery.
+
+All 24 approved fixture PNG/import pairs (48 files), including the accepted scarf,
+original `head_full`, torso and four revised arm inputs, remain pinned and intact.
+Runtime/spec/Sprite registration/resource-identity, writer/native history and
+persistence, current-fixture GPU and export-package coverage remain unchanged.
+
+Post-cleanup validation passed:
+
+| Targeted Gate | VERIFIED |
+| --- | --- |
+| Deformation and export-control units | 46/46 passed: 33 deformation + 13 export controls. |
+| Native writer/history/persistence/safety | Fresh full 26/26 passed: 11 graphical + 15 headless, no failures/errors/skips; strict log guards unchanged. Undo/Redo, Save/Reopen, resource identity, registration and no-auto-save behavior remain covered. All disposable child processes completed; the live editor was not manipulated. |
+| Fresh authored rendering | 86 tail CPU/GPU comparisons, 201 geometry poses, 65 arm samples, 29 arm captures and 16 head/scarf captures passed. All 287 PNG captures and semantic metrics are identical to accepted pre-cleanup Sprite evidence. |
+| Android/iOS resource packages | Fresh post-cleanup authored fixture: four primary packages plus two JSON-removal controls, six native checks / 13,036 assertions. Six external textures and the compiled rig/demo load without tooling JSON. Normal packages contain zero addon entries; positive controls contain 47, with 37 compiled remap targets excluded normally. Not executable/device validation. |
+| Preservation and references | All 24 PNG/import pins, dimensions, cached resource paths and node/texture references resolve. All 48 retained fixture files, 18 protected runtime/spec/test files and 229 export production inputs are unchanged. Empty disk lab remains 120 bytes. `git diff --check` passes; no stage/commit/merge/tag/push. |
+
+The fresh post-cleanup native-authored disposable scene is 71,955 bytes, SHA-256
+`64b470e512e04a552889b8c535f0783a943d7ffe00b87a4c2c50fca9fc2afa96`.
+Its serialization identity differs from the earlier saved proof; runtime
+semantics, spec, assets and all rendered captures are unchanged. The final spec
+SHA-256 remains
+`459b16ecf4367ef7c9254961a223a0c7ac0d56e79bc9bbc63b5b89e47b700571`.
+Native Windows temporary-directory and certificate-store sandbox restrictions
+required bounded unsandboxed validation reruns; no test/log guard was relaxed.
+At the cleanup stage, final controlled live acceptance remained separate. It is
+now complete, as recorded below.
+
+### Final v0.5 acceptance and consolidated regression - 2026-10-02
+
+Healthy live MCP reported Godot `4.7.2-stable (official)`, bridge/plugin `0.5.0`
+and protocol `1`. Both public writers were invoked once in the controlled
+acceptance sequence. The user then completed Undo demo, Undo rig, Redo rig,
+Redo demo, manual Save, close/reopen and final replay. Native history,
+Save/Reopen persistence, exact rest return and the visual result were accepted
+for the technical milestone. No automatic save/playback/seek was introduced.
+
+The final spec is
+`459b16ecf4367ef7c9254961a223a0c7ac0d56e79bc9bbc63b5b89e47b700571`:
+19 generated native script-free nodes and 24 pinned PNG/import pairs. The
+weighted real-art tail, two-piece arm, existing `head_full`, ordinary HeadPivot
+transform animation and explicit 288x147 scarf Sprite2D are the accepted contract. There is no
+elbow-sleeve-overlap/neck/candidate-head node or runtime scarf Polygon crop.
+`deformation_demo` remains 2.0 seconds, step `0.125`, `LOOP_NONE`, seven tracks /
+35 keys, unchanged values/easing and bob `[306,300,294,300,306]`; no RESET,
+autoplay, automatic playback or seek.
+
+The consolidated batch used the exact current branch implementation and a frozen
+copy of the accepted populated scene. All assertions/log guards were retained.
+Counts distinguish unittest methods from native assertions:
+
+| Gate | Final VERIFIED evidence |
+| --- | --- |
+| All MCP Python suites | 457/457 methods across 19 modules: 286 Godot + 171 Photoshop; zero failures/errors/skips. |
+| Included native MCP methods | 78: 25 graphical + 53 headless, including 26 deformation cases (11 graphical + 15 headless). |
+| Separate native inspection runner | 1,101 checks: 56 inspection + 442 rig/editor + 603 animation. |
+| Operator launcher / UXP / dependencies | Launcher 43 + 39 checks; UXP 61 + 104 checks; pip check clean. |
+| Normal Kitchen/game batch | Two runner unit methods; 25 native runs (13 headless + 12 graphical), 11,044 checks and 528 captures. |
+| Deformation GPU/oracle | 86 tail CPU/GPU comparisons, 201 geometry poses, 65 arm transform samples, 29 arm captures and 16 head/scarf captures. All 287 PNG captures byte-identical to the accepted Sprite proof. |
+| Android/iOS full-project resource controls | Four primary packages + two without-JSON diagnostic packages; eight native checker executions / 13,146 checks (13,036 deformation + 110 production Tolina). Normal packages contain zero addon entries, positive controls 47; 37 compiled/remap targets excluded normally. Compiled native rig/demo loads without tooling JSON. |
+| Preservation | All 432 nonignored branch files byte-identical across the batch, including all 24 fixture pairs and 229 export production inputs; original saved-scene mtime retained. No unexpected nonignored files. |
+
+There were no final failures or unexpected warnings. Ten expected malformed-world
+warnings belonged to marked Kitchen negative controls; 66 asyncio debug timing
+notices were not failures. Initial Windows sandbox Temp/fixture-setup and
+certificate-store blocks required approved unchanged environment reruns; their
+logs were retained. A Kitchen diagnostic encoding limitation was resolved with
+`PYTHONIOENCODING=utf-8`. No behavioral/flaky test retry or log-guard relaxation
+occurred. GPU validation passed on its first native execution; later private-Temp
+evidence access required approved read/copy archival, not a test rerun. The
+headless popup limitation was covered graphically. Release probes were simulated.
+
+After the accepted batch, the user explicitly chose the empty-seed distribution
+policy. Only the lab was restored from the captured 120-byte baseline above;
+read-only checks verified exact text/hash/UID, zero children/scripts/resources,
+unchanged spec and all 48 pinned asset/import files. All other 431 nonignored
+files remained byte-identical, and `git diff --check` passed. The whole batch was
+not rerun for that exact seed restoration or documentation-only updates.
+
+**NOT EXECUTED:** actual APK/IPA or desktop release executable export, signing,
+installation and runtime acceptance; additional real Photoshop processing and
+installed operator launching/coexistence in this batch. The accepted live Godot
+history/save/reopen/replay was not repeated during the regression batch.
+
+**REQUIRES ANDROID DEVICE:** actual APK installation/replay, target GPU behavior,
+touch, performance/frame pacing and pause/resume.
+
+**REQUIRES MAC/iOS:** Xcode executable export/signing, IPA installation, Metal
+hardware behavior and device touch/performance/lifecycle. Resource packages on
+Windows do not establish executable iOS acceptance.
+
+**REQUIRES USER TEST:** broader installed operator/Photoshop coexistence beyond
+automated mocks, plus human review of future joint-ready production artwork and
+production integration. The current tooling milestone's controlled visual and
+history/persistence acceptance is complete, not an outstanding user-test gate.
 
 ## Tolina lab v0.4
 
@@ -115,7 +508,7 @@ attaching the Animation editor before a later native Redo can cause normal
 Godot observer assignment/seek, which is characterized rather than intercepted.
 Unknown relevant observers remain a conservative lab-only admission restriction.
 
-All four writers share one 128-ID editor-session ledger, operation/session
+These writers use the shared 128-ID editor-session ledger, operation/session
 correlation, reconnect/Python-restart handling, busy/committing guard and fault
 latch. Preparation failures are pre-action only. Once action creation begins,
 uncertainty returns `WRITE_OUTCOME_UNKNOWN` and blocks all writers. Ordered reads

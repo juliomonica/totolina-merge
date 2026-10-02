@@ -1,4 +1,4 @@
-"""Three metadata reads and four fixed lab writes; exact empty public inputs."""
+"""Three metadata reads and six fixed lab writes; exact empty public inputs."""
 from __future__ import annotations
 
 from typing import Annotated
@@ -11,6 +11,8 @@ from .protocol import (BridgeError, EditorStateResult, MAX_PAYLOAD_BYTES, OPERAT
                        RigLabResult, RigLabAnimationResult, SceneInspectionResult, WRITE_OPERATION,
                        ANIMATION_WRITE_OPERATION, TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION,
                        TolinaRigLabResult, TolinaLabBlinkResult,
+                       DEFORMATION_RIG_WRITE_OPERATION, DEFORMATION_DEMO_WRITE_OPERATION,
+                       DeformationRigLabResult, DeformationDemoResult,
                        WRITE_OPERATIONS, encode, envelope, validate_result)
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False, "maxProperties": 0}
@@ -150,3 +152,13 @@ def register_tools(server: GodotMCPServer, bridge: GodotBridge) -> None:
     async def godot_create_tolina_lab_blink() -> Annotated[CallToolResult, TolinaLabBlinkResult]:
         """Add exactly the reviewed blink animation in one undo action to the exact Tolina lab rig with a detached, settled AnimationPlayer editor. Never creates a rig, saves, selects, plays or changes production textures. Unknown outcomes require a fresh read and review; never retry automatically."""
         return await call_bridge(bridge, TOLINA_BLINK_WRITE_OPERATION)
+
+    @server.tool(annotations=write_annotations)
+    async def godot_create_rig_test_cat_deformation_lab() -> Annotated[CallToolResult, DeformationRigLabResult]:
+        """Create exactly the reviewed 19-node weighted-tail, articulated-arm and head-bob fixture in one undo action, only in the dedicated Rig Test Cat deformation lab. Uses immutable external addon test textures. Never saves, replaces, plays or writes production content. Unknown outcomes require a fresh read and review; never retry automatically."""
+        return await call_bridge(bridge, DEFORMATION_RIG_WRITE_OPERATION)
+
+    @server.tool(annotations=write_annotations)
+    async def godot_create_rig_test_cat_deformation_demo() -> Annotated[CallToolResult, DeformationDemoResult]:
+        """Add only the reviewed two-second deformation_demo with seven tracks and 35 keys in one undo action to the exact existing deformation lab rig. Requires admitted skeletal observers and a detached, settled AnimationPlayer editor. Never creates a rig, saves, selects or plays. Unknown outcomes require a fresh read and review; never retry automatically."""
+        return await call_bridge(bridge, DEFORMATION_DEMO_WRITE_OPERATION)

@@ -1,4 +1,4 @@
-"""Closed v1 wire contracts: metadata reads and four fixed undoable lab writes."""
+"""Closed v1 wire contracts: metadata reads and six fixed undoable lab writes."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from pydantic import Field, with_config
 from typing_extensions import TypedDict
 
 PROTOCOL_VERSION = 1
-BRIDGE_VERSION = "0.4.0"
+BRIDGE_VERSION = "0.5.0"
 MAX_PAYLOAD_BYTES = 256 * 1024
 MAX_STRING_BYTES = 4096
 MAX_NODES = 2000
@@ -24,8 +24,11 @@ WRITE_OPERATION = "godot_create_rig_lab"
 ANIMATION_WRITE_OPERATION = "godot_create_rig_lab_animation"
 TOLINA_RIG_WRITE_OPERATION = "godot_create_tolina_rig_lab"
 TOLINA_BLINK_WRITE_OPERATION = "godot_create_tolina_lab_blink"
+DEFORMATION_RIG_WRITE_OPERATION = "godot_create_rig_test_cat_deformation_lab"
+DEFORMATION_DEMO_WRITE_OPERATION = "godot_create_rig_test_cat_deformation_demo"
 WRITE_OPERATIONS = frozenset({WRITE_OPERATION, ANIMATION_WRITE_OPERATION,
-                              TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION})
+                              TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION,
+                              DEFORMATION_RIG_WRITE_OPERATION, DEFORMATION_DEMO_WRITE_OPERATION})
 READ_OPERATIONS = frozenset({"godot_ping", "godot_get_editor_state", "godot_inspect_scene"})
 OPERATIONS = READ_OPERATIONS | WRITE_OPERATIONS
 LAB_SCENE_PATH = "res://addons/lunitora_godot/labs/totolina_rig_lab.tscn"
@@ -40,6 +43,12 @@ TOLINA_RIG_ROOT_NAME = "TolinaRig"
 TOLINA_RIG_UNDO_ACTION_NAME = "Lunitora: Create Tolina Character Rig"
 TOLINA_ANIMATION_PLAYER_PATH = "TolinaRig/AnimationPlayer"
 TOLINA_BLINK_UNDO_ACTION_NAME = "Lunitora: Create Tolina Lab Blink"
+DEFORMATION_LAB_SCENE_PATH = "res://addons/lunitora_godot/labs/rig_test_cat_deformation_lab.tscn"
+DEFORMATION_LAB_ROOT_NAME = "RigTestCatDeformationLab"
+DEFORMATION_RIG_ROOT_NAME = "RigTestCatRig"
+DEFORMATION_RIG_UNDO_ACTION_NAME = "Lunitora: Create Rig Test Cat Deformation Rig"
+DEFORMATION_ANIMATION_PLAYER_PATH = "RigTestCatRig/AnimationPlayer"
+DEFORMATION_DEMO_UNDO_ACTION_NAME = "Lunitora: Create Rig Test Cat Deformation Demo"
 WRITE_ERRORS = frozenset({"LAB_SCENE_REQUIRED", "LAB_ROOT_MISMATCH", "LAB_ALREADY_CREATED",
                           "RIG_LAB_BUILD_FAILED", "WRITE_REPLAY_REJECTED", "SESSION_WRITE_LIMIT",
                           "WRITE_OUTCOME_UNKNOWN", "WRITE_BUSY", "INVALID_REQUEST", "INVALID_MESSAGE"})
@@ -53,10 +62,20 @@ TOLINA_RIG_WRITE_ERRORS = (WRITE_ERRORS - {"RIG_LAB_BUILD_FAILED"}) | {
 TOLINA_BLINK_WRITE_ERRORS = (ANIMATION_WRITE_ERRORS - {"RIG_LAB_ANIMATION_BUILD_FAILED"}) | {
     "TOLINA_SPEC_INVALID", "TOLINA_ASSET_INVALID", "TOLINA_BLINK_BUILD_FAILED",
 }
+DEFORMATION_RIG_WRITE_ERRORS = (WRITE_ERRORS - {"RIG_LAB_BUILD_FAILED"}) | {
+    "DEFORMATION_SPEC_INVALID", "DEFORMATION_ASSET_INVALID", "DEFORMATION_RIG_BUILD_FAILED",
+    "LAB_SKELETON_EDITOR_BUSY",
+}
+DEFORMATION_DEMO_WRITE_ERRORS = (ANIMATION_WRITE_ERRORS - {"RIG_LAB_ANIMATION_BUILD_FAILED"}) | {
+    "DEFORMATION_SPEC_INVALID", "DEFORMATION_ASSET_INVALID", "DEFORMATION_DEMO_BUILD_FAILED",
+    "LAB_SKELETON_EDITOR_BUSY",
+}
 WRITE_ERRORS_BY_OPERATION = {
     WRITE_OPERATION: WRITE_ERRORS, ANIMATION_WRITE_OPERATION: ANIMATION_WRITE_ERRORS,
     TOLINA_RIG_WRITE_OPERATION: TOLINA_RIG_WRITE_ERRORS,
     TOLINA_BLINK_WRITE_OPERATION: TOLINA_BLINK_WRITE_ERRORS,
+    DEFORMATION_RIG_WRITE_OPERATION: DEFORMATION_RIG_WRITE_ERRORS,
+    DEFORMATION_DEMO_WRITE_OPERATION: DEFORMATION_DEMO_WRITE_ERRORS,
 }
 ERROR_MESSAGES = {
     "DISCONNECTED": "Godot editor is disconnected. Open this project with the editor plugin enabled.",
@@ -93,6 +112,11 @@ ERROR_MESSAGES = {
     "TOLINA_ASSET_INVALID": "An approved external Tolina texture or import failed identity, hash, type or dimension validation. Nothing was repaired.",
     "TOLINA_RIG_BUILD_FAILED": "Detached Tolina rig preparation failed before starting an undo action.",
     "TOLINA_BLINK_BUILD_FAILED": "Detached Tolina blink preparation failed before starting an undo action.",
+    "DEFORMATION_SPEC_INVALID": "The reviewed deformation specification failed its pinned digest or closed validation. Nothing was repaired.",
+    "DEFORMATION_ASSET_INVALID": "An approved external deformation texture or import failed identity, hash, type or dimension validation. Nothing was repaired.",
+    "DEFORMATION_RIG_BUILD_FAILED": "Detached deformation rig preparation failed before starting an undo action.",
+    "DEFORMATION_DEMO_BUILD_FAILED": "Detached deformation demo preparation failed before starting an undo action.",
+    "LAB_SKELETON_EDITOR_BUSY": "A skeletal setup or TailMesh draw observer is attached. Deselect the mesh/detach the relevant editor and allow normal frames to settle before a fresh read; nothing was changed.",
 }
 # Shared rejection codes retain the legacy writer's exact diagnostic text. Only
 # the fixed v0.4 operations select these truthful Tolina-specific descriptions.
@@ -104,6 +128,14 @@ TOLINA_ERROR_MESSAGES = {
     "LAB_RIG_MISMATCH": "The Tolina lab requires the exact reviewed native v0.4 rig and deterministic rest state.",
     "LAB_ANIMATION_ALREADY_CREATED": "The fixed blink animation or its global library already exists.",
 }
+DEFORMATION_ERROR_MESSAGES = {
+    "LAB_SCENE_REQUIRED": "Open the saved Rig Test Cat deformation lab scene before using this fixed writer.",
+    "LAB_ROOT_MISMATCH": "The deformation lab root must be the exact native, script-free local Node2D.",
+    "LAB_ALREADY_CREATED": "The reserved RigTestCatRig subtree already exists; nothing was replaced.",
+    "LAB_RIG_REQUIRED": "Create the dedicated deformation rig before creating its demo.",
+    "LAB_RIG_MISMATCH": "The deformation lab requires the exact reviewed native v0.5 rig and deterministic rest pose.",
+    "LAB_ANIMATION_ALREADY_CREATED": "The fixed deformation_demo animation or its global library already exists.",
+}
 ErrorCode = Literal[
     "DISCONNECTED", "TIMEOUT", "BUSY", "PORT_IN_USE", "EDITOR_BUSY", "AUTH_FAILED",
     "LOCAL_AUTH_UNSAFE", "PROJECT_MISMATCH", "UNSUPPORTED_HOST", "INVALID_REQUEST",
@@ -114,6 +146,8 @@ ErrorCode = Literal[
     "LAB_RIG_REQUIRED", "LAB_RIG_MISMATCH", "LAB_ANIMATION_ALREADY_CREATED", "LAB_ANIMATION_CONFLICT",
     "LAB_ANIMATION_EDITOR_BUSY", "LAB_ANIMATION_EDITOR_SETTLING", "RIG_LAB_ANIMATION_BUILD_FAILED",
     "TOLINA_SPEC_INVALID", "TOLINA_ASSET_INVALID", "TOLINA_RIG_BUILD_FAILED", "TOLINA_BLINK_BUILD_FAILED",
+    "DEFORMATION_SPEC_INVALID", "DEFORMATION_ASSET_INVALID", "DEFORMATION_RIG_BUILD_FAILED",
+    "DEFORMATION_DEMO_BUILD_FAILED", "LAB_SKELETON_EDITOR_BUSY",
 ]
 BoundedString = Annotated[str, Field(max_length=MAX_STRING_BYTES)]
 NonEmptyString = Annotated[str, Field(min_length=1, max_length=MAX_STRING_BYTES)]
@@ -138,7 +172,7 @@ class PingData(TypedDict):
     godot_version: NonEmptyString
     project_path: NonEmptyString
     project_name: BoundedString
-    plugin_version: Literal["0.4.0"]
+    plugin_version: Literal["0.5.0"]
     editor_session_id: NonEmptyString
     read_only: Literal[True]
 
@@ -202,7 +236,7 @@ class Envelope(TypedDict):
     ok: bool
     connected: bool
     protocol_version: Literal[1]
-    bridge_version: Literal["0.4.0"]
+    bridge_version: Literal["0.5.0"]
     round_trip_ms: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None
     error: ErrorInfo | None
 
@@ -312,8 +346,58 @@ class TolinaLabBlinkResult(Envelope):
     result: TolinaLabBlinkData | None
 
 
+@with_config(extra="forbid")
+class DeformationRigLabData(TypedDict):
+    editor_session_id: NonEmptyString
+    project_path: NonEmptyString
+    scene_path: Literal["res://addons/lunitora_godot/labs/rig_test_cat_deformation_lab.tscn"]
+    root_name: Literal["RigTestCatDeformationLab"]
+    created_root: Literal["RigTestCatRig"]
+    created_node_count: Annotated[int, Field(strict=True, ge=19, le=19)]
+    undo_action_name: Literal["Lunitora: Create Rig Test Cat Deformation Rig"]
+    undo_actions_added: Annotated[int, Field(strict=True, ge=1, le=1)]
+    save_state: Literal["saved_dirty"]
+    auto_saved: Literal[False]
+    read_only: Literal[False]
+
+
+@with_config(extra="forbid")
+class DeformationRigLabResult(Envelope):
+    result: DeformationRigLabData | None
+
+
+@with_config(extra="forbid")
+class DeformationDemoData(TypedDict):
+    editor_session_id: NonEmptyString
+    project_path: NonEmptyString
+    scene_path: Literal["res://addons/lunitora_godot/labs/rig_test_cat_deformation_lab.tscn"]
+    root_name: Literal["RigTestCatDeformationLab"]
+    animation_player_path: Literal["RigTestCatRig/AnimationPlayer"]
+    library_name: Literal[""]
+    animation_name: Literal["deformation_demo"]
+    animation_key: Literal["deformation_demo"]
+    length_seconds: Annotated[float, Field(strict=True, ge=2.0, le=2.0, allow_inf_nan=False)]
+    track_count: Annotated[int, Field(strict=True, ge=7, le=7)]
+    key_count: Annotated[int, Field(strict=True, ge=35, le=35)]
+    undo_action_name: Literal["Lunitora: Create Rig Test Cat Deformation Demo"]
+    undo_actions_added: Annotated[int, Field(strict=True, ge=1, le=1)]
+    save_state: Literal["saved_dirty"]
+    auto_saved: Literal[False]
+    read_only: Literal[False]
+
+
+@with_config(extra="forbid")
+class DeformationDemoResult(Envelope):
+    result: DeformationDemoData | None
+
+
 def error_info(code: str, *, operation: str | None = None) -> ErrorInfo:
-    messages = TOLINA_ERROR_MESSAGES if operation in {TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION} else {}
+    if operation in {TOLINA_RIG_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION}:
+        messages = TOLINA_ERROR_MESSAGES
+    elif operation in {DEFORMATION_RIG_WRITE_OPERATION, DEFORMATION_DEMO_WRITE_OPERATION}:
+        messages = DEFORMATION_ERROR_MESSAGES
+    else:
+        messages = {}
     return {"code": code, "message": messages.get(code, ERROR_MESSAGES[code])}
 
 
@@ -457,7 +541,7 @@ def validate_result(operation: str, data: dict) -> None:
             _fields(node, {"path", "type"})
             require(_path(node["path"]) and _string(node["type"]) and node["path"] not in seen)
             seen.add(node["path"])
-    elif operation in {WRITE_OPERATION, TOLINA_RIG_WRITE_OPERATION}:
+    elif operation in {WRITE_OPERATION, TOLINA_RIG_WRITE_OPERATION, DEFORMATION_RIG_WRITE_OPERATION}:
         _fields(data, {"editor_session_id", "project_path", "scene_path", "root_name", "created_root",
                        "created_node_count", "undo_action_name", "undo_actions_added", "save_state",
                        "auto_saved", "read_only"})
@@ -465,6 +549,9 @@ def validate_result(operation: str, data: dict) -> None:
         if operation == TOLINA_RIG_WRITE_OPERATION:
             scene_path, root_name = TOLINA_LAB_SCENE_PATH, TOLINA_LAB_ROOT_NAME
             created_root, action_name, node_count = TOLINA_RIG_ROOT_NAME, TOLINA_RIG_UNDO_ACTION_NAME, 21
+        elif operation == DEFORMATION_RIG_WRITE_OPERATION:
+            scene_path, root_name = DEFORMATION_LAB_SCENE_PATH, DEFORMATION_LAB_ROOT_NAME
+            created_root, action_name, node_count = DEFORMATION_RIG_ROOT_NAME, DEFORMATION_RIG_UNDO_ACTION_NAME, 19
         else:
             scene_path, root_name = LAB_SCENE_PATH, LAB_ROOT_NAME
             created_root, action_name, node_count = RIG_ROOT_NAME, UNDO_ACTION_NAME, 7
@@ -473,7 +560,7 @@ def validate_result(operation: str, data: dict) -> None:
         require(type(data["created_node_count"]) is int and data["created_node_count"] == node_count
                 and type(data["undo_actions_added"]) is int and data["undo_actions_added"] == 1)
         require(data["save_state"] == "saved_dirty" and data["auto_saved"] is False and data["read_only"] is False)
-    elif operation in {ANIMATION_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION}:
+    elif operation in {ANIMATION_WRITE_OPERATION, TOLINA_BLINK_WRITE_OPERATION, DEFORMATION_DEMO_WRITE_OPERATION}:
         _fields(data, {"editor_session_id", "project_path", "scene_path", "root_name",
                        "animation_player_path", "library_name", "animation_name", "animation_key",
                        "length_seconds", "track_count", "key_count", "undo_action_name",
@@ -483,6 +570,10 @@ def validate_result(operation: str, data: dict) -> None:
             scene_path, root_name = TOLINA_LAB_SCENE_PATH, TOLINA_LAB_ROOT_NAME
             player_path, animation_name = TOLINA_ANIMATION_PLAYER_PATH, "blink"
             action_name, length, track_count, key_count = TOLINA_BLINK_UNDO_ACTION_NAME, 0.24, 3, 18
+        elif operation == DEFORMATION_DEMO_WRITE_OPERATION:
+            scene_path, root_name = DEFORMATION_LAB_SCENE_PATH, DEFORMATION_LAB_ROOT_NAME
+            player_path, animation_name = DEFORMATION_ANIMATION_PLAYER_PATH, "deformation_demo"
+            action_name, length, track_count, key_count = DEFORMATION_DEMO_UNDO_ACTION_NAME, 2.0, 7, 35
         else:
             scene_path, root_name = LAB_SCENE_PATH, LAB_ROOT_NAME
             player_path, animation_name = ANIMATION_PLAYER_PATH, "bend_tip"

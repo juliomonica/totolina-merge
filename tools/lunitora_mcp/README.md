@@ -1,6 +1,6 @@
 # Lunitora Photoshop MCP — v0.6 operator convenience
 
-Separate Godot profile: [Godot Animation MCP v0.4 setup and dedicated labs](GODOT_README.md).
+Separate Godot profile: [Godot Animation MCP v0.5 setup and dedicated labs](GODOT_README.md).
 Its three metadata tools remain read-only. `godot_create_rig_lab({})` adds one
 fixed seven-node scaffold only in the dedicated `TotolinaRigLab` scene, with one
 native Undo/Redo action and no autosave. The blue test mesh uses exact
@@ -9,7 +9,7 @@ The separate `godot_create_rig_lab_animation({})` requires that unchanged fixtur
 and a detached, settled animation editor, then adds only synthetic `bend_tip`.
 Both writers bind requests to fresh editor-session reads, reject re-entry and
 duplicate write IDs, verify scene/history after committing, and fail closed
-when the outcome is uncertain. Bridge/plugin version is 0.4.0, protocol remains
+when the outcome is uncertain. Bridge/plugin version is 0.5.0, protocol remains
 1, and Codex owns its separate port 43128 stdio process. The Godot guide records
 the broader reusable animation roadmap and separates historical v0.1 evidence
 from completed v0.2 and v0.3 real-checkout live acceptance. The v0.3 cycle verified
@@ -27,7 +27,7 @@ v0.4 adds only `godot_create_tolina_rig_lab({})` and
 nodes using immutable cached external production textures; blink adds three
 alpha tracks with bounded keys and exact rest endpoints in a separate native
 action. Native Godot 4.7.2 playback can overshoot near keys, as characterized in
-the Godot guide. All four writers share one session safety coordinator. v0.4 is
+the Godot guide. These writers use the shared session safety coordinator. v0.4 is
 technically accepted: live bridge/plugin `0.4.0`, both Tolina writers, native
 blink Undo/Redo and manual Save/Reopen passed. The user approved the production
 idle/front match, final blink and 390×844, 405×720 and 540×960 presentations.
@@ -36,6 +36,60 @@ Writers preserve production resources; Leon's intentional, approved `blink_02`
 artwork replacement and final PNG/spec hashes are recorded in the Godot guide.
 The changed PNG's `.png.import` and all other Tolina PNG/import files remain unchanged.
 Machine-local configuration is not changed by this implementation.
+
+v0.5 adds only the fixed `godot_create_rig_test_cat_deformation_lab({})` and
+`godot_create_rig_test_cat_deformation_demo({})`, gated to the dedicated native
+`RigTestCatDeformationLab`. Nineteen native, script-free nodes prove a real-art
+Polygon2D tail with Skeleton2D/four Bone2Ds and explicit deterministic weights,
+a two-piece hierarchical arm and ordinary HeadPivot transform animation. A static
+`ScarfForeground` Sprite2D uses a deterministic 288x147 transparent extraction
+of the approved torso/scarf pixels at offset `(-139,238)` and z-index `1`;
+head transforms/bob and `head_full` artwork are unchanged. Its exact-source and
+bounded Polygon-versus-PNG rasterization proof is recorded in the Godot guide.
+The arm-only art revision pins four 1254x1254 upper/lower left/right exports while
+the fixture retains two left-arm Sprite2Ds and the same 19-node hierarchy. The
+lower piece stays behind the sleeve with a fixed `-0.87026` compensation; native
+Shoulder/Elbow keys and timing are unchanged. No independently generated candidate sleeve/head/neck/scarf
+layers are integrated. The separate
+2.0-second demo has step `0.125`, `LOOP_NONE`, seven tracks/35 keys and native
+`-2.0` easing, with no RESET, autoplay, automatic playback or seek. All 24
+fixture PNG/import pairs now live under the export-excluded addon; production
+presets and Tolina resources are unchanged. All six writers share one safety
+coordinator and native Undo/Redo without automatic saving. Exact skeletal observer
+admission, conservative rejection of TailMesh and ScarfForeground draw observers (including an
+attached Polygon2D editor), and the existing Godot 4.7.2 detached/settled
+AnimationPlayer rule apply. Queued callbacks must settle through normal editor
+frames and exact rest validation; the writer never detaches callbacks itself.
+See the Godot guide for geometry, hashes, validation and limitations. Controlled
+live native Undo/Redo, manual Save/Reopen and final replay passed on Godot
+`4.7.2-stable (official)`; the user accepted the visual technical milestone.
+Current arm art is sufficient for tooling validation. Better joint-ready
+production arm art is a future artwork-quality improvement, not a new MCP
+capability or a remaining technical-milestone acceptance gate.
+The bounded scarf extraction revision passes 35 reviewed A/B pairs, 26 native
+writer/history/persistence cases, retained tail/arm GPU proofs and six compiled
+resource-package checks. Interior source RGBA is exact; the few native-AA versus
+PNG boundary pixels are explicitly disclosed, not described as pixel-identical.
+All unrelated artwork and shared MCP safety code remain unchanged. This evidence
+uses disposable fixtures; the later controlled live acceptance is also complete.
+Post-acceptance cleanup removes only one-off regeneration/frozen-reference tools
+and four unused candidate PNG/import pairs. All 24 pinned pairs and maintained
+Sprite/native/GPU/export coverage remain; the spec/runtime contract is unchanged.
+
+The distributed deformation lab is an intentionally empty 120-byte native
+`RigTestCatDeformationLab (Node2D)` seed, not the populated acceptance scene.
+UID `uid://dkuplpgst2o17` and the captured baseline SHA-256
+`1645fa0ad54b5f435e3b8e4a94d1e1baa1f00a9d01a44831687a904527efbb4d`
+are preserved. Final spec SHA-256 is
+`459b16ecf4367ef7c9254961a223a0c7ac0d56e79bc9bbc63b5b89e47b700571`;
+it generates exactly 19 native, script-free nodes from 24 pinned PNG/import pairs.
+The final consolidated MCP/launcher/UXP/Kitchen/native/GPU regression and
+Android/iOS resource-package controls passed. Executable exports/signing/device
+behavior and additional real Photoshop/operator workflows were **NOT EXECUTED**
+in that batch. Android hardware remains **REQUIRES ANDROID DEVICE**; executable
+iOS/Xcode/device behavior remains **REQUIRES MAC/iOS**. Broader installed operator
+and Photoshop/Godot coexistence workflows remain **REQUIRES USER TEST** beyond
+the automated mocks. These are not replaced by ZIP/resource-package checks.
 
 Repository-controlled Photoshop bridge with two compatible read-only tools,
 photoshop_ping and photoshop_get_active_document, plus photoshop_process_image

@@ -97,6 +97,8 @@ class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
     lab_path = LAB_PATH
     lab_root_name = "TotolinaRigLab"
     bootstrap_import = False
+    rendering_method = "gl_compatibility"
+    rendering_driver_windows = None
 
     def control_values(self):
         """Fixed fixture controls; subclasses may substitute their own template."""
@@ -125,7 +127,8 @@ class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
         shutil.copy2(source / "inspection.gd", addon / "inspection.gd")
         shutil.copy2(source / "inspection.gd.uid", addon / "inspection.gd.uid")
         if self.editor_mode:
-            for filename in ("plugin.gd", "rig_lab.gd", "animation_writer.gd", "character_rig.gd"):
+            for filename in ("plugin.gd", "rig_lab.gd", "animation_writer.gd", "character_rig.gd",
+                             "weighted_mesh_2d.gd", "deformation_rig.gd"):
                 if not (source / filename).is_file():
                     continue
                 shutil.copy2(source / filename, addon / filename)
@@ -134,7 +137,7 @@ class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
                 self.editor_control.format(**self.control_values()), encoding="utf-8")
             (addon / "native_editor_transport.gd.uid").write_text("uid://dlghwo7gnmklj\n", encoding="utf-8")
             (addon / "plugin.cfg").write_text('[plugin]\nname="Native writer transport fixture"\n'
-                'description="Disposable native test only"\nauthor="tests"\nversion="0.4.0"\n'
+                'description="Disposable native test only"\nauthor="tests"\nversion="0.5.0"\n'
                 'script="native_editor_transport.gd"\n', encoding="utf-8")
             lab = self.project / self.lab_path
             lab.parent.mkdir(parents=True)
@@ -148,8 +151,11 @@ class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
         shutil.copy2(source / "bridge_client.gd.uid", addon / "bridge_client.gd.uid")
         enabled = ('[editor_plugins]\nenabled=PackedStringArray("res://addons/lunitora_godot/plugin.cfg")\n'
                    if self.editor_mode else '')
+        rendering = f'[rendering]\nrenderer/rendering_method="{self.rendering_method}"\n'
+        if self.rendering_driver_windows is not None:
+            rendering += f'rendering_device/driver.windows="{self.rendering_driver_windows}"\n'
         (self.project / "project.godot").write_text('config_version=5\n\n[application]\nconfig/name="Native bridge validation"\n'
-            + enabled + '[rendering]\nrenderer/rendering_method="gl_compatibility"\n', encoding="utf-8")
+            + enabled + rendering, encoding="utf-8")
         if not self.editor_mode:
             (self.project / "native_bridge.gd").write_text(SCRIPT, encoding="utf-8")
             (self.project / "native_bridge.gd.uid").write_text("uid://dlghwo7gnmklj\n", encoding="utf-8")
@@ -234,16 +240,27 @@ class GodotNativeBridgeTests(unittest.IsolatedAsyncioTestCase):
 
     async def wait_connected(self):
         async with asyncio.timeout(10):
-            while self.bridge._connection is None:
+            while True:
                 if self.process.returncode is not None:
                     self.fail("Native client exited before mutual authentication.")
-                await asyncio.sleep(0.02)
-            if self.editor_mode:
-                while True:
-                    data, _ = await self.bridge.request("godot_get_editor_state", {})
-                    if data["scene"]["path"] == f"res://{self.lab_path}":
-                        break
+                if self.bridge._connection is None:
                     await asyncio.sleep(0.02)
+                    continue
+                if not self.editor_mode:
+                    return
+                try:
+                    data, _ = await self.bridge.request("godot_get_editor_state", {})
+                except BridgeError as error:
+                    if error.code != "DISCONNECTED":
+                        raise
+                    # Plugin reload may retire the socket after it authenticated.
+                    # Only this bounded read readiness poll tolerates reconnects;
+                    # no writer is invoked or retried here.
+                    await asyncio.sleep(0.02)
+                    continue
+                if data["scene"]["path"] == f"res://{self.lab_path}":
+                    return
+                await asyncio.sleep(0.02)
 
     async def test_native_mutual_auth_and_eight_concurrent_read_only_requests(self):
         operations = ["godot_ping", "godot_get_editor_state", "godot_inspect_scene"]

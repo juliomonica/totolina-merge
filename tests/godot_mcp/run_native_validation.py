@@ -35,18 +35,21 @@ ADDON_FILES = (
     "bridge_client.gd.uid", "inspection.gd", "inspection.gd.uid", "rig_lab.gd", "rig_lab.gd.uid",
     "animation_writer.gd", "animation_writer.gd.uid",
     "character_rig.gd", "character_rig.gd.uid", "specs/tolina_character_rig_v1.json",
+    "weighted_mesh_2d.gd", "weighted_mesh_2d.gd.uid", "deformation_rig.gd", "deformation_rig.gd.uid",
+    "specs/rig_test_cat_deformation_v1.json",
 )
 FIXTURE_FILES = ("inspection_validation.gd", "inspection_validation.gd.uid",
                  "rig_lab_validation.gd", "rig_lab_validation.gd.uid",
                  "animation_lab_validation.gd", "animation_lab_validation.gd.uid")
 LAB_PATH = "addons/lunitora_godot/labs/totolina_rig_lab.tscn"
 CHARACTER_LAB_PATH = "addons/lunitora_godot/labs/tolina_character_rig_lab.tscn"
+DEFORMATION_LAB_PATH = "addons/lunitora_godot/labs/rig_test_cat_deformation_lab.tscn"
 
 
 def production_snapshot(repository: Path) -> dict[str, str]:
     """Audit source scenes/resources plus any real lab; never copy them to tests."""
     files = {repository / "project.godot", repository / "export_presets.cfg",
-             repository / LAB_PATH, repository / CHARACTER_LAB_PATH}
+             repository / LAB_PATH, repository / CHARACTER_LAB_PATH, repository / DEFORMATION_LAB_PATH}
     for directory in ("scenes", "resources", "assets", "scripts"):
         location = repository / directory
         if location.is_dir():
@@ -221,7 +224,7 @@ def main() -> int:
             '            controller._normal_process_tick()\n'
             '    super._poll_editor_commands()\n', encoding="utf-8")
         (addon / "plugin.cfg").write_text('[plugin]\nname="Isolated animation writer"\n'
-            'description="Disposable test hook"\nauthor="Lunitora tests"\nversion="0.4.0"\n'
+            'description="Disposable test hook"\nauthor="Lunitora tests"\nversion="0.5.0"\n'
             'script="native_animation_plugin.gd"\n', encoding="utf-8")
         animation_controller = project / "addons" / "animation_lab_validation"
         animation_controller.mkdir()
