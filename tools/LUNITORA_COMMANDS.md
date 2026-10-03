@@ -84,12 +84,11 @@ to rerun setup. Setup now prepares available MCP configuration and reviewed loca
 authentication without launching servers. Compatible existing entries and
 credentials are preserved; project trust and first Photoshop pairing remain
 explicit user actions. `--check` reports proposals without changing anything.
-The PowerShell implementation remains temporary rollback/reference code until Art
-parity is proven on the Photoshop machine. Current Git aliases do not invoke it,
-and it is outside the supported operator workflow. Normal setup and operation
-require no manual PowerShell commands. If Art validation exposes a Python blocker,
-handle recovery deliberately through Git/version history and a reviewed correction
-or rollback, rather than adding user-facing PowerShell commands.
+Windows Core/Game and Art Python workflows are live accepted. The obsolete
+PowerShell launcher/setup implementation and its tests are removed in v0.10.
+Use Python setup and the seven repository-local Git aliases; recovery uses
+reviewed corrections or Git history. Legacy non-secret configuration import
+remains available for older machines.
 
 When dependencies need repair, setup may ask permission to stop only strictly
 verified MCP processes belonging to this checkout. It never closes Godot or

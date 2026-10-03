@@ -668,14 +668,11 @@ git godot
 
 Setup saves validated application metadata in ignored `tools/.lunitora/config.json`,
 imports legacy selections without deleting them, and installs all seven local
-Python aliases. `-Check` validates without repair, startup or shutdown. The old
-PowerShell sources remain temporary rollback/reference code until Art parity is
-proven on the Photoshop machine; they are outside the supported operator workflow.
-All seven current aliases invoke host Python plus `tools/lunitora_launcher.py`,
-never PowerShell. Normal setup and operation require no manual PowerShell commands.
-If Art validation exposes a Python blocker, handle recovery deliberately through
-Git/version history and a reviewed correction or rollback instead of introducing
-user-facing PowerShell commands. Phase 4 provisions
+Python aliases. `--check` validates without repair, startup or shutdown. Windows
+Core/Game and Art Python workflows are live accepted. The obsolete PowerShell
+launcher/setup and its tests are retired in v0.10. All seven aliases invoke host
+Python plus `tools/lunitora_launcher.py`; recovery uses reviewed corrections or
+Git history. Phase 4 provisions
 setup-owned project MCP entries and
 reviewed local authentication. Compatible inherited entries remain untouched;
 trust and live connection acceptance remain explicit user actions.
