@@ -330,10 +330,14 @@ function initializePanel() {
 
   function scheduleReconnect() {
     if (destroyed || reconnectTimer !== null) return;
-    reconnectTimer = setTimeout(() => {
+    const retryGeneration = generation;
+    const timer = setTimeout(() => {
+      // clearTimeout cannot retract a callback already queued by the host.
+      if (destroyed || retryGeneration !== generation || reconnectTimer !== timer) return;
       reconnectTimer = null;
       void connect(true);
     }, RECONNECT_INTERVAL_MS);
+    reconnectTimer = timer;
   }
 
   async function connect(automatic = false) {
@@ -427,6 +431,7 @@ function initializePanel() {
         }
         authenticated = true;
         connecting = false;
+        cancelReconnect();
         clearTimeout(authTimer);
         authTimer = null;
         status.textContent = "Connected · inspection and staging candidates";
@@ -468,6 +473,14 @@ function initializePanel() {
       closedDiagnostic(event, current === generation);
       if (current !== generation) return;
       disconnect();
+      cancelReconnect();
+      if (authenticated && event && event.code === 1000 && event.wasClean === true &&
+          event.reason === "Replaced by authenticated reconnect") {
+        // Another authenticated runtime owns the bridge now. Retrying here makes
+        // installed/development or duplicate panels replace each other forever.
+        status.textContent = "Bridge is owned by another authenticated connection. Use Connect / Reconnect to take over.";
+        return;
+      }
       status.textContent = "Waiting for ChatGPT/Codex. Retrying automatically.";
       scheduleReconnect();
     };

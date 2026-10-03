@@ -49,7 +49,7 @@ def print_summary(name, core, apps, *, emit=print, details=None, integration=Non
                                         environment_present=environment_present).items():
         if isinstance(status, dict):
             emit(f"  {capability}: {status['state']} - {status['reason']}")
-            for field in ("local_configuration", "python_environment", "mcp_configuration", "authentication", "live_connection"):
+            for field in ("local_configuration", "python_environment", "mcp_configuration", "authentication", "photoshop_installed", "udt_installed", "developer_mode_plugin_loading", "protected_bridge_credential", "photoshop_panel_paired", "live_connection", "next_first_time_step"):
                 if field in status:
                     emit(f"    {field.replace('_', ' ')}: {status[field]}")
         else:
@@ -77,6 +77,8 @@ def bootstrap(root: Path, platform, *, check=False, interactive=True, prompt=inp
         emit("Deferred setup continues with read-only readiness inspection; no configuration or credential changes will be attempted.")
     original, config_state = load_setup_config(root, platform.name, check=inspect_only,
                                              interactive=interactive and not inspect_only, prompt=prompt, emit=emit)
+    from .art_guidance import UDT_DESCRIPTION
+    emit(UDT_DESCRIPTION)
     updated, states = resolve_config(original, platform,
                                      interactive=interactive and not inspect_only, prompt=prompt, tolerant=True)
     requirements = catalog(root)
@@ -91,7 +93,8 @@ def bootstrap(root: Path, platform, *, check=False, interactive=True, prompt=inp
         action = "none" if app else requirement.get("action", "Install/configure the application and rerun setup.")
         emit(f"{requirement.get('name', kind)} | {classification} | {state} | version {version} | {action} | other capabilities continue")
         if kind == "udt":
-            emit("UDT is Adobe's developer utility for loading, developing and debugging the Lunitora UXP Photoshop plugin. Photoshop runs Art; UDT is required for developer loading and git art-dev, not daily packaged-plugin use.")
+            from .art_guidance import UDT_DESCRIPTION
+            emit(UDT_DESCRIPTION + " Adobe provides it through Creative Cloud; UDT/Developer Mode currently require administrator/elevated privileges. Core/Game continue without it.")
     if inspect_only:
         emit("Local configuration: " + config_state + ("; repair available" if updated != original else ""))
     else:
@@ -116,7 +119,7 @@ def bootstrap(root: Path, platform, *, check=False, interactive=True, prompt=inp
     if not pairing_available:
         emit("Photoshop bridge pairing: unavailable on this machine because Photoshop is not installed/configured. Core/Game are unaffected; no token was requested or changed.")
     elif deferred and replace_photoshop:
-        emit("Photoshop bridge token replacement is deferred; no token was requested or changed. Rerun python tools/lunitora_setup.py --pair-photoshop after the environment can be updated safely.")
+        emit("Photoshop bridge pairing is deferred; no token was requested or changed. Rerun python tools/lunitora_setup.py --pair-photoshop after the environment can be updated safely.")
     details = inspect_prerequisites(root, platform.name)
     source = json.loads((root / "tools/lunitora_requirements.json").read_text(encoding="utf-8"))
     for requirement in source["prerequisites"]:
@@ -133,6 +136,10 @@ def bootstrap(root: Path, platform, *, check=False, interactive=True, prompt=inp
     print_summary(platform.name, core, updated["applications"], emit=emit, details=details, integration=integration,
                   local_ready=aliases_ready and config_ready, environment_ready=environment["ready"],
                   environment_present=bool(environment.get("python")))
+    if platform.name == "windows":
+        from .authentication import PHOTOSHOP_STORAGE, CAPABILITIES
+        from .art_guidance import emit_first_time
+        emit_first_time(root, root / PHOTOSHOP_STORAGE / CAPABILITIES["photoshop"], emit)
     return 0 if not deferred and core and pairing_available and integration_success(integration, check=inspect_only) else 1
 
 
@@ -140,9 +147,15 @@ def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description="Repository-local Lunitora machine setup. External applications are never installed.")
     parser.add_argument("--check", action="store_true", help="Read-only doctor; no installation, repair or application startup.")
-    parser.add_argument("--pair-photoshop", action="store_true", help="Explicitly replace/reset this machine's Photoshop bridge token using hidden input; reconnect the panel afterward.")
+    parser.add_argument("--pair-photoshop", action="store_true", help="Reuse a valid protected token or privately create/import a first-time token.")
+    parser.add_argument("--repair-photoshop-auth", action="store_true", help="Consent-gated ownership/DACL repair; preserves the existing valid Photoshop token.")
+    parser.add_argument("--migrate-photoshop-auth", action="store_true", help="Consent-gated byte-preserving migration into dedicated protected Windows storage.")
     parser.add_argument("--_host-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.migrate_photoshop_auth and (args.check or args.pair_photoshop or args.repair_photoshop_auth):
+        parser.error("--migrate-photoshop-auth must be used alone.")
+    if args.repair_photoshop_auth and (args.check or args.pair_photoshop):
+        parser.error("--repair-photoshop-auth cannot be combined with --check or --pair-photoshop.")
     if args.check and args.pair_photoshop:
         parser.error("--check cannot be combined with --pair-photoshop; check never requests or replaces a token.")
     root = Path(__file__).absolute().parents[2]
@@ -162,7 +175,17 @@ def main(argv=None):
                 command.append("--check")
             if args.pair_photoshop:
                 command.append("--pair-photoshop")
+            if args.repair_photoshop_auth:
+                command.append("--repair-photoshop-auth")
+            if args.migrate_photoshop_auth:
+                command.append("--migrate-photoshop-auth")
             return subprocess.run(command, check=False).returncode
+        if args.migrate_photoshop_auth:
+            from .photoshop_migration import migrate
+            return migrate(root, name)
+        if args.repair_photoshop_auth:
+            from .photoshop_recovery import repair
+            return repair(root, name)
         state = ensure_environment(root, name, check=args.check, host_python=host,
                                    interactive=not args.check, emit=print)
         deferred = state.get("deferred", False)

@@ -261,6 +261,19 @@ function panel(options = {}) {
       timers.delete(entry[0]); entry[1]();
       await flushPromises();
     },
+    async advanceTime(elapsed) {
+      while (timers.size) {
+        const delay = Math.min(...[...timers.values()].map(callback => callback.delay));
+        if (delay > elapsed) break;
+        for (const callback of timers.values()) callback.delay -= delay;
+        elapsed -= delay;
+        for (const [id, callback] of [...timers]) {
+          if (callback.delay === 0 && timers.delete(id)) callback();
+        }
+        await flushPromises();
+      }
+      for (const callback of timers.values()) callback.delay -= elapsed;
+    },
     get clickHandlers() { return clickHandlers; },
     click: () => elements.connect.click(),
     detail: () => elements["diagnostic-detail"].textContent,
@@ -504,6 +517,61 @@ async function diagnosticTests() {
     ui.sockets.at(-1).onclose({ code: 1000 });
     await ui.fireTimer(5000); ui.open();
     await ui.message({ type: "auth_result", protocol_version: 1, ok: true });
+    assert.equal(ui.sockets.length, 2);
+    assert.equal(ui.timers.size, 0);
+    ui.assertSafe();
+  });
+  await checkPanel("two authenticated panels settle after replacement without retry competition", async () => {
+    const first = panel(), second = panel();
+    await flushPromises();
+    first.open();
+    await first.message({ type: "auth_result", protocol_version: 1, ok: true });
+    second.open();
+    await second.message({ type: "auth_result", protocol_version: 1, ok: true });
+    // Mirror the real server's authenticated replacement close.
+    first.sockets[0].onclose({ code: 1000,
+      reason: "Replaced by authenticated reconnect", wasClean: true });
+    assert.equal(first.timers.size, 0, "Displaced panel must yield instead of replacing the winner again");
+    assert.match(first.elements.status.textContent, /another authenticated connection/);
+    assert.match(second.elements.status.textContent, /^Connected/);
+    assert.equal(second.timers.size, 0);
+    for (let seconds = 0; seconds < 60; seconds += 5) {
+      await first.advanceTime(5000); await second.advanceTime(5000);
+      assert.match(second.elements.status.textContent, /^Connected/);
+      assert.equal(first.sockets.length + second.sockets.length, 2);
+      assert.equal(first.timers.size + second.timers.size, 0);
+      assert.equal([...first.sockets, ...second.sockets].filter(ws => ws.readyState !== 3).length, 1);
+    }
+    await second.message({ type: "request", protocol_version: 1, id: "settled-ping", operation: "photoshop_ping" });
+    assert.equal(second.sockets[0].sent.at(-1).ok, true);
+    // A real server shutdown still retries only the authoritative panel.
+    second.sockets[0].onclose({ code: 1000, reason: "Bridge stopped", wasClean: true });
+    assert.equal(first.timers.size, 0);
+    await second.fireTimer(5000); second.open();
+    await second.message({ type: "auth_result", protocol_version: 1, ok: true });
+    assert.equal(second.sockets.length, 2);
+    assert.equal(second.timers.size, 0);
+    // The operator can explicitly reclaim the connection using the saved token.
+    await first.click(); first.open();
+    await first.message({ type: "auth_result", protocol_version: 1, ok: true });
+    assert.match(first.elements.status.textContent, /^Connected/);
+    assert.equal(first.timers.size, 0);
+    first.assertSafe(); second.assertSafe();
+  });
+  await checkPanel("queued stale retry and socket callbacks cannot disturb an authenticated replacement", async () => {
+    const ui = panel(); await flushPromises();
+    const old = ui.sockets[0], staleClose = old.onclose, staleError = old.onerror;
+    old.onerror({});
+    const staleRetry = [...ui.timers.values()].find(callback => callback.delay === 5000);
+    await ui.click(); ui.open();
+    await ui.message({ type: "auth_result", protocol_version: 1, ok: true });
+    const status = ui.elements.status.textContent, detail = ui.detail();
+    staleRetry();
+    staleClose({ code: 1000, reason: "Replaced by authenticated reconnect", wasClean: true });
+    staleError({});
+    await flushPromises();
+    assert.equal(ui.elements.status.textContent, status);
+    assert.equal(ui.detail(), detail);
     assert.equal(ui.sockets.length, 2);
     assert.equal(ui.timers.size, 0);
     ui.assertSafe();

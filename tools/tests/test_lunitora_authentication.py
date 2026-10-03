@@ -244,7 +244,7 @@ class WindowsProtectedStorage(unittest.TestCase):
         self.config, self.security, self.photoshop = auth._reviewed_modules()
         self.local = self.root / auth.STORAGE
         self.godot = self.local / "godot-auth.json"
-        self.pairing = self.local / "pairing-token.txt"
+        self.pairing = self.root / auth.PHOTOSHOP_STORAGE / "pairing-token.txt"
 
     def tearDown(self):
         self.directory.cleanup()
@@ -326,15 +326,16 @@ class WindowsProtectedStorage(unittest.TestCase):
         before = acl_snapshot(self.local)
         for check in (True, False):
             result = self.provision(("godot", "photoshop"), check=check)
-            self.assertFalse(any(item["ready"] for item in result.values()))
+            self.assertFalse(result["godot"]["ready"])
+            self.assertEqual(result["photoshop"]["ready"], not check)
         after = acl_snapshot(self.local)
         self.assertEqual(before, after)
         self.assertFalse(self.godot.exists())
-        self.assertFalse(self.pairing.exists())
+        self.assertTrue(self.pairing.exists())
 
     def test_valid_legacy_photoshop_token_in_unsafe_storage_is_preserved(self):
         self.local.mkdir()
-        self.pairing.write_bytes(b"p" * 64 + b"\n")
+        (self.local / "pairing-token.txt").write_bytes(b"p" * 64 + b"\n")
         before = self.snapshot()
         descriptor = acl_snapshot(self.local)
         for check in (True, False):

@@ -34,7 +34,7 @@
       "version_policy": ">=27.10.0; UXP manifest v5 and Photoshop API v2",
       "source": "tools/lunitora_mcp/bridges/photoshop_uxp/manifest.json",
       "policy": "manual_install",
-      "action": "Install Photoshop through Creative Cloud; install the reviewed UXP bridge and pair it privately."
+      "action": "Install/open Adobe Creative Cloud Desktop, sign in and install supported Photoshop (manifest minimum 27.10.0) for Art. Lunitora never silently installs Adobe applications; Core/Game continue without Photoshop."
     },
     {
       "id": "udt",
@@ -45,7 +45,7 @@
       "optional_for": ["Art"],
       "version_policy": "No version pin",
       "policy": "manual_install",
-      "action": "Install UXP Developer Tool through Adobe Creative Cloud for developer plugin loading and git art-dev; enable Photoshop Developer Mode and select the repository plugin manifest."
+      "action": "UXP Developer Tool (UDT) is Adobe's utility for loading, developing, debugging and packaging UXP plugins. Install UXP Developer Tools from Creative Cloud > All apps, then enable first-launch Developer Mode with Adobe's admin/elevation prompt. Required for development loading/git art-dev; Core/Game and daily packaged-plugin use continue without it."
     }
   ],
   "prerequisites": [

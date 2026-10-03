@@ -125,17 +125,14 @@ class ProtocolTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 load_config(path)
 
-    def test_setup_creates_once_and_does_not_expose_or_replace_token(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / ".local") as directory:
-            root = Path(directory)
-            path = root / ".local" / "pairing-token.txt"
-            with patch.object(config_module, "ROOT", root), patch.object(config_module, "TOKEN_PATH", path):
-                self.assertIsNone(config_module.load_token())
-                self.assertEqual(config_module.setup_token(), path)
-                token = config_module.load_token()
-                self.assertTrue(config_module.valid_token(token))
-                config_module.setup_token()
-                self.assertEqual(config_module.load_token(), token)
+    def test_setup_delegates_to_reviewed_protected_writer(self):
+        with patch.object(sys, "path", [str(ROOT.parent), *sys.path]):
+            from lunitora_machine import authentication as auth
+        with patch.object(auth, "provision_authentication", return_value={"photoshop": {"ready": True}}) as writer, \
+                patch.object(auth, "storage_for", return_value=auth.PHOTOSHOP_STORAGE):
+            path = config_module.setup_token()
+        self.assertEqual(path, ROOT / ".local/photoshop-auth/pairing-token.txt")
+        writer.assert_called_once()
 
     def test_manifest_permission_and_version_contract(self):
         manifest = json.loads((ROOT / "bridges/photoshop_uxp/manifest.json").read_text())
