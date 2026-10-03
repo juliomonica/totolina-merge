@@ -72,6 +72,37 @@ and [Use the UXP Developer Tool](https://developer.adobe.com/uxp/guides/how-to/u
 (running host required for development loading).
 
 
+## v0.10 post-Art parity cleanup
+
+Windows Core/Game and Windows Art host-Python workflows are live accepted. Setup
+is `python tools/lunitora_setup.py`; read-only inspection is `--check`, and private
+first-time credential setup/reuse is `--pair-photoshop`. All seven repository-local
+aliases (`art`, `art-refresh`, `art-dev`, `dev`, `dev-refresh`, `godot`,
+`godot-refresh`) invoke host Python and `tools/lunitora_launcher.py`.
+
+The obsolete `tools/operator_launcher/{common,launch,setup}.ps1`, its example
+configuration and its two PowerShell-only test suites are removed. No supported
+Python runtime or test invokes them. Historical PowerShell counts and references
+below describe earlier milestones, not retained fallback code. The ignore rule
+for `tools/operator_launcher/config.local.json` and Python import/tests for that
+legacy non-secret configuration remain for users upgrading older machines.
+
+On this Art machine, the legacy `.local/pairing-token.txt` copy was verified as
+valid, regular, single-link, reviewed-owner and byte-identical to the authoritative
+protected `.local/photoshop-auth/pairing-token.txt`. Only the legacy file was
+deleted, through its pinned exclusive Windows handle. The protected token and
+unrelated local files were preserved; protected-only runtime loading and read-only
+authentication validation pass. A subsequent live `photoshop_ping({})` returned
+`ok=true`, `connected=true`, Photoshop `27.10.0` and bridge/plugin `0.1.0`.
+No credential values were printed or logged. This was a bounded machine cleanup,
+not a new automatic deletion feature.
+
+Reviewed credential repair/migration and legacy lookup remain necessary for other
+machines upgrading older checkouts. A present dedicated credential takes precedence;
+unsafe dedicated storage never falls back to legacy storage. Removing the local
+legacy copy does not retire migration support. macOS behavior, asset-registration
+tooling and the pre-existing native recovery-test issue are outside v0.10 scope.
+
 ## v0.8 Milestone Acceptance
 
 The accepted migration status for `tooling/godot-launcher-v0.8` is:
@@ -79,10 +110,10 @@ The accepted migration status for `tooling/godot-launcher-v0.8` is:
 | Area | Status |
 | --- | --- |
 | Windows Core/Game | **LIVE ACCEPTED** |
-| Art workflow | **REQUIRES ART MACHINE** — validate on the Photoshop machine |
+| Windows Art workflow | **LIVE ACCEPTED** — see v0.9 acceptance below |
 | macOS live behavior | **REQUIRES MAC** |
 | Android executable/device behavior | Separate validation; **REQUIRES ANDROID DEVICE** |
-| Legacy PowerShell | Temporary rollback/reference code until Art parity is proven; outside the supported operator workflow |
+| Legacy PowerShell | Retired in v0.10 after Windows Core/Game and Art acceptance; historical evidence remains in Git |
 
 Windows acceptance on 2026-10-02 covers the host-Python migration, clean Git Bash
 output, the visible correct-checkout Godot editor, matching-editor reuse and
@@ -97,13 +128,9 @@ This supersedes earlier pending Windows workstation acceptance below. Historical
 phase counts and execution boundaries remain labeled as such. Fresh-machine
 network installation, actual lingering-MCP recovery, Art pairing/processing,
 macOS native behavior and executable mobile/device tests remain separate.
-Do not remove or rewrite the retained PowerShell implementation before Art parity
-is proven and its retirement is separately reviewed.
-No current Git alias invokes it: all seven use host Python and
-`tools/lunitora_launcher.py`. Normal setup and operation require no manual
-PowerShell commands. If Art-machine validation exposes a Python blocker, handle
-recovery deliberately through Git/version history and a reviewed correction or
-rollback; do not introduce user-facing PowerShell commands as a recovery workflow.
+Windows Art parity is now live accepted. The v0.10 cleanup retires the obsolete
+PowerShell launcher/setup and its tests. All seven aliases use host Python and
+`tools/lunitora_launcher.py`; recovery uses reviewed corrections or Git history.
 
 ### Final Scope Pruning
 
@@ -113,7 +140,7 @@ The v0.8 commit candidate restores these files byte-for-byte to current `main`:
 `tools/operator_launcher/common.ps1`, and
 `tools/operator_launcher/tests/test_godot_launcher.ps1`.
 The untracked `tools/operator_launcher/tests/test_godot_output_detachment.ps1`
-is removed. The retained PowerShell implementation stays at its baseline; clean
+is removed. At that historical milestone, the PowerShell implementation stayed at its baseline; clean
 Godot stdout/stderr detachment and log cleanup belong to the Python launcher.
 Python depends only on the legacy local configuration for migration, not these
 PowerShell implementation or test changes. Accepted host-Python functionality
@@ -199,11 +226,9 @@ git godot
 git godot-refresh
 ```
 
-All seven aliases call host Python plus `tools/lunitora_launcher.py`. Existing
-PowerShell scripts are retained temporarily as rollback/reference code until Art
-parity is proven. Current aliases do not invoke them, and they are not part of the
-supported operator workflow. No manual PowerShell commands are required for normal
-setup or operation. No global Git
+All seven aliases call host Python plus `tools/lunitora_launcher.py`. The obsolete
+PowerShell launcher/setup and PowerShell-only tests are removed in v0.10. Legacy
+non-secret configuration import remains supported for upgrades. No global Git
 configuration, shell profile, startup service or scheduled task is changed.
 Application ownership, safe reconnect and one-attempt launch behavior remain
 part of the launcher contract.
@@ -460,8 +485,8 @@ editing is needed.
 
 Windows Core/Game live migration and the authenticated read-only ping are
 accepted. Real fresh-machine provisioning remains separate from automated
-fixtures. Legacy PowerShell remains temporary rollback/reference code until Art
-parity is proven on the Photoshop machine, outside the supported operator workflow.
+fixtures. Windows Art is also live accepted; obsolete PowerShell launcher/setup
+code is retired in v0.10.
 
 ## macOS And Mobile
 
@@ -501,8 +526,8 @@ The final Windows automated batch passed 262 checks without skips:
 | Python Windows adapter (including three native read-only probes) | 31 |
 | Python detachment/log cleanup (including one native disposable child) | 13 |
 | Metadata-only macOS/mobile/catalog readiness | 14 |
-| Retained PowerShell base launcher | 43 |
-| Retained PowerShell Godot launcher | 49 |
+| Historical PowerShell base launcher | 43 |
+| Historical PowerShell Godot launcher | 49 |
 | Focused deformation/P3 diagnostic regression | 34 |
 
 Fixtures demonstrate setup/rerun, local Git aliases including a real invocation
@@ -564,8 +589,8 @@ The final automated batch passed 363 checks without skips or retries:
 | Authentication provisioning/security (20 contracts, 15 native Windows checks) | 35 |
 | Integration/check/readiness policy | 14 |
 | Existing Godot protected-authentication regression | 13 |
-| Retained PowerShell base launcher | 43 |
-| Retained PowerShell Godot launcher | 49 |
+| Historical PowerShell base launcher | 43 |
+| Historical PowerShell Godot launcher | 49 |
 | Focused deformation/P3 diagnostic regression | 34 |
 
 The Python discovery run executed all 224 Phase 1-4 tests together. Fixtures cover
@@ -593,7 +618,7 @@ acceptance of the corrected bootstrap architecture.
 
 **NOT EXECUTED:** actual Phase 4 workstation dependency update/provisioning,
 fresh-machine installation, live Art portability, full game/mobile batches and
-the retained PowerShell compiled-child proof. **REQUIRES USER TEST:** project
+the historical PowerShell compiled-child proof. **REQUIRES USER TEST:** project
 trust/reload, fresh project MCP startup/authentication and private Photoshop
 pairing. **REQUIRES MAC:** native launcher/configuration/authentication behavior
 and executable iOS/Xcode validation. **REQUIRES ANDROID DEVICE:** executable
@@ -652,7 +677,7 @@ editor writer was run during pruning. The earlier Windows live evidence remains
 applicable because the accepted Python implementation is unchanged.
 
 The previous, pre-pruning milestone review reran 598 tests/checks with host Python
-`3.12.10` x64 (`-I -S -B` for the 459 operator tests), both retained PowerShell
+`3.12.10` x64 (`-I -S -B` for the 459 operator tests), both historical PowerShell
 mock suites and the managed-payload Godot authentication/deformation regressions.
 The completed batch had zero failures, errors or skips. An initial sandboxed
 operator run failed on disposable temporary-directory access; a scoped execution
@@ -682,8 +707,8 @@ rerun. **REQUIRES ART MACHINE:** Adobe installation,
 Developer Mode/UDT loading, private first pairing/reset, live Art processing and
 Art launcher parity. **REQUIRES MAC:** native activation/ownership/refresh/
 authentication and executable iOS/Xcode/device work. **REQUIRES ANDROID DEVICE:**
-executable export/install/device behavior. PowerShell remains temporary
-rollback/reference code until Art parity is proven; current aliases never invoke it.
+executable export/install/device behavior. This historical record predates v0.9
+Art acceptance and v0.10 PowerShell retirement.
 
 ### Historical Correction File Inventory
 
@@ -895,7 +920,7 @@ skips. Developmental sandbox temp-access errors and one output-capture fixture
 assertion were corrected; a strengthened native free-state assertion also caught
 and fixed another-checkout redirector's base-interpreter argv identity. The failed
 empty fixtures were verified and removed.
-The retained standalone compiled-child PowerShell proof was not rerun; native
+The historical standalone compiled-child PowerShell proof was not rerun; native
 Python detachment coverage is included in the complete Python batch.
 
 Actual normal setup was exercised while the real Godot MCP was live. It admitted

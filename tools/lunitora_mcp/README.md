@@ -3,11 +3,9 @@
 Machine setup now uses `python tools/lunitora_setup.py`; the read-only doctor is
 `python tools/lunitora_setup.py --check`. See the authoritative
 [machine setup guide](../../docs/MACHINE_SETUP.md) for the phased v0.8 migration.
-PowerShell source remains temporary rollback/reference code until Art parity is
-proven on the Photoshop machine. Current Git aliases never invoke it, and it is
-outside the supported operator workflow. Normal setup and operation require no
-manual PowerShell commands. The Python bootstrap is the current operator setup
-workflow. Phase 4 provisions reviewed
+Windows Core/Game and Art Python workflows are live accepted. The obsolete
+PowerShell launcher/setup and its tests are retired in v0.10. Python bootstrap
+and repository-local Git aliases are the supported operator workflow. Phase 4 provisions reviewed
 local MCP configuration/authentication; compatible existing entries, restrictions
 and credentials are preserved. Project trust and first UXP pairing remain manual.
 
@@ -188,14 +186,10 @@ and [Use the UXP Developer Tool](https://developer.adobe.com/uxp/guides/how-to/u
 ## Operator convenience v0.8
 
 Daily operator reference: [LUNITORA_COMMANDS.md](../LUNITORA_COMMANDS.md).
-The Python machine setup guide defines the current operator workflow. The
-PowerShell rollback/reference section below and older phase/live-test records are historical
-technical evidence. The retained implementation is temporary rollback/reference
-code until Art parity is proven; it is outside the supported operator workflow
-and no current alias invokes it. Retirement requires separate review. If Art
-validation exposes a Python blocker, handle recovery deliberately through
-Git/version history and a reviewed correction or rollback, without introducing
-user-facing PowerShell commands.
+The Python machine setup guide defines the current operator workflow. Older
+phase/live-test records are historical evidence. The obsolete PowerShell
+implementation is retired in v0.10; recovery uses Git history and reviewed
+corrections.
 Windows Core/Game host-Python migration is **LIVE ACCEPTED**; fresh-machine
 network provisioning remains separate.
 Setup/daily aliases now use validated standalone host Python with standard-library
@@ -300,28 +294,20 @@ the protected local file is then the source for private panel pairing.
 | Token is rejected or stale | The panel reports **Pairing failed. Re-enter the local token.** First re-enter this machine's current protected setup token and choose **Connect / Reconnect**. For a deliberate rotation/reset use `python tools/lunitora_setup.py --pair-photoshop`, then `git art-refresh` and pair the panel again. Do not copy another machine's token or silently reset valid storage. |
 | Secure credential storage is unavailable | Setup must fail closed on unsafe Windows credential storage; review the reported storage problem without weakening ACLs. If only the panel reports session-only pairing, restore Adobe secureStorage availability and reconnect to confirm durable pairing. |
 
-### Retained PowerShell Rollback/Reference Code
+### Legacy launcher retirement (v0.10)
 
-The implementation under `tools/operator_launcher/` is retained temporarily for
-rollback/reference until Art parity is proven. Its source and historical validation
-records remain available for developer review; it is not a supported daily fallback
-or part of the operator workflow. All seven current repository aliases use host
-Python plus `tools/lunitora_launcher.py` and never invoke these PowerShell scripts.
-
-The historical implementation stored machine paths in ignored
-`tools/operator_launcher/config.local.json` and installed PowerShell aliases.
-Those aliases are superseded. Normal setup uses `python tools/lunitora_setup.py`,
-and normal operation uses the current Git aliases; no manual PowerShell command
-is required. If Art-machine validation exposes a Python blocker, recovery must be
-handled deliberately through Git/version history and a reviewed correction or
-rollback, not by asking operators to run the retained scripts.
+The obsolete PowerShell scripts, example configuration and PowerShell-only tests
+under `tools/operator_launcher/` are removed after Windows Core/Game and Art
+acceptance. Git history preserves historical implementation and test evidence.
+The directory's ignore rule remains because Python setup still imports existing
+non-secret `config.local.json` selections for upgrading machines; those local
+files are preserved. All seven aliases use host Python and
+`tools/lunitora_launcher.py`.
 
 ### Host-Python Godot Launcher Behavior
 
-The following v0.8 behavior belongs to the Python launcher. The historical
-PowerShell rollback/reference code remains exactly at current `main`, without
-these new output detachment changes, until Art parity is proven. Current aliases
-do not invoke it.
+The following behavior belongs to the supported host-Python launcher. The
+obsolete PowerShell implementation has been retired.
 
 The v0.8 Godot launch remains visible and asynchronous, but newly launched editor
 stdout and stderr go to separate uniquely named
@@ -375,7 +361,7 @@ protocol `1`, round trip `34.456 ms`, no error. Missing Photoshop/UDT on this
 machine did not block Game. Art validation remains **REQUIRES ART MACHINE**.
 
 **VERIFIED automated:** the final scope-pruned batch totals **620 passing
-tests/checks**: 459 host operator tests, 43 retained PowerShell base checks,
+tests/checks**: 459 host operator tests, 43 historical PowerShell base checks,
 39 baseline PowerShell Godot checks, 13 MCP authentication/configuration tests,
 22 protocol tests, 11 SDK/stdio tests and 33 restored baseline deformation tests.
 The Python disposable-child proof starts no real applications or MCP server.
@@ -569,9 +555,8 @@ For a full automated rerun, first finish Desktop tasks and close Desktop yoursel
 then confirm port 43127 is free. Do not kill an unknown listener. Run from Git Bash:
 
 ```bash
-# From the repository root; the launcher tests do not touch real applications.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/tests/test_launcher.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/tests/test_godot_launcher.ps1
+# From the repository root; the launcher tests use disposable fixtures.
+PYTHONPATH=tools ./tools/lunitora_mcp/.venv/Scripts/python.exe -B -m unittest discover -s tools/tests -v
 cd tools/lunitora_mcp
 ./.venv/Scripts/python.exe -B -m unittest discover -s tests -t . -v
 node tests/test_plugin.js
