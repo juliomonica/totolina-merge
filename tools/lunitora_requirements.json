@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "scope": "Configuration readiness only; no automatic application, SDK or device installation.",
+  "applications": [
+    {
+      "id": "desktop",
+      "name": "Codex Desktop",
+      "purpose": "Own configured MCP stdio processes and provide the desktop development workspace.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Desktop workflows", "Game tooling", "Art tooling"],
+      "optional_for": ["Core environment"],
+      "version_policy": "No version pin; validate the application identity. macOS native control requires separate validation.",
+      "policy": "manual_install",
+      "action": "Install and sign in to Codex Desktop; run setup, review project trust explicitly and reload to validate MCP connectivity."
+    },
+    {
+      "id": "godot",
+      "name": "Godot Editor",
+      "purpose": "Edit, run and validate the native GDScript game and animation labs.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Game", "Android", "iOS"],
+      "optional_for": ["Core", "Art"],
+      "version_policy": "4.7.2-stable (official)",
+      "policy": "manual_install",
+      "action": "Install the official Godot 4.7.2 stable editor and select its executable or macOS application bundle."
+    },
+    {
+      "id": "photoshop",
+      "name": "Adobe Photoshop",
+      "purpose": "Prepare reviewed art candidates through the Lunitora Photoshop UXP bridge.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Art"],
+      "optional_for": ["Core", "Game"],
+      "version_policy": ">=27.10.0; UXP manifest v5 and Photoshop API v2",
+      "source": "tools/lunitora_mcp/bridges/photoshop_uxp/manifest.json",
+      "policy": "manual_install",
+      "action": "Install Photoshop through Creative Cloud; install the reviewed UXP bridge and pair it privately."
+    },
+    {
+      "id": "udt",
+      "name": "UXP Developer Tool (UDT)",
+      "purpose": "Adobe's developer utility for loading, developing and debugging the Lunitora UXP Photoshop plugin; not daily packaged-plugin use.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["plugin development/loading", "art-dev"],
+      "optional_for": ["Art"],
+      "version_policy": "No version pin",
+      "policy": "manual_install",
+      "action": "Install UXP Developer Tool through Adobe Creative Cloud for developer plugin loading and git art-dev; enable Photoshop Developer Mode and select the repository plugin manifest."
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "python",
+      "name": "Standalone Python",
+      "purpose": "Run the setup/check commands, MCP toolkit and standard-library game regressions.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Core"],
+      "optional_for": ["Game", "Android", "iOS", "Art"],
+      "version_policy": "==3.12.*; existing toolkit environment is tools/lunitora_mcp/.venv",
+      "source": "tools/lunitora_mcp/pyproject.toml",
+      "policy": "manual_install",
+      "action": "Install standalone Python 3.12 explicitly; setup detects it but never downloads or installs system Python."
+    },
+    {
+      "id": "python_environment",
+      "name": "Repository Python Environment",
+      "purpose": "Provide the existing checkout-owned tools/lunitora_mcp/.venv environment without modifying system packages.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Core"],
+      "optional_for": [],
+      "version_policy": "Python ==3.12.* and the checked-in requirements.lock",
+      "source": "tools/lunitora_mcp/requirements.lock",
+      "policy": "repository_owned_auto",
+      "action": "Explicit setup may create/install the repo environment; check is read-only and a valid existing environment is preserved."
+    },
+    {
+      "id": "mcp_configuration",
+      "name": "Project MCP Configuration",
+      "purpose": "Prepare only setup-owned direct-Python MCP entries while preserving user policy and inherited compatible entries.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Game tooling", "Art tooling"],
+      "optional_for": ["Core environment"],
+      "version_policy": "Godot nine reviewed tools; Photoshop three reviewed tools; project trust and live acceptance are separate",
+      "source": "tools/lunitora_machine/codex_config.py",
+      "policy": "repository_owned_auto",
+      "action": "Run setup; review conflicting custom entries without replacing them. Explicitly review project trust and reload Desktop yourself."
+    },
+    {
+      "id": "mcp_authentication",
+      "name": "Local MCP Authentication",
+      "purpose": "Provision reviewed local Godot/Photoshop credentials only for configured capabilities; preserve valid protected credentials unless Photoshop replacement is explicitly requested.",
+      "platforms": ["windows"],
+      "required_for": ["Game tooling", "Art tooling"],
+      "optional_for": ["Core environment"],
+      "version_policy": "Existing project-bound Godot schema and Photoshop pairing-token format; Windows protected DACL; macOS REQUIRES MAC",
+      "source": "tools/lunitora_machine/authentication.py",
+      "policy": "repository_owned_auto",
+      "action": "Run setup for private one-time-per-machine Photoshop bridge pairing; hidden input accepts an existing token or generates a new protected token. Review unsafe storage explicitly; macOS authentication requires Mac validation."
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "purpose": "Work with the current checkout and repository-local workflow aliases.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Core"],
+      "optional_for": [],
+      "version_policy": "No version pin; Git for Windows with Git Bash is the validated Windows workflow",
+      "policy": "manual_install",
+      "action": "Install Git; alias setup is local to this repository and never changes global Git configuration."
+    },
+    {
+      "id": "node",
+      "name": "Node.js",
+      "purpose": "Run the optional UXP JavaScript mock regression tests without npm packages.",
+      "platforms": ["windows", "macos"],
+      "required_for": [],
+      "optional_for": ["Art"],
+      "version_policy": "No version pin",
+      "policy": "manual_install",
+      "action": "Install Node only when running the JavaScript mock tests."
+    },
+    {
+      "id": "git_lfs",
+      "name": "Git LFS",
+      "purpose": "Fetch and version editable binary art only when the repository tracks those files with LFS.",
+      "platforms": ["windows", "macos"],
+      "required_for": [],
+      "optional_for": ["Art"],
+      "version_policy": "No version pin; conditional on LFS tracking",
+      "source": "source_art/ART_GUIDE.md",
+      "policy": "manual_install",
+      "action": "Install Git LFS before working with LFS-tracked masters; it is not required by the current text-only .gitattributes."
+    },
+    {
+      "id": "jdk",
+      "name": "Java Development Kit",
+      "purpose": "Build executable Android exports, not resource-package controls.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Android"],
+      "optional_for": ["Core", "Game"],
+      "version_policy": "OpenJDK 17 recommended by Godot 4.7",
+      "policy": "manual_install",
+      "action": "Install a compatible JDK and configure the user-local Java SDK path in Godot."
+    },
+    {
+      "id": "android_sdk",
+      "name": "Android SDK",
+      "purpose": "Build/install Android executables and inspect device availability.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Android"],
+      "optional_for": ["Core", "Game"],
+      "version_policy": "Godot 4.7: Platform-Tools >=35.0.0, Build-Tools 35.0.1, Platform 35, current Command-line Tools; documented native/custom-build packages include CMake 3.10.2.4988404 and NDK 28.1.13356709",
+      "source": "https://docs.godotengine.org/en/4.7/tutorials/export/exporting_for_android.html",
+      "policy": "manual_install",
+      "action": "Install the Android SDK with Android Studio or sdkmanager; accept licenses, configure Godot and authorize devices manually."
+    },
+    {
+      "id": "export_templates_android",
+      "name": "Godot Android Export Templates",
+      "purpose": "Produce Android executables using templates matching the selected editor.",
+      "platforms": ["windows", "macos"],
+      "required_for": ["Android"],
+      "optional_for": ["Game"],
+      "version_policy": "4.7.2.stable, matching the official editor",
+      "policy": "manual_install",
+      "action": "Install matching Godot export templates; resource-package validation alone does not prove executable export readiness."
+    },
+    {
+      "id": "xcode",
+      "name": "Xcode",
+      "purpose": "Build and sign executable iOS exports on a Mac.",
+      "platforms": ["macos"],
+      "required_for": ["iOS"],
+      "optional_for": ["Core", "Game"],
+      "version_policy": "No repository version pin; full Xcode with the applicable iOS SDK is required",
+      "policy": "manual_install",
+      "action": "Install/open Xcode, accept licenses and select its developer directory; account, signing and provisioning remain manual."
+    },
+    {
+      "id": "export_templates_ios",
+      "name": "Godot iOS Export Templates",
+      "purpose": "Export the native iOS project with templates matching the selected editor.",
+      "platforms": ["macos"],
+      "required_for": ["iOS"],
+      "optional_for": ["Game"],
+      "version_policy": "4.7.2.stable, matching the official editor",
+      "policy": "manual_install",
+      "action": "Install matching iOS export templates; Apple team, bundle, certificates, profiles and device work remain explicit user setup."
+    }
+  ]
+}

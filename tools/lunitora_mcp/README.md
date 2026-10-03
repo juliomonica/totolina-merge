@@ -1,5 +1,22 @@
 # Lunitora Photoshop MCP — v0.6 operator convenience
 
+Machine setup now uses `python tools/lunitora_setup.py`; the read-only doctor is
+`python tools/lunitora_setup.py --check`. See the authoritative
+[machine setup guide](../../docs/MACHINE_SETUP.md) for the phased v0.8 migration.
+PowerShell source remains temporary rollback/reference code until Art parity is
+proven on the Photoshop machine. Current Git aliases never invoke it, and it is
+outside the supported operator workflow. Normal setup and operation require no
+manual PowerShell commands. The Python bootstrap is the current operator setup
+workflow. Phase 4 provisions reviewed
+local MCP configuration/authentication; compatible existing entries, restrictions
+and credentials are preserved. Project trust and first UXP pairing remain manual.
+
+Photoshop is required to run the Art workflow. **UXP Developer Tool (UDT)** is
+Adobe's developer utility used to load, develop and debug the Lunitora UXP
+Photoshop plugin. UDT is required for development loading and `git art-dev`, not
+for daily use of an already installed packaged plugin. Missing Art applications
+do not block unrelated Game workflows.
+
 Separate Godot profile: [Godot Animation MCP v0.5 setup and dedicated labs](GODOT_README.md).
 Its three metadata tools remain read-only. `godot_create_rig_lab({})` adds one
 fixed seven-node scaffold only in the dedicated `TotolinaRigLab` scene, with one
@@ -104,71 +121,154 @@ are verified on this workstation. Both read-only tools succeeded through the rea
 Codex MCP integration on 2026-09-29 with the restricted localhost configuration
 below.
 
-## Operator convenience v0.6
+## Operator convenience v0.8
 
 Daily operator reference: [LUNITORA_COMMANDS.md](../LUNITORA_COMMANDS.md).
-This section and the workstation setup below describe the current workflow;
-older phase/live-test records later in this file are historical technical evidence.
+The Python machine setup guide defines the current operator workflow. The
+PowerShell rollback/reference section below and older phase/live-test records are historical
+technical evidence. The retained implementation is temporary rollback/reference
+code until Art parity is proven; it is outside the supported operator workflow
+and no current alias invokes it. Retirement requires separate review. If Art
+validation exposes a Python blocker, handle recovery deliberately through
+Git/version history and a reviewed correction or rollback, without introducing
+user-facing PowerShell commands.
+Windows Core/Game host-Python migration is **LIVE ACCEPTED**; fresh-machine
+network provisioning remains separate.
+Setup/daily aliases now use validated standalone host Python with standard-library
+operator modules; only MCP servers use the managed repo venv. Missing/broken MCP
+dependencies therefore cannot prevent setup or actionable launcher diagnostics.
+The [machine setup guide](../../docs/MACHINE_SETUP.md#managed-environment-repair)
+defines bounded, explicitly approved MCP-only recovery; no editor is closed for
+dependency repair. See the [current milestone acceptance](../../docs/MACHINE_SETUP.md#v08-milestone-acceptance)
+for the accepted Windows launch/reuse/refresh and successful read-only Godot ping.
+Art migration validation is **REQUIRES ART MACHINE**: private pairing, UDT loading,
+Art launcher parity and live processing await the Photoshop machine. macOS live
+behavior remains **REQUIRES MAC**; Android executable/device validation is separate.
 
-### Repository-local launcher setup
+### First Photoshop Plugin Loading And Pairing
 
-From the checkout root in **Git Bash**:
+The **bridge token** is the one-time machine pairing/authentication credential
+for the Lunitora Photoshop bridge, not an Adobe password or Codex credential.
+Normally pairing is required **once per machine**. Local setup can generate this
+machine's token or privately import an existing token. The Photoshop panel sends
+the user-supplied copy to the local server. The panel has no generate, reveal or
+copy button; do not look for a token in UDT logs or Photoshop's UI.
 
-```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/setup.ps1
-```
+1. Install **Photoshop 27.10.0 or newer** through Adobe Creative Cloud. For
+   developer loading, open Creative Cloud Desktop, sign in, select **All apps**,
+   search for **UXP Developer Tools**, and choose **Install**. Lunitora setup
+   detects these applications but does not download or install them.
+   See [Adobe's installation instructions](https://developer.adobe.com/uxp/guides/how-to/developer-tools/).
+2. Launch UDT and choose **Enable** when its first-run **Developer Mode** prompt
+   appears. Approve Adobe's elevation request yourself. In Windows Photoshop,
+   choose **Edit > Preferences > Plugins > Enable Developer Mode**, then quit and
+   reopen Photoshop after handling any unsaved work yourself. These are Adobe's
+   [host Developer Mode steps](https://developer.adobe.com/firefly-services/docs/photoshop/guides/actionjson-endpoint/).
+   Developer Mode is needed for development loading; Lunitora setup does not
+   enable it or grant privileges. Keep Photoshop running so it appears in UDT's
+   connected applications.
+3. Choose **Add Plugin...** (or **Add Existing Plugin...**) in UDT. Select the
+   existing repository file
+   `tools/lunitora_mcp/bridges/photoshop_uxp/manifest.json`; do not create a new
+   plugin. Select the Photoshop host and choose **Load** from the plugin's
+   **Actions** menu. Its name is **Lunitora Photoshop Bridge**, ID
+   `com.lunitora.photoshop.bridge`, version `0.1.0`.
+   See [Adobe's existing-plugin picker](https://adobedocs.github.io/uxp-photoshop/guides/devtool/plugin-management/)
+   and [Load workflow](https://developer.adobe.com/photoshop/uxp/2021/guides/udt-walkthrough/).
+4. From the repository root, run `python tools/lunitora_setup.py`. With Photoshop
+   available and compatible MCP configuration, a missing/invalid token in safe
+   protected storage triggers the private prompt **Photoshop bridge token
+   (hidden; Enter generates a new machine token):**. Paste an existing valid
+   64-character token there if you are restoring this machine's credential, or
+   press **Enter** to generate its token. The prompt does not echo or print it;
+   if hidden input is unavailable, setup stops pairing rather than falling back
+   to visible input. It stores the value only using the reviewed Windows
+   machine-local protected mechanism. A valid existing token is preserved
+   without prompting. Handle project trust and Desktop configuration reload
+   explicitly; Codex owns the bridge server, so do not start a parallel server.
+5. Open Photoshop's **Plugins > Lunitora Photoshop Bridge** panel. It shows the
+   host/UXP/bridge versions, connection status, a **Pairing token** password input
+   and **Connect / Reconnect** button. The token comes from setup's protected,
+   ignored `tools/lunitora_mcp/.local/pairing-token.txt` file, not this panel.
+   Open that file privately in a local editor, copy its value into the password
+   input, close the editor without edits, and clear the clipboard after pasting.
+   Never use terminal output or UDT's console to retrieve it; never put it into
+   `.codex/config.toml`, JSON, environment files, logs, screenshots or Git.
+6. Choose **Connect / Reconnect**. The input is cleared. Require
+   **Connected · inspection and staging candidates** and
+   **Pairing saved securely on this computer.** Only after authentication succeeds
+   does the panel cache its copy using Adobe UXP secureStorage. If instead it
+   reports **Pairing is valid for this session. Secure storage is unavailable.**,
+   that connection works but durable pairing is not confirmed.
+7. On later runs, setup reports **Photoshop bridge authentication: OK** when its
+   protected server token is valid and asks nothing. That status proves local
+   credential readiness, not a live connection; the panel's accepted connection
+   and secure-cache statuses prove pairing. The panel reconnects using its secure
+   cache. Re-pair only after a deliberate credential change, plugin
+   installation/storage reset or authentication rejection.
+   `python tools/lunitora_setup.py --check` only checks local readiness;
+   it never reveals, prints, prompts for, creates or changes a token, and it
+   does not prove a live Photoshop connection.
 
-Setup discovers the registered `OpenAI.Codex` Windows desktop package (whose UI
-may be named `ChatGPT.exe`), Photoshop under Program Files/Adobe, and UXP Developer
-Tool. It validates absolute local executable paths before installing the seven
-aliases with `git config --local`. It never selects the `codex` CLI from PATH.
-Multiple discovered installations require an explicit selection. Photoshop/UDT
-may be absent on a Codex-only workstation; commands that require them fail clearly.
-Existing valid overrides are preserved. After an app update moves its executable,
-rerun setup to discover its current location. For nonstandard installations:
+For a **deliberate rotation/reset**, run
+`python tools/lunitora_setup.py --pair-photoshop`. It prompts privately even when
+a valid token already exists: paste the new valid token or press Enter to generate
+one. Existing safe protected storage is checked before replacement; unsafe or
+unexpectedly changed storage fails closed. Supplying the same token leaves it
+unchanged. Setup does not reveal the previous value, launch applications or
+automatically reconnect anything. From an external Git Bash window after Desktop
+work finishes, run `git art-refresh`, then privately update the Photoshop panel's
+password input and choose **Connect / Reconnect**. Confirm both accepted statuses
+again. `--check` cannot be combined with `--pair-photoshop`.
 
-```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/setup.ps1 \
-  -DesktopExe 'C:\path\to\ChatGPT.exe' \
-  -PhotoshopExe 'C:\path\to\Photoshop.exe' \
-  -UdtExe 'C:\path\to\Adobe UXP Developer Tools.exe' \
-  -GodotExe 'C:\path\to\Godot_v4.7.2-stable_win64.exe'
-```
+There is no plugin-generated value to copy back into setup. Import existing
+credentials only through setup's hidden prompt, never ordinary configuration;
+the protected local file is then the source for private panel pairing.
 
-Machine paths and the expected checkout root live only in ignored
-`tools/operator_launcher/config.local.json`; the tracked example documents the
-original fields and optional `godotExe`. Existing four-field Photoshop launcher
-configurations remain valid. Setup validates/saves an explicit Godot path and
-preserves existing Photoshop/UDT settings. No secrets belong there.
-Moving/copying the checkout requires fresh
-setup (remove the old ignored configuration first). There is no global Git change,
-scheduled task, Python dependency, shell-profile edit, or MCP configuration edit.
-Git shell aliases run from the repository root even when invoked in a subdirectory.
-Each alias calls the tracked `launch.ps1` with its matching mode:
+### Pairing Troubleshooting
 
-```text
-!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 art
-!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 art-refresh
-!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 art-dev
-!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 dev
-!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 dev-refresh
-!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 godot
-!powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/launch.ps1 godot-refresh
-```
+| Symptom | Action |
+| --- | --- |
+| Plugin is not loaded in UDT | Add the exact existing `manifest.json` above and choose **Load** for the Photoshop host. Opening `git art-dev` alone does not load/reload it. |
+| Photoshop is not running or connected to UDT | Start supported Photoshop and confirm it appears in UDT's connected applications before loading. For a disconnected bridge, also let the Codex-owned MCP server start; do not start a competing server. |
+| Developer Mode is not enabled | Enable it in UDT and approve Adobe's requested permissions. In Windows Photoshop, enable **Edit > Preferences > Plugins > Enable Developer Mode**, then restart after protecting unsaved work. Follow Adobe's troubleshooting if its enable action fails; do not edit repository config. |
+| Token is missing/invalid | Rerun `python tools/lunitora_setup.py` and follow its hidden import-or-generate prompt; then privately pair the panel with the protected setup token. Unsafe storage is blocked instead of repaired. Never create a value in tracked config. |
+| Token is rejected or stale | The panel reports **Pairing failed. Re-enter the local token.** First re-enter this machine's current protected setup token and choose **Connect / Reconnect**. For a deliberate rotation/reset use `python tools/lunitora_setup.py --pair-photoshop`, then `git art-refresh` and pair the panel again. Do not copy another machine's token or silently reset valid storage. |
+| Secure credential storage is unavailable | Setup must fail closed on unsafe Windows credential storage; review the reported storage problem without weakening ACLs. If only the panel reports session-only pairing, restore Adobe secureStorage availability and reconnect to confirm durable pairing. |
 
-Use `git art -Check` (or any alias with `-Check`) to validate paths without starting
-or stopping applications. The ordinary commands report application startup status,
-not verified MCP connectivity. Desktop owns configured stdio MCP processes,
-including `lunitora_godot`; the launcher never runs `core.server` or
-`core.godot_server` itself. Do not run a parallel manual server.
+### Retained PowerShell Rollback/Reference Code
 
-The Godot profiles reuse this same `tools/operator_launcher` implementation.
-`git godot` verifies the expected checkout and configured Godot executable, then
-ensures Desktop and the Godot editor are running on this repository with
-`--editor --path <repo-root>`. Detection verifies both the executable path and
-project arguments; a window title does not prove the project. It does not open
-the Project Manager. Neither Godot command opens Photoshop or UDT or touches
-port 43127. See the [Godot launcher guide](GODOT_README.md#repository-local-godot-launcher-v07).
+The implementation under `tools/operator_launcher/` is retained temporarily for
+rollback/reference until Art parity is proven. Its source and historical validation
+records remain available for developer review; it is not a supported daily fallback
+or part of the operator workflow. All seven current repository aliases use host
+Python plus `tools/lunitora_launcher.py` and never invoke these PowerShell scripts.
+
+The historical implementation stored machine paths in ignored
+`tools/operator_launcher/config.local.json` and installed PowerShell aliases.
+Those aliases are superseded. Normal setup uses `python tools/lunitora_setup.py`,
+and normal operation uses the current Git aliases; no manual PowerShell command
+is required. If Art-machine validation exposes a Python blocker, recovery must be
+handled deliberately through Git/version history and a reviewed correction or
+rollback, not by asking operators to run the retained scripts.
+
+### Host-Python Godot Launcher Behavior
+
+The following v0.8 behavior belongs to the Python launcher. The historical
+PowerShell rollback/reference code remains exactly at current `main`, without
+these new output detachment changes, until Art parity is proven. Current aliases
+do not invoke it.
+
+The v0.8 Godot launch remains visible and asynchronous, but newly launched editor
+stdout and stderr go to separate uniquely named
+`%TEMP%\lunitora-godot-launcher\godot-<GUID32>.stdout.log` and
+`godot-<GUID32>.stderr.log` files rather than Git Bash. Both paths are reported.
+Matching-editor reuse creates no logs or log directory. Before a new launch,
+best-effort cleanup removes only matching top-level, non-reparse launcher logs
+older than seven days in the dedicated directory; locked/unreadable files or
+cleanup failure do not prevent launch. No arbitrary temp files are removed.
+Executable selection, project quoting, working directory, one-attempt failure
+behavior, Desktop ownership and MCP reconnect remain unchanged.
 
 Run refresh from **external Git Bash**, after active Desktop tasks finish. It
 closes every process at the configured desktop executable path, first requesting
@@ -202,6 +302,23 @@ Codex and the correct Totolina Merge project without Photoshop or UDT.
 `git godot-refresh` restarted Codex/MCP while preserving the running Godot editor
 and unsaved scene state; the Godot MCP reconnected successfully. The v0.6
 validation below covers the original five art/dev commands.
+This is historical v0.7 live evidence. **Windows Core/Game: LIVE ACCEPTED,
+2026-10-02**, including the corrected host-Python launcher, clean Git Bash output,
+correct-checkout editor reuse, refresh/unsaved-work preservation and MCP reconnect.
+One read-only `godot_ping({})` through configured `lunitora_godot` also succeeded:
+`ok=true`, `connected=true`, Godot `4.7.2-stable (official)`, bridge/plugin `0.5.0`,
+protocol `1`, round trip `34.456 ms`, no error. Missing Photoshop/UDT on this
+machine did not block Game. Art validation remains **REQUIRES ART MACHINE**.
+
+**VERIFIED automated:** the final scope-pruned batch totals **620 passing
+tests/checks**: 459 host operator tests, 43 retained PowerShell base checks,
+39 baseline PowerShell Godot checks, 13 MCP authentication/configuration tests,
+22 protocol tests, 11 SDK/stdio tests and 33 restored baseline deformation tests.
+The Python disposable-child proof starts no real applications or MCP server.
+The historical compiled PowerShell child proof is excluded from the candidate
+and was not rerun. The unrelated P3 wording correction is deferred. See the
+[machine setup validation record](../../docs/MACHINE_SETUP.md#final-host-python-automated-validation)
+for exact counts and execution boundaries.
 
 ### One-time private .ccx installation
 
@@ -386,7 +503,16 @@ after the test run and normal Desktop restart. Do not replace its real token.
 
 ## New Windows Workstation Setup
 
-Follow this sequence on each new PC. Replace placeholders before running commands.
+The current normal bootstrap is `python tools/lunitora_setup.py`; it prepares the
+local environment, aliases and available MCP configuration/authentication. See
+the [machine setup guide](../../docs/MACHINE_SETUP.md#phase-4-provisioning).
+The manual walkthrough below is retained technical/legacy reference, not a
+requirement to create aliases, install dependencies or edit config by hand.
+Photoshop installation, reviewed bridge installation and private first pairing
+remain manual.
+
+The following walkthrough records historical setup and inspection acceptance.
+Use the current Python bootstrap and pairing instructions above on each new PC.
 Shell examples use **Git Bash**: `<repo-path-bash>` is the checkout's absolute
 Bash path, such as `/d/Development/totolina-merge`. In TOML, `<repo-path>` is the
 same checkout's Windows path, such as `D:\Development\totolina-merge`.
@@ -432,7 +558,7 @@ Each machine uses its own paths.
    unnecessary; use `.venv/Scripts/python.exe` directly. The lock pins all 30
    dependencies, including `mcp==2.2.0` and `websockets==17.1`.
 
-4. **Generate this machine's pairing token.**
+4. **Historical token-creation reference, not the current setup command.**
 
    ~~~bash
    ./.venv/Scripts/python.exe -B -m core.server --setup
@@ -442,6 +568,12 @@ Each machine uses its own paths.
    token. It prints only the file location, never the token. Repeating setup
    preserves an existing valid token. Never copy or share another workstation's
    token, `.local` directory, or Python environment.
+
+   Do not use this older plain-file creation workflow for a new v0.8 machine:
+   it does not provision the reviewed Windows protected storage used by current
+   setup. Use `python tools/lunitora_setup.py` from the repository root and follow
+   its private pairing prompt instead. Existing valid tokens in unsafe storage
+   remain blocked; setup does not silently weaken or repair their ACLs.
 
 5. **Keep local files out of Git.** `.local/` (including the token), `.venv/`,
    `__pycache__/`, `*.py[cod]`, `*.log`, `*.egg-info/`, and `config.local.toml`
@@ -504,7 +636,9 @@ Each machine uses its own paths.
     `has_document=false, document=null` result, not a disconnect. These tools
     only inspect; they do not edit, save, or export.
 
-12. **Troubleshoot.** Install the launcher aliases above, then use `git art-refresh`
+12. **Troubleshoot.** From the repository root, run `python tools/lunitora_setup.py`
+    to prepare current
+    host-Python aliases, then use `git art-refresh`
     from external Git Bash for `PORT_IN_USE` recovery. There is no alternate-port
     fallback. To inspect a listener manually:
 

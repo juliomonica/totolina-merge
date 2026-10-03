@@ -11,3 +11,11 @@
 # Ignored files
 /source_art/_inbox/
 /source_art/_staging/
+
+# Machine bootstrap state; paths never belong to committed project configuration.
+/tools/.lunitora/
+/.codex/config.toml
+/.codex/.lunitora-codex-*.tmp
+/tools/__pycache__/
+/tools/lunitora_machine/**/__pycache__/
+/tools/tests/__pycache__/
