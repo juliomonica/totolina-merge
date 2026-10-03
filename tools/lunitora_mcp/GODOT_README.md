@@ -1,5 +1,11 @@
 # Lunitora Godot Animation MCP v0.5
 
+The authoritative machine setup command is `python tools/lunitora_setup.py`;
+the read-only doctor is `python tools/lunitora_setup.py --check`.
+See [machine setup](../../docs/MACHINE_SETUP.md) for the host-Python launcher
+architecture and current Windows Core/Game **LIVE ACCEPTED** status.
+The launcher migration preserves the reviewed Godot transport/tool contract.
+
 This editor bridge exposes the three existing metadata tools, `godot_ping`,
 `godot_get_editor_state`, and `godot_inspect_scene`, plus six fixed lab operations:
 `godot_create_rig_lab`, `godot_create_rig_lab_animation`,
@@ -9,7 +15,7 @@ All nine accept exactly `{}`; extra fields are rejected. Bridge and editor-plugi
 transport protocol remains **1**. The Codex-owned Python stdio server listens on **127.0.0.1:43128**;
 Godot's `WebSocketPeer` connects from the enabled editor plugin. Photoshop's
 server, implementation, and **43127** port are separate. The Godot and Photoshop
-profiles share the existing `tools/operator_launcher` implementation.
+launcher profiles use host Python plus `tools/lunitora_launcher.py`.
 
 The three inspection operations retain their read-only behavior. The rig operation
 creates the seven-node scaffold; the separate animation operation requires that
@@ -601,49 +607,45 @@ installed `4.7.2.stable` templates.
 
 ## New-computer setup
 
+Use `python tools/lunitora_setup.py` for the current environment, alias and
+available MCP/authentication bootstrap. Project trust and live Desktop connection
+remain explicit user actions. The configuration example below documents the
+reviewed contract, not a normal requirement to edit config manually; compatible
+existing entries and narrower user restrictions are preserved by setup.
+
 Use Windows, Python **3.12.x**, and the project-compatible Godot **4.7.2** editor.
-Keep the toolkit's existing `requirements.lock`; the Godot bridge adds no package
-pins or generalized transport framework. Run the following from the checkout
-root in PowerShell, adjusting only the checkout and installed executables on a
-different PC:
+Setup creates an absent managed MCP venv, reuses a healthy one and verifies the
+existing platform-qualified `requirements.lock`. It runs on standalone host
+Python with stdlib operator modules; only MCP servers use the repo venv as their
+runtime. Run from the checkout root:
 
-```powershell
-py -3.12 -m venv tools/lunitora_mcp/.venv
-& ./tools/lunitora_mcp/.venv/Scripts/python.exe -m pip install -r ./tools/lunitora_mcp/requirements.lock
+```sh
+python tools/lunitora_setup.py
+python tools/lunitora_setup.py --check
 ```
 
-Reuse an existing Python 3.12 toolkit environment. Do not recreate an environment
-already used by Photoshop. Check its interpreter first:
-
-```powershell
-& ./tools/lunitora_mcp/.venv/Scripts/python.exe --version
-```
-
-Add this separate entry to the user-level Codex `config.toml`. These are this
-workstation's actual paths:
+For contract reference only, the generated project MCP entry has this shape.
+`<repo-path>` is a placeholder; actual machine-local paths remain in ignored
+configuration. Setup preserves compatible inherited entries and narrower user
+restrictions without writing global configuration.
 
 ```toml
 [mcp_servers.lunitora_godot]
-command = 'D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp\.venv\Scripts\python.exe'
+command = '<repo-path>\tools\lunitora_mcp\.venv\Scripts\python.exe'
 args = ['-B', '-m', 'core.godot_server']
-cwd = 'D:\Development\LunitoraGames\totolina-merge\tools\lunitora_mcp'
+cwd = '<repo-path>\tools\lunitora_mcp'
 startup_timeout_sec = 15
 tool_timeout_sec = 10
-enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene', 'godot_create_rig_lab', 'godot_create_rig_lab_animation', 'godot_create_tolina_rig_lab', 'godot_create_tolina_lab_blink']
+enabled_tools = ['godot_ping', 'godot_get_editor_state', 'godot_inspect_scene', 'godot_create_rig_lab', 'godot_create_rig_lab_animation', 'godot_create_tolina_rig_lab', 'godot_create_tolina_lab_blink', 'godot_create_rig_test_cat_deformation_lab', 'godot_create_rig_test_cat_deformation_demo']
 ```
 
-On this PC the user configuration is `C:\Users\julio\.codex\config.toml`.
 Preserve the existing Photoshop entry and all unrelated configuration. Do not
 put credentials in the config, command arguments, or environment. Restart the
 Codex connection/app as needed to discover the newly configured server; a file
 edit alone does not prove this chat has loaded or called it.
 
-For daily editor startup, configure and use the repository-local launcher below.
-The equivalent direct editor command is:
-
-```powershell
-& 'C:/path/to/Godot_v4.7.2-stable_win64.exe' --editor --path 'C:/path/to/totolina-merge'
-```
+For daily editor startup, configure and use the repository-local Python launcher
+below with `git godot`; no manual PowerShell command is required.
 
 `project.godot` enables `addons/lunitora_godot/plugin.cfg`. Godot can start before
 Codex: the plugin waits for the credential and listener, then authenticates. It
@@ -653,31 +655,66 @@ Only one owning Python listener and one authenticated editor are supported.
 A port conflict returns an explicit availability error and never selects a new
 port or terminates the existing listener.
 
-## Repository-local Godot launcher v0.7
+## Repository-local Godot launcher v0.8
 
-Reuse the existing launcher; no second launcher or manual Python server is needed.
-From the checkout root in Git Bash, validate/save the installed Godot executable:
+Use the Python launcher; no parallel MCP server is started. From the checkout root
+in Git Bash, run setup and let it validate/discover the installed Godot executable:
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/operator_launcher/setup.ps1 \
-  -GodotExe 'C:\path\to\Godot_v4.7.2-stable_win64.exe'
+python tools/lunitora_setup.py
 git godot -Check
 git godot
 ```
 
-Setup saves optional `godotExe` in ignored
-`tools/operator_launcher/config.local.json`, preserves the existing Photoshop/UDT
-configuration, and installs all seven repository-local aliases. Legacy
-four-field configurations remain valid for art/dev commands. `-Check` validates
-configuration without starting or stopping applications.
+Setup saves validated application metadata in ignored `tools/.lunitora/config.json`,
+imports legacy selections without deleting them, and installs all seven local
+Python aliases. `-Check` validates without repair, startup or shutdown. The old
+PowerShell sources remain temporary rollback/reference code until Art parity is
+proven on the Photoshop machine; they are outside the supported operator workflow.
+All seven current aliases invoke host Python plus `tools/lunitora_launcher.py`,
+never PowerShell. Normal setup and operation require no manual PowerShell commands.
+If Art validation exposes a Python blocker, handle recovery deliberately through
+Git/version history and a reviewed correction or rollback instead of introducing
+user-facing PowerShell commands. Phase 4 provisions
+setup-owned project MCP entries and
+reviewed local authentication. Compatible inherited entries remain untouched;
+trust and live connection acceptance remain explicit user actions.
+Setup and all seven aliases run on validated standalone host Python; their
+operator modules are standard-library-only. The managed MCP venv is a server
+payload, not the launcher runtime. Missing/unhealthy payloads return a setup
+instruction before Desktop launch. Explicit setup can recover only pinned,
+strictly verified same-checkout MCP processes with consent; Godot itself remains
+open. See [managed environment repair](../../docs/MACHINE_SETUP.md#managed-environment-repair).
 
 `git godot` ensures this is the configured `totolina-merge` checkout, starts
 ChatGPT/Codex Desktop if needed, and opens the configured Godot 4.7.2 editor using
 `--editor --path <repo-root>`. It verifies executable path and project arguments
 when detecting an already running editor; window titles alone are insufficient.
-It does not open the Project Manager, Photoshop, or UXP Developer Tool, and does
+It does not open the Project Manager, Photoshop, or UXP Developer Tool (UDT), and does
 not touch Photoshop port 43127. Codex owns the `lunitora_godot` stdio MCP process;
 the launcher never starts `core.godot_server` manually.
+
+For a new editor launch, Python `subprocess.Popen` redirects stdout and stderr to separate
+files outside the repository:
+
+```text
+%TEMP%\lunitora-godot-launcher\godot-<GUID32>.stdout.log
+%TEMP%\lunitora-godot-launcher\godot-<GUID32>.stderr.log
+```
+
+The unique pair prevents historical or concurrent logs from colliding. The
+launcher reports the paths and returns without waiting; the Godot editor remains
+visible. Executable selection, quoted project arguments and working directory
+are unchanged. Reusing an already running matching editor creates neither logs
+nor the log directory. Launch failure is reported after one attempt, without a
+retry or fallback that writes Godot output into the terminal.
+
+Before a new launch, cleanup best-effort removes only this launcher's matching
+top-level, non-reparse log files older than seven days in that dedicated directory.
+Unreadable or locked files and cleanup failures are nonfatal. No arbitrary temp
+files, nested directories or files outside that location are deleted. Desktop
+ownership, Codex-owned `lunitora_godot`, reconnect and Git/MCP configuration are
+unchanged; no wrapper launcher or background service is introduced.
 
 Run `git godot-refresh` from external Git Bash after active Desktop work finishes.
 It fully restarts Desktop, allows the old Codex-owned Godot MCP process to exit,
@@ -691,6 +728,44 @@ The original five art/dev commands retain their 2026-09-30 live verification.
 Codex and the correct Totolina Merge project without Photoshop or UDT.
 `git godot-refresh` restarted Codex/MCP while preserving the running Godot editor
 and unsaved scene state; the Godot MCP reconnected successfully.
+This is historical v0.7 live evidence and does not validate v0.8 terminal output
+detachment.
+
+### v0.8 targeted validation
+
+The [machine setup guide](../../docs/MACHINE_SETUP.md#final-host-python-automated-validation)
+records the final scope-pruned host-Python batch and execution boundaries:
+**620 passing tests/checks**, comprising 459 host operator tests, 43 baseline
+PowerShell base checks, 39 baseline PowerShell Godot checks, 13 MCP authentication/
+configuration tests, 22 protocol tests, 11 SDK/stdio tests and 33 restored baseline
+deformation tests. The native Python disposable-child proof verifies separate
+delayed output after launcher exit and leaves invoking-shell captures clean.
+It starts no Godot, Desktop or MCP server. Run operator tests from the checkout
+root using the validated standalone Python 3.12 host:
+
+```bash
+python -I -S -B -m unittest discover -s tools/tests -p 'test_lunitora_*.py' -v
+```
+
+The earlier PowerShell compiled-child 12/12 evidence is historical; that proof
+is excluded from the milestone candidate and was not rerun. The behavior-neutral
+P3 busy-editor wording correction is deferred as a tiny tooling follow-up.
+Automated fixtures alone do not
+establish application, Mac or device acceptance.
+
+**Windows Core/Game: LIVE ACCEPTED, 2026-10-02.** The corrected host-Python
+migration, clean Git Bash prompt, visible correct-checkout editor, matching-editor
+reuse and `git godot-refresh` preservation of editor/unsaved work with MCP
+reconnect are accepted. The configured `lunitora_godot` MCP completed one
+read-only `godot_ping({})`: `ok=true`, `connected=true`, `read_only=true`, protocol
+`1`, Godot `4.7.2-stable (official)`, bridge/plugin `0.5.0`, project
+`Totolina Merge`, round trip `34.456 ms`, no error. No writer was invoked.
+
+Missing Photoshop/UDT on the Game machine did not block Core/Game. Art parity,
+private pairing and live processing remain **REQUIRES ART MACHINE**. macOS live
+behavior remains **REQUIRES MAC**. Android executable export/install and
+**REQUIRES ANDROID DEVICE** tests remain separate. Fresh-machine network package
+installation and recovery of actual lingering MCP processes are **NOT EXECUTED**.
 
 ## Automatic local credential
 
@@ -1050,7 +1125,7 @@ tools/lunitora_mcp/tests/test_godot_stdio.py
 ```
 
 Local-only setup comprises the separate `lunitora_godot` entry in
-`C:\Users\julio\.codex\config.toml`, the ignored toolkit `.venv`, and the ignored
+`%USERPROFILE%\.codex\config.toml`, the ignored toolkit `.venv`, and the ignored
 automatic `.local/godot-auth.json`. Ignored `.godot/` and temporary directories
 hold editor imports, isolated test copies, logs, screenshots, and export ZIPs.
 These local files are not part of the Git change set. All previous user
@@ -1063,7 +1138,7 @@ validation support, and preserves the existing launcher and Photoshop profiles.
 ## Historical recorded validation — v0.1, 2026-09-30
 
 This is the historical v0.1 implementation record. Current launcher acceptance
-is recorded in [Repository-local Godot launcher v0.7](#repository-local-godot-launcher-v07);
+is recorded in [Repository-local Godot launcher v0.8](#repository-local-godot-launcher-v08);
 the broader GUI and device checks below retain their original validation status.
 
 The implementation is on `tooling/godot-animation-mcp-v0.1` at unchanged HEAD
@@ -1143,7 +1218,7 @@ probes are absent. These are physical-package checks with the actual helper and
 scene, rather than preset-string checks or synthetic placeholders alone.
 
 Evidence remains in the local temporary directory
-`C:\Users\julio\AppData\Local\Temp\lunitora-godot-v02-regressions-5847612491b54ad58c779b666fac9376`:
+`%TEMP%\lunitora-godot-v02-regressions-5847612491b54ad58c779b666fac9376`:
 `photoshop-python-retry.log`, `uxp-plugin.log`, `uxp-processing.log`,
 `launcher-base.log`, `launcher-godot.log`, `kitchen-runner-unit-retry.log`,
 `kitchen-retry-runner.log`, `kitchen-retry/` logs/captures,
@@ -1154,9 +1229,9 @@ and `exports-final-retry/`; the final verified run exercises the persistent
 temporary-path isolation. Initial sandbox attempts were retained separately;
 the clean Windows-permission retries above are the passing results. The native
 editor acceptance was rerun with private process-temporary paths; final evidence
-is at `C:\Users\julio\AppData\Local\Temp\lunitora-godot-native-y_cstvh9`.
+is at `%TEMP%\lunitora-godot-native-y_cstvh9`.
 Complete final Python discovery is recorded in
-`C:\Users\julio\AppData\Local\Temp\lunitora-godot-v02-final-320d184fa1ce4a9a8862448f1d304658\godot-python-all.log`.
+`%TEMP%\lunitora-godot-v02-final-320d184fa1ce4a9a8862448f1d304658\godot-python-all.log`.
 Per-case native safety logs and evidence are retained in the ignored
 `tools/lunitora_mcp/.local/native-safety-logs/` directory.
 
