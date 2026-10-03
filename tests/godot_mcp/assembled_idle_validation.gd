@@ -78,7 +78,9 @@ func verify_structure(specimen: Node2D) -> void:
 		expected[shoulder + "/UpperArm" + side] = "Sprite2D"
 		expected[shoulder + "/UpperArm" + side + "/Elbow" + side] = "Node2D"
 		expected[shoulder + "/UpperArm" + side + "/Elbow" + side + "/LowerArmPaw" + side] = "Sprite2D"
-	require(count_nodes(specimen) == 25, "Assembled scene must contain exactly25 nodes")
+		for layer in ["ArmSocketBack", "ArmSleeveNearWall", "ArmCuffLipFront"]:
+			expected[BODY + "/" + layer + side] = "Sprite2D"
+	require(count_nodes(specimen) == 31, "Assembled scene must contain exactly31 nodes")
 	require(String(specimen.name) == "RigTestCatAssembledIdleLab", "Unexpected lab root")
 	for path in expected:
 		require(specimen.has_node(path), "Missing fixed node: " + path)
@@ -87,6 +89,29 @@ func verify_structure(specimen: Node2D) -> void:
 		require(node.get_script() == null, "Authored scene must have no runtime scripts")
 		if node is Sprite2D or node is Polygon2D:
 			require(node.texture != null and node.texture.resource_path.begins_with("res://addons/lunitora_godot/test_assets/rig_test_cat/"), "Unexpected artwork")
+			require(node.material == null, "Cuff sandwich must not require shader masking")
+	var overlay_contract := {
+		"L": {"position": Vector2(267, 525), "size": Vector2(153, 163), "lower_position": Vector2(1396.7734, -1646.1658), "lower_rotation": -1.9765847, "lower_offset": Vector2(-860, -240)},
+		"R": {"position": Vector2(-412, 526), "size": Vector2(143, 162), "lower_position": Vector2(-1844.1476, -1055.0321), "lower_rotation": 1.4105227, "lower_offset": Vector2(-380, -210)}}
+	var layers := {"ArmSocketBack": ["socket_back", 0], "ArmSleeveNearWall": ["sleeve_near_wall", 2], "ArmCuffLipFront": ["cuff_lip_front", 3]}
+	for side in overlay_contract:
+		var contract: Dictionary = overlay_contract[side]
+		var lower: Sprite2D = specimen.get_node(BODY + "/Shoulder" + side + "/UpperArm" + side + "/Elbow" + side + "/LowerArmPaw" + side)
+		for layer in layers:
+			var attachment: Sprite2D = specimen.get_node(BODY + "/" + layer + side)
+			require(attachment.position == contract.position and attachment.scale == Vector2.ONE and attachment.rotation == 0.0, "Sleeve attachment registration changed: " + layer + side)
+			require(not attachment.centered and attachment.offset == Vector2.ZERO and attachment.z_index == layers[layer][1] and attachment.z_as_relative, "Sleeve attachment ordering changed: " + layer + side)
+			require(attachment.texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR, "Sleeve attachment filtering changed: " + layer + side)
+			require(attachment.texture.resource_path == "res://addons/lunitora_godot/test_assets/rig_test_cat/arms/rig_test_cat_arm_" + layers[layer][0] + "_" + side.to_lower() + ".png", "Sleeve attachment texture identity changed: " + layer + side)
+			require(attachment.texture.get_size() == contract.size, "Sleeve attachment canvas changed: " + layer + side)
+			if layer == "ArmSocketBack":
+				require(attachment.get_index() > specimen.get_node(BODY + "/Torso").get_index(), "Socket back must draw after the sleeve exterior: " + side)
+		require(lower.position == contract.lower_position and lower.rotation == f32(contract.lower_rotation), "Accepted manual arm placement changed: " + side)
+		require(lower.scale == Vector2.ONE and not lower.centered and lower.offset == contract.lower_offset and lower.z_index == 1, "Accepted lower sprite registration/order changed: " + side)
+		require(lower.texture.get_size() == Vector2(1254, 1254), "Lower-arm canvas must remain1254 square: " + side)
+	report["manual_arm_placement_preserved"] = true
+	report["cuff_overlays_static"] = true
+	report["sleeve_attachment_layers_static"] = true
 	var animation_player: AnimationPlayer = specimen.get_node("CharacterRoot/AnimationPlayer")
 	require(animation_player.get_animation_list() == PackedStringArray(["RESET", "idle"]), "Only idle and RESET are allowed")
 	require(animation_player.autoplay.is_empty(), "Idle must be opt-in")
@@ -138,7 +163,7 @@ func verify_structure(specimen: Node2D) -> void:
 		require(float(reset.track_get_key_value(track, 0)) == float(idle.track_get_key_value(idle.find_track(path, Animation.TYPE_VALUE), 0)), "RESET differs from idle rest")
 		require(absf(value_at(specimen.get_node("CharacterRoot"), path) - f32(float(reset.track_get_key_value(track, 0)))) < 0.000001, "RESET key differs from authored nativefloat rest property")
 	report["tracks"] = tracks
-	report["node_count"] = 25
+	report["node_count"] = 31
 	report["idle_key_count"] = 50
 	report["reset_key_count"] = 10
 
@@ -207,7 +232,9 @@ func check_pose(time: float) -> void:
 	if failed:
 		return
 	var current := transforms(scene)
-	for path in [".", "CharacterRoot", "CharacterRoot/LowerFootL", "CharacterRoot/LowerFootR", BODY + "/ScarfForeground", BODY + "/HeadPivot/Head"]:
+	for path in [".", "CharacterRoot", "CharacterRoot/LowerFootL", "CharacterRoot/LowerFootR", BODY + "/ScarfForeground", BODY + "/HeadPivot/Head",
+		BODY + "/ArmSocketBackL", BODY + "/ArmSocketBackR", BODY + "/ArmSleeveNearWallL", BODY + "/ArmSleeveNearWallR", BODY + "/ArmCuffLipFrontL", BODY + "/ArmCuffLipFrontR",
+		BODY + "/ShoulderL/UpperArmL/ElbowL/LowerArmPawL", BODY + "/ShoulderR/UpperArmR/ElbowR/LowerArmPawR"]:
 		require(current[path] == rest[path], "Static authored part moved: " + path)
 	var segment := mini(int(fposmod(time, 6.0) / 1.5), 3)
 	var u := (fposmod(time, 6.0) - segment * 1.5) / 1.5
@@ -303,9 +330,13 @@ func capture_closeups(view: SubViewport) -> void:
 			if part in ["shoulder_l", "elbow_l", "shoulder_r", "elbow_r"]:
 				var side := "L" if part.ends_with("_l") else "R"
 				var node: Node2D = scene.get_node(BODY + "/Shoulder" + side)
-				if part.begins_with("elbow"):
-					node = node.get_node("UpperArm" + side + "/Elbow" + side)
 				center = node.global_position
+				if part.begins_with("elbow"):
+					# Manual art placement moves the visible socket away from the
+					# technical elbow origin. Inspect the accepted cuff/forearm seam.
+					var torso: Sprite2D = scene.get_node(BODY + "/Torso")
+					var socket := Vector2(890, 650) if side == "L" else Vector2(217, 650)
+					center = torso.global_transform * (socket + torso.offset)
 				zoom = 2.0 / scene.get_node("CharacterRoot").scale.x
 			elif part == "neck":
 				center = scene.get_node(BODY + "/HeadPivot").global_position

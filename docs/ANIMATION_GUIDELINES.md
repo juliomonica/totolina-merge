@@ -755,3 +755,414 @@ names in content data, and merge/reward authority in gameplay. Production may
 uniformly fit the visual root to the available viewport without changing pose
 timing, source pivots, or any physics transform. Compare lab captures before/after
 structural changes to ensure the approved output has not drifted.
+
+---
+
+# 31. Visual Animation Problem-Solving
+
+These lessons from the assembled rig-test-cat apply to future Lunitora
+characters and games across engines and tools.
+
+## Decision Ownership
+
+### Codex
+
+Codex is responsible for visual and technical problem-solving. When an assembled
+character or animation looks unnatural, Codex should:
+
+- inspect the complete character and full animation, not only the rest pose;
+- identify likely root causes without waiting for the user to diagnose individual
+  transforms;
+- test multiple bounded solutions when appropriate, comparing transforms,
+  pivots, hierarchy, layering, z-order, underlap, clipping and artwork changes;
+- reject fixes that work in one pose but fail during motion, and prefer the
+  smallest solution that stays visually correct throughout the animation;
+- distinguish art-preparation problems from rig/animation problems, avoiding
+  unnecessary rig complexity to compensate for bad artwork;
+- present the best validated candidate for human visual approval.
+
+Codex should not require the user to prescribe every pixel-level or
+transform-level correction.
+
+### MCP / Tooling
+
+MCP/tooling provides deterministic capabilities and safety. It should:
+
+- inspect exact scene/resource state and expose exact transforms, pivots,
+  animation values and resource identity;
+- apply allowed deterministic edits;
+- measure geometry, gaps, collisions, bounds and registration;
+- capture/render representative poses where supported;
+- preserve native Undo/Redo and no-auto-save guarantees where applicable;
+- validate deterministic contracts and fail closed when state is unsafe or
+  ambiguous.
+
+MCP/tooling should not make subjective artistic decisions about whether an arm,
+pose, silhouette or movement looks natural. These responsibilities describe
+tooling where supported, not a requirement to expand its capabilities.
+
+### Human
+
+The user provides final artistic and product approval. Human review decides
+whether motion feels natural, silhouettes and proportions read correctly,
+overlaps look convincing, an artistic compromise is acceptable, and the
+animation is visually ready to ship or proceed.
+
+## Pre-Animation Asset Readiness Gate
+
+Before rigging or animation begins, Codex must inspect the complete character
+artwork and proposed motion to determine whether the available assets are
+sufficient.
+
+Animation should not proceed merely because each major body part has an image.
+
+For every moving attachment, Codex must determine:
+
+- moving hierarchy;
+- intended pivot;
+- motion envelope;
+- required hidden underlap;
+- foreground/background occlusion;
+- whether a moving part must pass between back and front artwork layers;
+- whether terminating outlines could become visible during motion;
+- whether additional overlay, socket, mask, or split artwork is required.
+
+Codex should reason about the represented physical structure first.
+
+Examples:
+
+- sleeve: sleeve back → forearm → sleeve front lip;
+- collar: back collar → neck → front collar;
+- hair: back hair → head → bangs/front hair;
+- hand holding object: back fingers → object → front fingers;
+- eyelids: face/eye base → eye → foreground eyelid as required.
+
+Before animation implementation, Codex must provide an **Asset Readiness Report**
+classifying each relevant asset as:
+
+- `READY`
+- `MISSING_REQUIRED`
+- `NEEDS_REGISTRATION`
+- `NEEDS_ART_EDIT`
+- `OPTIONAL`
+
+For every missing required asset, specify:
+
+- filename;
+- purpose;
+- front/back layer relationship;
+- expected canvas/registration;
+- pivot/anchor relationship;
+- required overlap region;
+- whether it can be derived safely from existing artwork.
+
+Do not begin full animation until all `MISSING_REQUIRED`, `NEEDS_REGISTRATION`,
+and blocking `NEEDS_ART_EDIT` items are resolved or explicitly accepted by the
+user as temporary limitations.
+
+Codex owns this analysis and the identification of missing art pieces. The user
+should not be expected to know every required overlay or source-art split
+beforehand. MCP/tooling provides measurements and deterministic validation but
+does not make subjective artistic decisions. Technical validity alone does not
+establish visual readiness.
+
+Where practical, Codex should provide registration guides and specifications for
+any required new artwork, including canvas dimensions, pivots, placement,
+layering, overlap and motion-clearance requirements.
+
+Animation may proceed with a known limitation only when the user explicitly
+accepts it as temporary. Document that limitation and the remaining art work;
+temporary acceptance does not establish final artistic approval. This gate
+precedes rigging/animation implementation and complements the full-motion
+validation and human visual approval below. Preserve the source-art safety
+requirements in sections 11 and 16 while preparing or testing candidates.
+
+## Minimum Sufficient Decomposition
+
+Do not minimize artwork pieces, sprites or layers at the expense of visual
+plausibility. The correct decomposition is the smallest set of layers that
+convincingly represents the intended physical relationship throughout the
+complete animation. Asset count is not a success metric; visual plausibility
+across the complete motion range is.
+
+A moving joint may require additional front/back artwork when one part must
+pass inside, behind, through or around another part. Examples, back to front:
+
+- sleeve: sleeve/socket back → forearm → front cuff lip;
+- boot: boot back → leg → boot front;
+- collar: collar back → neck → collar front;
+- hair: back hair → head → front hair/bangs;
+- hand holding object: back fingers → object → front fingers.
+
+If a simpler decomposition produces visible seams, flat intersections,
+impossible occlusion, exposed terminating edges, repeated art/transform hacks,
+or remains visually rejected after bounded corrections, Codex must reconsider
+the artwork decomposition rather than force the simpler structure. Codex may
+conclude that additional artwork is **REQUIRED** before animation continues.
+
+Do not assume two pieces are better than three, three better than four, or fewer
+nodes inherently preferable. Prefer fewer pieces only when the visual result
+remains correct throughout the intended motion.
+
+The Pre-Animation Asset Readiness Gate must determine the required decomposition
+before final rig values and animation are frozen. Human visual rejection
+overrides an earlier simpler decomposition when it cannot convincingly represent
+the intended physical relationship.
+
+## Foreground Lip Must Not Be a Full Ring
+
+When a moving part passes through an opening, Codex must determine the physical
+front/back relationship before rigging or painting around the problem. The
+typical back-to-front structure is:
+
+```text
+rear/socket-back → moving inserted part → front lip / foreground overlap
+```
+
+This applies to sleeve/socket → forearm → front cuff lip, collar back → neck →
+collar front, back fingers → object → front fingers, and back hair → head →
+bangs/front hair.
+
+A foreground lip must contain **only the near/front rim** that overlaps the
+moving part, matching fabric edge/shading and any minimal side return required
+for occlusion. The passage must remain open/transparent so the moving part can
+visually pass through it. For sleeves/cuffs, the bottom/far inner line must be
+**absent** from the foreground lip.
+
+The foreground asset must not contain:
+
+- the far/back/bottom inner rim or a back-side interior contour;
+- a complete ellipse, hollow oval, ring or empty-circle/closed-tube appearance;
+- the rear cavity bowl, socket depth or back-side interior shading.
+
+These rear features belong to the socket-back layer, which may contain cavity
+depth, the far wall and interior sleeve/socket shading. The rear asset must
+**not duplicate the foreground/front lip**.
+
+Codex must inspect the foreground asset **alone before animation testing**. If
+it reads as a complete sleeve opening, full ring/oval, empty cuff or closed
+tube, reject it immediately. It must read as a foreground overlap strip/lip,
+not a complete sleeve by itself. Structural validity cannot override this
+isolation rejection test.
+
+Apply Minimum Sufficient Decomposition: there is no maximum asset count or
+fixed piece/node count to preserve. Use the minimum pieces that represent the
+physical relationship convincingly throughout the full motion; visual
+plausibility, not asset count, is the success metric.
+
+After one or two failed bounded corrections for the same defect, apply the
+Decomposition Escalation Rule: stop repeated RGB, alpha, offset, transform,
+masking or small paint patches and re-evaluate the physical/layer model.
+Codex owns identifying and specifying missing socket backs, front lips,
+collar/hair layers, finger splits, overlaps and hidden extensions before
+animation is considered ready; the user must not have to discover them.
+
+Keep structural and visual readiness separate under Visual Defect Override.
+Human visual rejection is authoritative. A joint with a user-rejected seam,
+impossible line, flat insertion, floating edge, duplicate contour, closed-tube
+effect or unrealistic overlap must not be classified as `READY_VISUAL`, even
+when technical checks pass.
+
+## Decomposition Escalation Rule
+
+Codex must not repeatedly patch a visually rejected construction indefinitely.
+If one or two bounded corrections fail to resolve the same user-visible defect,
+stop local tweaking and re-evaluate the physical/layer decomposition from first
+principles. Ask:
+
+- what physically exists behind the moving part;
+- what physically exists in front of it;
+- what part must move between those layers;
+- whether the current artwork can represent that relationship;
+- whether additional split artwork or layers are required.
+
+Repeated transform, RGB, alpha, masking or offset corrections are evidence that
+the decomposition itself may be wrong. Codex may increase artwork assets,
+sprites, overlay layers or socket/back/front pieces when necessary for visual
+plausibility. There is **no fixed maximum asset count**. Fewer pieces are
+preferable only when they remain visually correct throughout the full motion.
+Do not preserve a simpler decomposition merely because it was previously
+accepted technically.
+
+### Codex Owns Asset-Decomposition Design
+
+The user may provide source artwork, but Codex owns determining whether it is
+sufficiently decomposed for the intended animation. Proactively identify,
+request and specify any additional artwork pieces needed before animation
+proceeds. The user should not have to discover missing sleeve backs, cuff lips,
+socket interiors, foreground overlays, hair layers, hand/finger splits or
+similar pieces during playback.
+
+Solve the represented physical relationship correctly rather than forcing the
+available art into an unsuitable structure.
+
+### Required Occlusion Stack
+
+Before rigging or animating a moving attachment, Codex must explicitly state its
+intended back-to-front layer stack. Examples:
+
+```text
+sleeve back/interior → forearm → front cuff lip
+```
+
+```text
+collar back → neck → collar front
+```
+
+```text
+back hair → head → bangs/front hair
+```
+
+If the physical stack is unclear or cannot be represented by the current
+assets, animation remains blocked until the art decomposition is resolved or
+the user explicitly accepts a temporary limitation.
+
+### Efficient Visual Problem-Solving
+
+For a persistent visual defect:
+
+1. identify the user-visible defect;
+2. test at most one or two small bounded corrections;
+3. if the defect remains, stop patching;
+4. re-evaluate the physical/layer decomposition;
+5. compare alternative decompositions;
+6. choose the minimum sufficient structure that is visually correct throughout
+   the full motion;
+7. specify missing art before further animation work;
+8. only then resume implementation and validation, subject to the readiness gate.
+
+Do not spend repeated cycles proving a structurally valid but visually rejected
+construction.
+
+### Human Visual Override
+
+Human visual rejection remains authoritative. If the user says a joint,
+overlap, seam or silhouette still looks wrong, Codex must not treat the same
+decomposition as accepted solely because technical tests pass. The next action
+must be a bounded visual correction or decomposition escalation if prior bounded
+corrections failed.
+
+## Visual Defect Override
+
+Structural validity does not imply visual readiness. An asset may pass geometry,
+registration, overlap/underlap coverage, motion-envelope, collision, hierarchy
+and loop/reset checks and still be visually unacceptable.
+
+Codex must actively inspect rendered output for visual artifacts and evaluate
+and report **structural readiness** and **visual readiness** separately.
+Technical validation supports visual review but does not replace it.
+
+A visible seam, cutoff, terminating line, duplicate contour, shading
+discontinuity, floating edge, unnatural overlap or other artifact that does not
+correspond to the intended physical structure prevents the affected asset or
+animated joint from being visually ready, even when technical checks pass.
+
+A user-reported visual defect is authoritative evidence that the affected
+result is not visually accepted. Human visual rejection overrides a prior Codex
+`READY` classification for that issue. Codex must not dismiss the defect because
+overlap measurements are sufficient, no geometric gap exists, the hierarchy is
+valid, the animation technically loops or the asset is structurally usable.
+Do not report an asset or animated joint as fully `READY` while a user-rejected
+visual artifact remains visible.
+
+When the user identifies a visual defect:
+
+1. inspect the reported region across the full animation, not only the rest pose;
+2. determine whether the artifact comes from source artwork, layering, masking,
+   registration, transforms or animation;
+3. classify the affected asset/state accordingly;
+4. test a bounded correction, or apply the Decomposition Escalation Rule if prior
+   bounded corrections failed;
+5. present the corrected rendered result for human approval.
+
+Where useful, distinguish:
+
+- `READY_STRUCTURAL`
+- `READY_VISUAL`
+- `NEEDS_ART_EDIT`
+- `NEEDS_REGISTRATION`
+- `MISSING_REQUIRED`
+- `OPTIONAL`
+
+An asset may be `READY_STRUCTURAL + NEEDS_ART_EDIT` at the same time. For example,
+a forearm may remain geometrically covered by a sleeve throughout the full
+motion range yet show an unnatural dark cutoff/shading line under the sleeve.
+That forearm is structurally valid but visually requires art editing.
+
+In the readiness report above, unqualified `READY` requires both structural
+readiness and human visual acceptance; otherwise report structural and visual
+statuses separately. `READY_VISUAL` records human visual acceptance of the
+reviewed asset/state and motion. Final visual acceptance belongs to the user.
+Explicit temporary acceptance permits work under the readiness gate but does
+not turn an unresolved visual defect into final visual readiness.
+
+## Visual Registration Before Freezing Rig Values
+
+Initial pivots, offsets and transforms are not authoritative merely because
+they pass technical validation. Intentional initial pivot placement (section 10)
+establishes provisional technical registration; freezing the accepted contract
+requires visual approval.
+
+For character assembly:
+
+1. establish approximate technical registration;
+2. inspect the complete assembled character;
+3. review movement across the full intended animation range;
+4. correct registration, overlap, layering or artwork as needed;
+5. obtain human visual approval;
+6. only then freeze pivots/transforms as the accepted contract.
+
+A technically valid registration is not automatically a visually correct one.
+
+## Full-Motion Validation
+
+Never approve a joint or overlap based only on the rest pose. Validate at:
+
+- rest;
+- animation extrema;
+- intermediate poses;
+- loop boundaries where relevant;
+- complete continuous playback.
+
+Replacement art or transform corrections must remain visually connected
+throughout motion, not merely at one sampled frame.
+
+## 2D Joint Overlap / Underlap
+
+For cutout character joints, use hidden overlap where appropriate:
+
+- moving lower pieces may extend underneath foreground clothing;
+- hidden proximal edges should generally have no visible terminating outline;
+- a foreground sleeve, cuff or layer may conceal the moving attachment;
+- sufficient underlap should cover the entire intended motion envelope.
+
+Prefer the smallest construction that remains visually convincing throughout
+the full motion, as defined by Minimum Sufficient Decomposition. Add required
+front/back artwork and overlap sprites or nodes when graphical evidence shows
+that the simpler construction cannot represent the physical relationship.
+
+## Art vs Rig Responsibility
+
+Prefer better source-art separation, proper hidden overlap, sensible pivots and
+registration-compatible replacement assets over increasingly complicated rig
+logic. The rig should not be expected to rescue fundamentally poor asset
+preparation.
+
+Conversely, do not redraw assets when a bounded transform or layering correction
+clearly solves the visual problem. Preserve the source-art safety requirements
+in sections 11 and 16 while testing candidates.
+
+## Problem-Solving Workflow
+
+For visual animation defects:
+
+1. describe the user-visible defect;
+2. inspect and measure current state;
+3. identify plausible root causes;
+4. test at most one or two bounded corrections for the same defect, then apply
+   the Decomposition Escalation Rule if it remains;
+5. evaluate candidates through the full motion;
+6. reject solutions that introduce new problems;
+7. implement the smallest robust solution;
+8. validate technically;
+9. request human visual approval.
