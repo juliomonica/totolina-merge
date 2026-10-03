@@ -105,7 +105,7 @@ and stops pairing if secret input is unavailable. With a valid stored token,
 setup reports **Photoshop bridge authentication: OK** and does not ask again;
 this is local readiness, not proof of a live connection. The existing plugin
 does not generate, display or copy a token. The private protected file is
-`tools/lunitora_mcp/.local/pairing-token.txt`, not a Codex setting. Open it privately
+`tools/lunitora_mcp/.local/photoshop-auth/pairing-token.txt`, not a Codex setting. Open it privately
 in a local editor, copy it into Photoshop's **Plugins > Lunitora Photoshop Bridge**
 panel's **Pairing token** password input, and choose **Connect / Reconnect**.
 Do not copy it into chat, logs, screenshots, TOML, JSON or environment files.
@@ -120,16 +120,30 @@ procedure](lunitora_mcp/README.md#first-photoshop-plugin-loading-and-pairing).
 After packaged installation, **UDT is developer-only**.
 Run setup again if an application update moves its executable.
 
-For a deliberate bridge-token rotation/reset only, run:
+For first-time pairing or reuse of a valid protected token, run:
 
 ```bash
 python tools/lunitora_setup.py --pair-photoshop
 ```
 
-Use the hidden prompt; the previous value is never shown. Then, after Desktop
+An existing valid protected token is reused without a prompt or rotation.
+Missing tokens use the hidden create/import prompt. Then, after Desktop
 work finishes, run `git art-refresh` from external Git Bash and privately pair the
 panel with the current protected token again. Unsafe storage fails closed.
 `--check` never prompts or changes credentials and rejects `--pair-photoshop`.
+
+For valid legacy credentials with unsafe ownership/DACLs, explicitly run:
+
+```bash
+python tools/lunitora_setup.py --repair-photoshop-auth
+```
+
+This separate command requests consent and preserves token bytes exactly. It
+applies current-user ownership and protected current-user/SYSTEM full-access
+DACLs only to `.local` and `pairing-token.txt`. It does not repair unrelated
+children. If directory inheritance would change unrelated child ACLs, it stops
+before mutation and reports that a separate reviewed migration is required.
+Normal setup never performs this repair. `--check` cannot be combined with repair.
 
 If Photoshop starts before Codex Desktop/MCP, several failed localhost connection
 attempts during startup are expected. The paired plugin connects automatically
@@ -161,3 +175,63 @@ MAC:** macOS native launcher/authentication behavior. Android executable export
 and **REQUIRES ANDROID DEVICE** validation remain separate. Fresh-machine network
 installation and actual lingering-MCP recovery are **NOT EXECUTED**.
 See the [milestone acceptance record](../docs/MACHINE_SETUP.md#v08-milestone-acceptance).
+
+
+## Explicit Photoshop credential storage migration
+
+New Windows credentials use `tools/lunitora_mcp/.local/photoshop-auth/pairing-token.txt`.
+This dedicated ignored directory extends the Lunitora local root and contains only
+Photoshop credentials. Its owner/DACL can be secured independently of unrelated
+`.local` artifacts. Existing reviewed protected legacy credentials remain usable
+and unchanged. A present dedicated token takes precedence; invalid dedicated
+storage never falls back to the legacy credential. Fresh setup and
+`--pair-photoshop` create tokens directly in the dedicated directory.
+
+For a valid legacy token blocked by mixed-directory inheritance, run alone:
+
+```bash
+python tools/lunitora_setup.py --migrate-photoshop-auth
+```
+
+The command diagnoses without showing secrets and requires explicit `y` consent.
+It verifies ignored/untracked provenance, rejects redirects/reparse points and
+hard links, pins ancestor/source identities, checks for concurrent changes after
+consent, and creates the destination with current-user ownership and protected
+current-user/SYSTEM explicit full-access DACLs. It copies the original bytes
+without normalization or rotation, reopens and verifies identity/security and
+exact equality. It never modifies the legacy token, legacy directory ACL, or
+unrelated children. An existing protected byte-identical destination is a no-op;
+conflicting or unsafe destinations fail closed. If a post-creation verification
+fails, inspect the destination before retrying; the original remains recoverable.
+No automatic source cleanup is implemented.
+
+`legacy credential remains; cleanup available after live pairing acceptance`
+
+`--check` stays strictly read-only and cannot be combined with migration. Normal
+setup/check prefer the migrated protected token and no longer need legacy ACL
+repair. Repair remains available for repairable protected storage; mixed legacy
+inheritance directs operators to migration. **REQUIRES MAC:** native macOS
+credential protection is separate and not implemented by Windows ACL migration.
+
+Art-machine acceptance after automated validation:
+
+1. In external Git Bash at the repository root, run the migration command above;
+   review its source/destination explanation and enter `y`. Require verified
+   byte-identical migration and the legacy-remains message.
+2. Run `python tools/lunitora_setup.py --check`, then normal setup and
+   `python tools/lunitora_setup.py --pair-photoshop`. Require valid preserved
+   authentication without a hidden token prompt, rotation or legacy ACL repair.
+3. After active Desktop work finishes, run `git art-refresh` externally to restart
+   Codex/MCP with the new lookup. Preserve unsaved Photoshop work. Run `git art`
+   and, for development loading, `git art-dev` and manually reload the plugin in
+   UDT when needed. Do not start a parallel manual server.
+4. Use the plugin's cached secure pairing and require Connected. If re-entry is
+   needed, privately open the new credential file in a local editor, paste into
+   the panel password input, close without changes and clear the clipboard.
+   Never print/capture the token or place it in chat/configuration.
+5. Through the configured Photoshop MCP, perform one read-only
+   `photoshop_ping({})`; require `ok=true`, authenticated connection and the
+   expected Photoshop 27.10 host. Check one read-only active-document response
+   against the open document, with no document/history/dirty-state changes.
+6. Record sanitized live acceptance. Only then consider a separate explicitly
+   authorized legacy-token cleanup operation; do not delete it as part of migration.

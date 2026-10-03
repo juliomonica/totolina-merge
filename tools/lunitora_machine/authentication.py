@@ -16,6 +16,18 @@ from .configuration import reject_redirects, run
 
 CAPABILITIES = {"godot": "godot-auth.json", "photoshop": "pairing-token.txt"}
 STORAGE = Path("tools/lunitora_mcp/.local")
+PHOTOSHOP_STORAGE = STORAGE / "photoshop-auth"
+
+def storage_for(root, filename):
+    """Prefer dedicated storage, retaining already protected legacy credentials."""
+    if filename != CAPABILITIES["photoshop"]:
+        return STORAGE
+    destination = Path(root) / PHOTOSHOP_STORAGE / filename
+    if destination.exists() or destination.is_symlink():
+        return PHOTOSHOP_STORAGE
+    if (Path(root) / STORAGE / filename).exists():
+        return STORAGE
+    return PHOTOSHOP_STORAGE
 
 
 class AuthenticationError(ValueError):
@@ -46,16 +58,17 @@ def _reviewed_modules():
         sys.path.pop(0)
 
 
-def _guard_storage(root: Path, filename: str, runner) -> None:
+def _guard_storage(root: Path, filename: str, runner, storage=None) -> None:
     root = Path(os.path.abspath(root))
-    local = root / STORAGE
+    storage = storage if storage is not None else storage_for(root, filename)
+    local = root / storage
     reject_redirects(local / filename)
     # Reject tracked material even if an ignore rule would otherwise match it.
-    tracked = runner(["git", "-C", str(root), "ls-files", "-z", "--", STORAGE.as_posix()])
+    tracked = runner(["git", "-C", str(root), "ls-files", "-z", "--", storage.as_posix()])
     if tracked.returncode or tracked.stdout:
         raise AuthenticationError()
     ignored = runner(["git", "-C", str(root), "check-ignore", "--no-index", "-q", "--",
-                      (STORAGE / filename).as_posix()])
+                      (storage / filename).as_posix()])
     if ignored.returncode:
         raise AuthenticationError()
 
@@ -64,7 +77,7 @@ def _missing(error) -> bool:
     return isinstance(error, FileNotFoundError) or getattr(error, "winerror", None) in (2, 3)
 
 
-def _pin_ancestors(root: Path, stack: ExitStack, security) -> Path:
+def _pin_ancestors(root: Path, stack: ExitStack, security, storage=STORAGE) -> Path:
     root = Path(os.path.abspath(root))
     current = Path(root.anchor)
     security.pin(stack, current, directory=True)
@@ -74,13 +87,22 @@ def _pin_ancestors(root: Path, stack: ExitStack, security) -> Path:
     for part in ("tools", "lunitora_mcp"):
         current /= part
         security.pin(stack, current, directory=True)
-    return current / ".local"
+    parts = storage.relative_to(Path("tools/lunitora_mcp")).parts
+    for part in parts[:-1]:
+        current /= part
+        security.pin(stack, current, directory=True)
+    return current / parts[-1]
 
 
 def _read_protected(root: Path, filename: str, security) -> bytes | None:
     """Read through read-only pinned handles; missing storage stays missing."""
     with ExitStack() as stack:
-        local = _pin_ancestors(root, stack, security)
+        try:
+            local = _pin_ancestors(root, stack, security, storage_for(root, filename))
+        except Exception as error:
+            if _missing(error):
+                return None
+            raise
         try:
             directory = security.pin(stack, local, directory=True)
         except Exception as error:
@@ -88,6 +110,9 @@ def _read_protected(root: Path, filename: str, security) -> bytes | None:
                 return None
             raise
         security.validate_acl(directory)
+        if storage_for(root, filename) == PHOTOSHOP_STORAGE:
+            if any(child.name != filename for child in local.iterdir()):
+                raise AuthenticationError()
         try:
             handle = security.pin(stack, local / filename, directory=False)
         except Exception as error:
@@ -129,15 +154,9 @@ def _validate_photoshop(payload: bytes, photoshop) -> None:
 
 
 def pairing_instructions(root: Path, emit=print) -> None:
-    emit("Photoshop is required to run Art. UXP Developer Tool (UDT) is Adobe's utility for loading, developing and debugging the Lunitora UXP Photoshop plugin.")
-    emit("UDT is required for developer plugin loading and git art-dev; an installed packaged plugin does not need UDT for daily use.")
-    emit("Normally this is one-time pairing per machine. The bridge token is this machine's pairing/authentication credential, not an Adobe password.")
-    emit("1. In Adobe Creative Cloud Desktop, All apps, install UXP Developer Tools. In Photoshop, Edit > Preferences > Plugins > Enable Developer Mode, then restart Photoshop after protecting unsaved work. Enable UDT's first-run Developer Mode prompt yourself.")
-    emit("2. In UDT choose Add Plugin, select " + str(root / "tools/lunitora_mcp/bridges/photoshop_uxp/manifest.json") + ", then Load.")
-    emit("3. In Photoshop open Plugins > Lunitora Photoshop Bridge. The panel only accepts a token; it does not generate or reveal one.")
-    emit("4. Enter an existing token privately below, or press Enter to generate this machine's token. Setup stores it only in the ignored protected credential file.")
-    emit("5. Privately open " + str(root / STORAGE / CAPABILITIES["photoshop"]) + " after setup, copy it into the panel's Pairing token password field, then close the file without changes.")
-    emit("6. Trust/reload the project in Codex explicitly so its MCP server starts; choose Connect / Reconnect. Confirm Connected and Pairing saved securely on this computer. Never paste the token into Codex config, logs or chat.")
+    from .art_guidance import emit_first_time
+    emit_first_time(root, root / PHOTOSHOP_STORAGE / CAPABILITIES["photoshop"], emit)
+    emit("Local credential step now: enter an existing token privately below, or press Enter to generate this machine's token. Setup stores it only in the ignored protected credential file. Cancel to preserve existing data.")
 
 
 def read_pairing_token(secret_prompt=None) -> str | None:
@@ -162,7 +181,7 @@ def read_pairing_token(secret_prompt=None) -> str | None:
 def _replace_pairing(root, security, photoshop, token, expected) -> bool:
     _, con, file, _, nt = security._apis()
     with ExitStack() as stack:
-        local = _pin_ancestors(root, stack, security)
+        local = _pin_ancestors(root, stack, security, storage_for(root, CAPABILITIES["photoshop"]))
         security.validate_acl(security.pin(stack, local, directory=True))
         handle = file.CreateFile(str(local / CAPABILITIES["photoshop"]),
                                  con.GENERIC_READ | con.GENERIC_WRITE | nt.READ_CONTROL,
@@ -206,13 +225,20 @@ def _store_pairing(root: Path, security, photoshop, *, token=None, expected=None
         return _replace_pairing(root, security, photoshop, token, expected)
     _, _, file, _, _ = security._apis()
     with ExitStack() as stack:
-        local = _pin_ancestors(root, stack, security)
+        if storage_for(root, CAPABILITIES["photoshop"]) == PHOTOSHOP_STORAGE:
+            parent = _pin_ancestors(root, stack, security)
+            if not parent.exists():
+                file.CreateDirectory(str(parent), security.protected_attributes(directory=True))
+        local = _pin_ancestors(root, stack, security, storage_for(root, CAPABILITIES["photoshop"]))
         try:
             file.CreateDirectory(str(local), security.protected_attributes(directory=True))
         except Exception as error:
             if getattr(error, "winerror", None) != 183:
                 raise AuthenticationError() from None
         security.validate_acl(security.pin(stack, local, directory=True))
+        if local == root / PHOTOSHOP_STORAGE:
+            if any(child.name != CAPABILITIES["photoshop"] for child in local.iterdir()):
+                raise AuthenticationError()
         path = local / CAPABILITIES["photoshop"]
         try:
             handle = security.pin(stack, path, directory=False, create=True)
@@ -289,7 +315,7 @@ def provision_authentication(root: Path, platform_name: str, capabilities, *, ch
                         valid = True
                     except Exception:
                         pass
-                if valid and (not replace_photoshop or check):
+                if valid:
                     statuses[name] = _status(True, "already correct", "Protected machine-local token is valid and preserved; live bridge acceptance remains unverified.")
                     continue
                 if check:
@@ -328,6 +354,16 @@ def provision_authentication(root: Path, platform_name: str, capabilities, *, ch
         except PairingInputError:
             statuses[name] = _status(False, "pairing required", str(PairingInputError()))
         except Exception:
+            if name == "photoshop":
+                from .photoshop_recovery import repair_available, ACTION
+                from .photoshop_migration import migration_available, ACTION as MIGRATE
+                if migration_available(root, security, photoshop, runner):
+                    statuses[name] = _status(False, "migration required", "Valid legacy credential; run " + MIGRATE)
+                    continue
+                if repair_available(root, security, photoshop, runner):
+                    statuses[name] = _status(False, "repair required",
+                        "Photoshop authentication storage needs explicit protection repair. Run " + ACTION)
+                    continue
             statuses[name] = _status(False, "blocked",
                                      "Authentication storage is unsafe, tracked, malformed or unavailable; review existing storage. Setup will not repair ACLs or rotate credentials.")
     return statuses

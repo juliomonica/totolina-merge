@@ -98,4 +98,26 @@ def summarize(platform: str, core_ready: bool, apps: dict, details: dict | None 
             if not core_ready or not entry["configuration"]["ready"] or not entry["authentication"]["ready"]:
                 result[capability]["state"] = "PARTIAL"
                 result[capability]["reason"] += " Remaining local preparation or platform validation is listed below."
+    art_status = result["Art"]
+    inspected = applications_inspected
+    art_status["photoshop_installed"] = ("DETECTED" if art else "NOT DETECTED / NOT CONFIGURED") if inspected else "NOT CHECKED"
+    art_status["udt_installed"] = ("DETECTED" if _configured(apps, "udt") else "NOT DETECTED / NOT CONFIGURED") if inspected else "NOT CHECKED"
+    art_status["developer_mode_plugin_loading"] = "NOT CHECKED - manually verify UDT Developer Mode and Load, or installed packaged plugin"
+    art_status["protected_bridge_credential"] = (integration or {}).get("photoshop", {}).get("authentication", {}).get("state", "NOT CHECKED")
+    art_status["photoshop_panel_paired"] = "NOT CHECKED - manually enter the same token once in Pairing token and Connect / Reconnect"
+    art_status["live_connection"] = "NOT CHECKED - from Codex run one read-only photoshop_ping({})"
+    if not inspected:
+        action = "Application inspection unavailable; rerun --check before assuming any installation is missing."
+    elif not art:
+        action = "Steps 1-2: open/sign in to Creative Cloud and install/configure supported Photoshop for Art; Lunitora does not install it. Core/Game continue."
+    elif not _configured(apps, "udt"):
+        action = "Step 3 (development loading): install UXP Developer Tools through Creative Cloud. UDT loads/develops/debugs/packages UXP plugins; Core/Game and daily packaged-plugin use continue."
+    elif art_status["protected_bridge_credential"] not in ("already correct", "created", "paired locally"):
+        entry = (integration or {}).get("photoshop", {}).get("authentication", {})
+        action = "Steps 4-7 require manual verification; step 8 local credential: " + entry.get("reason", "run setup for protected credential inspection.")
+    else:
+        action = "Verify steps 4-7 manually (Developer Mode/plugin loading); then steps 11-15 (panel pairing, git art-refresh and read-only photoshop_ping). Local credential is configured; manual/live states remain unverified."
+    if platform == "macos":
+        action = "REQUIRES MAC: native credential protection and live Art validation remain separate; the Windows first-time checklist does not establish Mac readiness."
+    art_status["next_first_time_step"] = action
     return result

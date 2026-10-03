@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
-import secrets
 import tomllib
 from dataclasses import dataclass
 
@@ -46,11 +45,33 @@ def valid_token(value: object) -> bool:
 
 
 def load_token() -> str | None:
-    if not TOKEN_PATH.exists():
+    # A present dedicated token takes precedence; never fall back on corruption.
+    protected = ROOT / ".local" / "photoshop-auth" / "pairing-token.txt"
+    path = protected if protected.exists() or protected.is_symlink() else TOKEN_PATH
+    if path == protected and os.name == "nt":
+        import sys
+        sys.path.insert(0, str(ROOT.parent))
+        try:
+            from lunitora_machine import authentication as auth
+            from lunitora_machine import native_credentials as security
+            payload = auth._read_protected(ROOT.parents[1], "pairing-token.txt", security)
+            if payload is None:
+                raise ConfigurationError("Protected pairing storage is unavailable.")
+            auth._validate_photoshop(payload, __import__(__name__, fromlist=["valid_token"]))
+            return payload.decode("ascii").strip()
+        except Exception:
+            raise ConfigurationError("Protected pairing storage is unsafe or unavailable.") from None
+        finally:
+            sys.path.pop(0)
+    return _load_token_path(path)
+
+
+def _load_token_path(path) -> str | None:
+    if not path.exists():
         return None
-    if TOKEN_PATH.resolve().parent != (ROOT / ".local"):
+    if path.is_symlink() or path.parent.is_symlink() or path.resolve().parent not in (ROOT / ".local", ROOT / ".local" / "photoshop-auth") or (ROOT / ".local").resolve() != ROOT / ".local":
         raise ConfigurationError("The pairing file must be inside the toolkit's real .local directory.")
-    with TOKEN_PATH.open("r", encoding="ascii") as stream:
+    with path.open("r", encoding="ascii") as stream:
         value = stream.read(130).strip()
     if not valid_token(value):
         raise ConfigurationError("Invalid local pairing file. Restore a valid local token before starting.")
@@ -58,15 +79,15 @@ def load_token() -> str | None:
 
 
 def setup_token() -> Path:
-    """Create once; preserve an existing token. No token is returned or printed."""
-    TOKEN_PATH.parent.mkdir(exist_ok=True)
-    if TOKEN_PATH.parent.resolve() != ROOT / ".local":
-        raise ConfigurationError("The .local directory must not redirect outside the toolkit.")
+    """Delegate to the reviewed setup writer; never create insecure runtime tokens."""
+    import sys
+    sys.path.insert(0, str(ROOT.parent))
     try:
-        descriptor = os.open(TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        load_token()
-    else:
-        with os.fdopen(descriptor, "w", encoding="ascii", newline="\n") as stream:
-            stream.write(secrets.token_urlsafe(48) + "\n")
-    return TOKEN_PATH
+        from lunitora_machine import authentication as auth
+        result = auth.provision_authentication(ROOT.parents[1],
+            "windows" if os.name == "nt" else "macos", ("photoshop",))
+        if not result["photoshop"]["ready"]:
+            raise ConfigurationError("Run python tools/lunitora_setup.py; protected pairing is unavailable.")
+        return ROOT.parents[1] / auth.storage_for(ROOT.parents[1], "pairing-token.txt") / "pairing-token.txt"
+    finally:
+        sys.path.pop(0)

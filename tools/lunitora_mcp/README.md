@@ -121,6 +121,70 @@ are verified on this workstation. Both read-only tools succeeded through the rea
 Codex MCP integration on 2026-09-29 with the restricted localhost configuration
 below.
 
+## First-Time Photoshop / Art Machine Setup (Windows)
+
+UXP Developer Tool (UDT) is Adobe's utility for loading, developing, debugging and packaging UXP plugins.
+
+This workflow covers application installation, development-plugin loading, local
+credential setup, manual panel pairing and live MCP verification as separate stages.
+Lunitora detects applications; it never installs Adobe software or enables Developer
+Mode. Run repository commands from Git Bash at the checkout root.
+`<repo-root>` below means your actual checkout, for example
+`D:\Development\LunitoraGames\totolina-merge` on the current Art machine.
+
+1. Install/open Adobe Creative Cloud Desktop and sign in with your Adobe ID.
+2. Install supported Adobe Photoshop (repository manifest minimum 27.10.0; validated host 27.10) through Creative Cloud. Photoshop runs Art; Lunitora never silently installs it. Core/Game do not require Photoshop.
+3. In Creative Cloud, All apps, search for UXP Developer Tools and choose Install. UXP Developer Tool (UDT) is Adobe's utility for loading, developing, debugging and packaging UXP plugins. UDT is needed for development loading and git art-dev; daily use of an installed packaged plugin does not require UDT. Core/Game do not require UDT.
+4. Launch UDT and enable Developer Mode when prompted. Adobe currently requires administrator privileges for UDT and elevated permission to enable Developer Mode. Approve Adobe's prompt yourself; Lunitora does not elevate Adobe applications.
+5. Launch Photoshop. For development loading, enable Edit > Preferences > Plugins > Enable Developer Mode if needed; protect unsaved work before any requested restart.
+6. With Photoshop running, in UDT choose Add Plugin, select <repo-root>\tools\lunitora_mcp\bridges\photoshop_uxp\manifest.json, select the Photoshop host, then Load. Require successful loading.
+7. In Photoshop open Plugins > Lunitora Photoshop Bridge.
+8. From the repository root run python tools/lunitora_setup.py. Local credential setup is separate from Photoshop-panel pairing. Follow the reported command: --migrate-photoshop-auth for valid legacy mixed-directory storage, --repair-photoshop-auth for repairable protection, or --pair-photoshop for first-time private create/import or valid-token reuse. Run each command separately.
+9. The protected Lunitora bridge credential is normally configured once per machine (one-time pairing per machine). Existing valid protected credentials are preserved; no rotation is needed for this workflow.
+10. Privately open tools\lunitora_mcp\.local\photoshop-auth\pairing-token.txt in a local editor after setup; do not print it. The file is normally tools/lunitora_mcp/.local/photoshop-auth/pairing-token.txt. If setup confirms an existing reviewed protected legacy credential is in use, privately open `<repo-root>/tools/lunitora_mcp/.local/pairing-token.txt` instead; do not create a second token.
+11. Manually enter the SAME bridge password/token once into the Photoshop panel's password input, currently labelled Pairing token. The panel only accepts a token; it does not generate or reveal one. Close the editor without changes and clear the clipboard. Never paste the credential into chat, logs, screenshots, tracked JSON/TOML/configuration or environment files.
+12. Choose Connect / Reconnect in the panel. A listener may not be available until the next step; startup retry/disconnected status is not proof of bad pairing.
+13. After active Codex Desktop work finishes, run git art-refresh from external Git Bash. Review project trust/reload explicitly if requested. This restarts Desktop/MCP; Photoshop stays open. Require panel Connected; reconnect if needed. Require Pairing saved securely on this computer when Adobe secure storage is available.
+14. From Codex through the configured Photoshop MCP run one read-only photoshop_ping({}). Require ok=true, connected=true and the expected Photoshop host/version. Setup/check do not run this operation.
+15. Confirm Art readiness only after applications, development loading (or packaged installation), protected local credential, panel pairing and live MCP verification are accepted independently. Installation or local credential success alone is not full Art readiness.
+
+The manifest is `tools/lunitora_mcp/bridges/photoshop_uxp/manifest.json`; it declares
+Photoshop (`PS`), minimum host `27.10.0`, API version 2, panel **Lunitora Photoshop
+Bridge**, and main file `index.html`. The existing panel uses a password input
+labelled **Pairing token**, not a visible field literally labelled Password.
+Installing a packaged plugin is a separate alternative to development loading;
+UDT is needed for development and packaging, not daily packaged-plugin use.
+
+Read-only doctor:
+
+```bash
+python tools/lunitora_setup.py --check
+```
+
+The report separates Photoshop installation, UDT installation, Developer
+Mode/plugin loading, protected bridge credential, Photoshop-panel pairing and
+live MCP connection. Installation detection and local credential validation can
+be observed locally. Developer Mode/loading, panel pairing and live authentication
+remain **NOT CHECKED** until manually accepted. `next first time step` identifies
+missing apps/credential preparation or the manual steps requiring verification;
+an unobserved manual state is not reported as missing or complete. `CONFIGURED`
+means local configuration, not full Art readiness. Missing Photoshop/UDT never
+block unrelated Core/Game workflows. Doctor does not launch applications, change
+configuration, request secrets or call Photoshop MCP.
+
+For migration/repair follow only the specific command reported by setup. Never
+rotate a valid token to complete this checklist, and leave a migrated legacy
+credential untouched until separate cleanup is authorized after live acceptance.
+Native macOS credential protection remains **REQUIRES MAC**; these Windows
+instructions do not imply portable Windows ACL protection.
+
+Verified against repository implementation and Adobe guidance on 2026-10-03:
+[Set up developer tools](https://developer.adobe.com/uxp/guides/how-to/developer-tools/)
+(Creative Cloud installation, first-launch Developer Mode and admin/elevation),
+and [Use the UXP Developer Tool](https://developer.adobe.com/uxp/guides/how-to/udt-deep-dive/)
+(running host required for development loading).
+
+
 ## Operator convenience v0.8
 
 Daily operator reference: [LUNITORA_COMMANDS.md](../LUNITORA_COMMANDS.md).
@@ -189,7 +253,7 @@ copy button; do not look for a token in UDT logs or Photoshop's UI.
 5. Open Photoshop's **Plugins > Lunitora Photoshop Bridge** panel. It shows the
    host/UXP/bridge versions, connection status, a **Pairing token** password input
    and **Connect / Reconnect** button. The token comes from setup's protected,
-   ignored `tools/lunitora_mcp/.local/pairing-token.txt` file, not this panel.
+   ignored `tools/lunitora_mcp/.local/photoshop-auth/pairing-token.txt` file, not this panel.
    Open that file privately in a local editor, copy its value into the password
    input, close the editor without edits, and clear the clipboard after pasting.
    Never use terminal output or UDT's console to retrieve it; never put it into
@@ -394,6 +458,24 @@ Manual reconnect retires the old attempt; plugin destruction clears all timers
 and ignores pending storage results. Missing/invalid credentials or explicit
 authentication rejection require operator pairing and do not loop. No token or
 raw authentication payload is logged.
+
+A clean authenticated replacement (`1000`, `Replaced by authenticated reconnect`)
+means another plugin instance now owns the bridge. The displaced instance yields
+without retrying; its panel explains the other connection and permits explicit
+Connect / Reconnect takeover. This prevents two installed/development instances
+from replacing each other every five seconds. Authentication success cancels
+pending retries, and queued retry callbacks check their timer and generation.
+The authoritative instance still retries genuine bridge shutdowns/failures.
+Mock panel regressions cover two instances, 60 seconds of simulated settled time,
+healthy inspection, server-restart recovery and stale callbacks. Real Photoshop
+27.10 stable connection, authenticated reconnect-loop behavior and external
+`git art-refresh` are live accepted on the Windows Art machine (2026-10-03).
+After refresh, the Desktop-owned Photoshop MCP may start lazily on the first
+Photoshop MCP tool call. A transient `1006` while the server is not yet listening
+is acceptable; after connection, the panel must remain stable. See the
+[v0.9 Windows Art acceptance record](../../docs/MACHINE_SETUP.md#v09-windows-art-acceptance-2026-10-03)
+for separate installed/configured, credential-ready, panel-paired and live MCP
+acceptance, plus baseline test disposition and deferred work.
 
 When Photoshop starts before Codex Desktop/MCP, the plugin may make several
 failed localhost connection attempts while the server is starting. This is
@@ -619,7 +701,7 @@ Each machine uses its own paths.
 10. **Pair Photoshop on this workstation.** Open the local token privately:
 
     ~~~bash
-    notepad.exe './.local/pairing-token.txt'
+    notepad.exe './.local/photoshop-auth/pairing-token.txt'
     ~~~
 
     Copy it into the panel's **Pairing token** password input, close Notepad
@@ -1704,7 +1786,7 @@ controls after reload. Automated mocks do not establish live Photoshop success.
 
 ~~~bash
 cd <repo-path-bash>/tools/lunitora_mcp
-notepad.exe './.local/pairing-token.txt'
+notepad.exe './.local/photoshop-auth/pairing-token.txt'
 ~~~
 
 Copy the token into the panel's password input and close Notepad without changes.
@@ -1865,3 +1947,63 @@ Codex activation are verified through the real integration as recorded above.
 Automated checks additionally cover mock UXP events and fake WebSocket peers.
 The historical Phase 1 record covers inspection only; it does not verify Phase 2A
 processing or export. Game files and the existing Godot test suite are untouched.
+
+
+## Explicit Photoshop credential storage migration
+
+New Windows credentials use `tools/lunitora_mcp/.local/photoshop-auth/pairing-token.txt`.
+This dedicated ignored directory extends the Lunitora local root and contains only
+Photoshop credentials. Its owner/DACL can be secured independently of unrelated
+`.local` artifacts. Existing reviewed protected legacy credentials remain usable
+and unchanged. A present dedicated token takes precedence; invalid dedicated
+storage never falls back to the legacy credential. Fresh setup and
+`--pair-photoshop` create tokens directly in the dedicated directory.
+
+For a valid legacy token blocked by mixed-directory inheritance, run alone:
+
+```bash
+python tools/lunitora_setup.py --migrate-photoshop-auth
+```
+
+The command diagnoses without showing secrets and requires explicit `y` consent.
+It verifies ignored/untracked provenance, rejects redirects/reparse points and
+hard links, pins ancestor/source identities, checks for concurrent changes after
+consent, and creates the destination with current-user ownership and protected
+current-user/SYSTEM explicit full-access DACLs. It copies the original bytes
+without normalization or rotation, reopens and verifies identity/security and
+exact equality. It never modifies the legacy token, legacy directory ACL, or
+unrelated children. An existing protected byte-identical destination is a no-op;
+conflicting or unsafe destinations fail closed. If a post-creation verification
+fails, inspect the destination before retrying; the original remains recoverable.
+No automatic source cleanup is implemented.
+
+`legacy credential remains; cleanup available after live pairing acceptance`
+
+`--check` stays strictly read-only and cannot be combined with migration. Normal
+setup/check prefer the migrated protected token and no longer need legacy ACL
+repair. Repair remains available for repairable protected storage; mixed legacy
+inheritance directs operators to migration. **REQUIRES MAC:** native macOS
+credential protection is separate and not implemented by Windows ACL migration.
+
+Art-machine acceptance after automated validation:
+
+1. In external Git Bash at the repository root, run the migration command above;
+   review its source/destination explanation and enter `y`. Require verified
+   byte-identical migration and the legacy-remains message.
+2. Run `python tools/lunitora_setup.py --check`, then normal setup and
+   `python tools/lunitora_setup.py --pair-photoshop`. Require valid preserved
+   authentication without a hidden token prompt, rotation or legacy ACL repair.
+3. After active Desktop work finishes, run `git art-refresh` externally to restart
+   Codex/MCP with the new lookup. Preserve unsaved Photoshop work. Run `git art`
+   and, for development loading, `git art-dev` and manually reload the plugin in
+   UDT when needed. Do not start a parallel manual server.
+4. Use the plugin's cached secure pairing and require Connected. If re-entry is
+   needed, privately open the new credential file in a local editor, paste into
+   the panel password input, close without changes and clear the clipboard.
+   Never print/capture the token or place it in chat/configuration.
+5. Through the configured Photoshop MCP, perform one read-only
+   `photoshop_ping({})`; require `ok=true`, authenticated connection and the
+   expected Photoshop 27.10 host. Check one read-only active-document response
+   against the open document, with no document/history/dirty-state changes.
+6. Record sanitized live acceptance. Only then consider a separate explicitly
+   authorized legacy-token cleanup operation; do not delete it as part of migration.

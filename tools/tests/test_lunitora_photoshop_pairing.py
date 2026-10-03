@@ -119,7 +119,7 @@ class PairingProvisioningContracts(unittest.TestCase):
         self.assertTrue(result["photoshop"]["ready"])
         self.assertTrue(store.call_args.kwargs["expected"] == existing)
 
-    def test_explicit_replacement_is_not_automatic_rotation(self):
+    def test_explicit_pairing_reuses_valid_protected_token(self):
         existing = (TOKEN + "\n").encode()
         prompt = Mock(return_value=NEW_TOKEN)
         with patch.object(auth, "_read_protected", return_value=existing), \
@@ -127,8 +127,8 @@ class PairingProvisioningContracts(unittest.TestCase):
             result = self.provision(interactive=True, secret_prompt=prompt,
                                     replace_photoshop=True, emit=lambda _: None)
         self.assertTrue(result["photoshop"]["ready"])
-        self.assertTrue(store.call_args.kwargs["expected"] == existing)
-        prompt.assert_called_once()
+        store.assert_not_called()
+        prompt.assert_not_called()
         self.assertNotIn(TOKEN, repr(result))
         self.assertNotIn(NEW_TOKEN, repr(result))
 
@@ -178,11 +178,11 @@ class PairingProvisioningContracts(unittest.TestCase):
         self.assertFalse(result["photoshop"]["ready"])
         self.assertNotIn(TOKEN, repr(result) + "\n".join(output))
 
-    def test_noninteractive_replacement_fails_without_prompt_or_write(self):
+    def test_noninteractive_pairing_reuses_valid_token_without_prompt_or_write(self):
         with patch.object(auth, "_read_protected", return_value=(TOKEN + "\n").encode()), \
                 patch.object(auth, "_store_pairing") as store:
             result = self.provision(replace_photoshop=True, emit=lambda _: None)
-        self.assertFalse(result["photoshop"]["ready"])
+        self.assertTrue(result["photoshop"]["ready"])
         store.assert_not_called()
 
     def test_mac_pairing_does_not_request_secret_or_touch_storage(self):
@@ -226,18 +226,18 @@ class SetupPairingControls(unittest.TestCase):
         auth.pairing_instructions(root, output.append)
         text = "\n".join(output)
         self.assertIn("UXP Developer Tool (UDT)", output[0])
-        self.assertIn("loading, developing and debugging", output[0])
+        self.assertIn("loading, developing, debugging and packaging", output[0])
         self.assertIn("one-time pairing per machine", text)
         self.assertIn("Edit > Preferences > Plugins > Enable Developer Mode", text)
-        self.assertIn("UDT's first-run Developer Mode prompt", text)
+        self.assertIn("enable Developer Mode when prompted", text)
         self.assertIn(str(manifest_path), text)
         self.assertIn("Add Plugin", text)
         self.assertIn("Plugins > " + manifest["entrypoints"][0]["label"]["default"], text)
         self.assertIn("panel only accepts a token; it does not generate or reveal one", text)
-        self.assertIn("Enter an existing token privately", text)
+        self.assertIn("enter an existing token privately", text)
         self.assertIn("press Enter to generate this machine's token", text)
-        self.assertIn(str(root / auth.STORAGE / "pairing-token.txt"), text)
-        self.assertIn("Pairing token password field", text)
+        self.assertIn(str(root / auth.PHOTOSHOP_STORAGE / "pairing-token.txt"), text)
+        self.assertIn("password input, currently labelled Pairing token", text)
         self.assertIn("Connect / Reconnect", text)
         self.assertIn("Pairing saved securely on this computer", text)
 
@@ -295,7 +295,7 @@ class PairingProtectedReplacement(unittest.TestCase):
         (self.root / "tools/lunitora_mcp").mkdir(parents=True)
         self.config, self.security, self.photoshop = auth._reviewed_modules()
         self.local = self.root / auth.STORAGE
-        self.path = self.local / "pairing-token.txt"
+        self.path = self.root / auth.PHOTOSHOP_STORAGE / "pairing-token.txt"
 
     def tearDown(self):
         self.directory.cleanup()

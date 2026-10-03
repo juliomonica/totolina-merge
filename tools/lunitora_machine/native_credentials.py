@@ -108,6 +108,7 @@ class _Native:
         bind(self.security, "GetSecurityDescriptorControl", [p, ctypes.POINTER(w.WORD),
                                                              ctypes.POINTER(w.DWORD)], w.BOOL)
         bind(self.security, "GetAce", [p, w.DWORD, pp], w.BOOL)
+        bind(self.security, "SetKernelObjectSecurity", [w.HANDLE, w.DWORD, p], w.BOOL)
 
     def sid(self, pointer):
         if not pointer or not self.security.IsValidSid(pointer):
@@ -276,6 +277,78 @@ def validate_acl(handle):
             raise StorageError()
     finally:
         native.kernel.LocalFree(descriptor)
+
+
+def protection_snapshot(handle):
+    """Immutable, non-secret provenance and ACL evidence from a pinned object."""
+    native = _native()
+    owner, dacl, descriptor = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    if native.security.GetSecurityInfo(_handle(handle), 1, 5, ctypes.byref(owner), None,
+                                       ctypes.byref(dacl), None, ctypes.byref(descriptor)):
+        raise StorageError()
+    try:
+        control, revision = w.WORD(), w.DWORD()
+        if not native.security.GetSecurityDescriptorControl(descriptor, ctypes.byref(control), ctypes.byref(revision)):
+            raise StorageError()
+        entries = []
+        if not dacl.value:
+            raise StorageError()
+        header = ctypes.cast(dacl, ctypes.POINTER(_ACL)).contents
+        for index in range(header.count):
+            pointer = ctypes.c_void_p()
+            if not native.security.GetAce(dacl, index, ctypes.byref(pointer)):
+                raise StorageError()
+            ace = ctypes.cast(pointer, ctypes.POINTER(_ACE)).contents
+            entries.append(ctypes.string_at(pointer, ace.size))
+        return native.sid(owner.value), control.value, tuple(entries)
+    finally:
+        native.kernel.LocalFree(descriptor)
+
+
+def reviewed_owner(snapshot):
+    native = _native()
+    user, system = native.identity()
+    size = w.DWORD(68)
+    data = ctypes.create_string_buffer(size.value)
+    if not native.security.CreateWellKnownSid(26, None, data, ctypes.byref(size)):
+        raise StorageError()
+    return snapshot[0] in (user, system, native.sid(ctypes.addressof(data)))
+
+
+def repair_handle(stack, path, *, directory):
+    """Exclusive mutation handle; never enables privileges or follows redirects."""
+    handle = _FILE.CreateFile(str(path), _CON.GENERIC_READ | _NT.READ_CONTROL | 0xC0000,
+                              0, None, _CON.OPEN_EXISTING,
+                              0x00200000 | (0x02000000 if directory else 0), None)
+    stack.callback(handle.Close)
+    info = _FILE.GetFileInformationByHandle(handle)
+    if (info[0] & 0x400 or bool(info[0] & 0x10) != directory
+            or (not directory and (info[7] != 1 or info[5] or info[6] > 4096))):
+        raise StorageError()
+    return handle
+
+
+def pin_child_security(stack, path, *, directory):
+    """Pin unrelated artifacts for security inspection, without credential size limits."""
+    handle = _FILE.CreateFile(str(path), _NT.READ_CONTROL, 0, None, _CON.OPEN_EXISTING,
+                              0x00200000 | (0x02000000 if directory else 0), None)
+    stack.callback(handle.Close)
+    info = _FILE.GetFileInformationByHandle(handle)
+    if info[0] & 0x400 or bool(info[0] & 0x10) != directory:
+        raise StorageError()
+    return handle
+
+
+def apply_protection(handle, *, directory):
+    """Apply reviewed security. Caller must guard directory inheritance effects."""
+    # Non-inheritable ACEs satisfy validate_acl. The caller must first prove
+    # unrelated children have protected DACLs, because Windows can propagate
+    # removal of inherited ACEs even when these new ACEs are non-inheritable.
+    attributes = protected_attributes(directory=False)
+    if not _native().security.SetKernelObjectSecurity(
+            _handle(handle), 1 | 4 | 0x80000000, attributes.descriptor):
+        raise StorageError()
+    validate_acl(handle)
 
 
 def pin(stack: ExitStack, path: Path, *, directory, create=False):
